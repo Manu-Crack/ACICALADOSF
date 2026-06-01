@@ -136,9 +136,6 @@ export default async function MiCuentaPage() {
         <div className="card" style={{ marginBottom: 32 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <h2 className="heading-md">Mis Reservas</h2>
-            <Link href="/reservar" className="btn btn-primary btn-sm">
-              + Nueva Reserva
-            </Link>
           </div>
 
           {bookings && bookings.length > 0 ? (

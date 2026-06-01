@@ -130,7 +130,11 @@ export function ProfileForm({
             className="input"
             defaultValue={profile?.phone || ""}
             placeholder="987654321"
-            maxLength={15}
+            maxLength={9}
+            onInput={(e) => {
+              const target = e.target as HTMLInputElement;
+              target.value = target.value.replace(/\D/g, "");
+            }}
           />
         </div>
         <div>

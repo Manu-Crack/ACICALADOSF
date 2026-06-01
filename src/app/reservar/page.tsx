@@ -547,7 +547,16 @@ export default function ReservarPage() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <label className="label">Celular *</label>
-              <input className="input" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} placeholder="987654321" />
+              <input
+                className="input"
+                value={contact.phone}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  setContact({ ...contact, phone: val });
+                }}
+                placeholder="987654321"
+                maxLength={9}
+              />
             </div>
             <div style={{ marginBottom: 16 }}>
               <label className="label">Correo electrónico</label>

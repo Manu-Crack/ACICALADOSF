@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CartButton } from "@/components/cart/CartButton";
 
@@ -134,6 +135,19 @@ export async function Navbar() {
               <Link href="/mi-cuenta" className="btn btn-secondary btn-sm">
                 {profile?.first_name || "Mi Cuenta"}
               </Link>
+              <form
+                action={async () => {
+                  "use server";
+                  const supabase = await createClient();
+                  await supabase.auth.signOut();
+                  redirect("/");
+                }}
+                style={{ display: "inline" }}
+              >
+                <button type="submit" className="btn btn-ghost btn-sm">
+                  Cerrar Sesión
+                </button>
+              </form>
             </>
           ) : (
             <Link href="/auth/login" className="btn btn-secondary btn-sm">
@@ -141,9 +155,6 @@ export async function Navbar() {
             </Link>
           )}
           <CartButton />
-          <Link href="/reservar" className="btn btn-primary btn-sm">
-            Reservar
-          </Link>
         </div>
       </nav>
     </header>

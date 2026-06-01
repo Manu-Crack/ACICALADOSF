@@ -1,11 +1,26 @@
 import Link from "next/link";
 
 const socialLinks = [
-  { name: "Instagram", href: "#", icon: "📸" },
-  { name: "Facebook", href: "#", icon: "📘" },
-  { name: "TikTok", href: "#", icon: "🎵" },
-  { name: "WhatsApp", href: "https://wa.me/", icon: "💬" },
-  { name: "YouTube", href: "#", icon: "🎬" },
+  {
+    name: "Facebook",
+    href: "https://www.facebook.com/",
+    icon: <img src="/icons/Facebook.svg" alt="Facebook" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
+  },
+  {
+    name: "Instagram",
+    href: "https://www.instagram.com/",
+    icon: <img src="/icons/Instagram.svg" alt="Instagram" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
+  },
+  {
+    name: "TikTok",
+    href: "https://www.tiktok.com/",
+    icon: <img src="/icons/Tiktok.svg" alt="TikTok" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
+  },
+  {
+    name: "WhatsApp",
+    href: "https://wa.me/+51936207169",
+    icon: <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
+  }
 ];
 
 export function Footer() {
@@ -116,16 +131,13 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 title={s.name}
+                className="hover:scale-110 active:scale-95 transition-transform duration-200 ease-out"
                 style={{
                   width: 40,
                   height: 40,
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--color-border)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: "1.125rem",
-                  transition: "all var(--transition-fast)",
                 }}
               >
                 {s.icon}

@@ -26,6 +26,8 @@ export default function RegisterPage() {
       password,
       options: {
         data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           full_name: `${firstName} ${lastName}`.trim(),
         },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
