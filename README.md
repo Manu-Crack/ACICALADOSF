@@ -48,3 +48,4 @@
    git clone <URL_DEL_REPOSITORIO>
    cd acicalados-junio
    pnpm install
+   pnpm run dev
