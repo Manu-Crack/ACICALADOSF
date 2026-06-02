@@ -3,22 +3,22 @@ import Link from "next/link";
 const socialLinks = [
   {
     name: "Facebook",
-    href: "https://www.facebook.com/",
+    href: "https://www.facebook.com/spaacicalados",
     icon: <img src="/icons/Facebook.svg" alt="Facebook" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   },
   {
     name: "Instagram",
-    href: "https://www.instagram.com/",
+    href: "https://www.instagram.com/acicaladosacicalados/",
     icon: <img src="/icons/Instagram.svg" alt="Instagram" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   },
   {
     name: "TikTok",
-    href: "https://www.tiktok.com/",
+    href: "https://www.tiktok.com/@acicalados_spa?is_from_webapp=1&sender_device=pc",
     icon: <img src="/icons/Tiktok.svg" alt="TikTok" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   },
   {
     name: "WhatsApp",
-    href: "https://wa.me/+51936207169",
+    href: "https://wa.me/+51",
     icon: <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   }
 ];
@@ -98,12 +98,6 @@ export function Footer() {
               style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
             >
               Blog
-            </Link>
-            <Link
-              href="/reservar"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
-            >
-              Reservar
             </Link>
           </div>
         </div>

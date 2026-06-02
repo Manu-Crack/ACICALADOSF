@@ -121,11 +121,23 @@ export default function RegisterPage() {
 
         {/* OAuth */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-          <button onClick={() => handleOAuth("google")} disabled={loading} className="btn btn-secondary" style={{ width: "100%" }}>
-            🔵 Continuar con Google
+          <button
+            onClick={() => handleOAuth("google")}
+            disabled={loading}
+            className="btn btn-secondary"
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+          >
+            <img src="/icons/Google.svg" alt="Google" style={{ width: 18, height: 18 }} />
+            Continuar con Google
           </button>
-          <button onClick={() => handleOAuth("facebook")} disabled={loading} className="btn btn-secondary" style={{ width: "100%" }}>
-            🔷 Continuar con Facebook
+          <button
+            onClick={() => handleOAuth("facebook")}
+            disabled={loading}
+            className="btn btn-secondary"
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+          >
+            <img src="/icons/Facebook.svg" alt="Facebook" style={{ width: 18, height: 18 }} />
+            Continuar con Facebook
           </button>
         </div>
 
