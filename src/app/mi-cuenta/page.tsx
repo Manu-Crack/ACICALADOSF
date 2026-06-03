@@ -109,7 +109,12 @@ export default async function MiCuentaPage() {
               ← Atrás
             </Link>
             <div>
-              <Link href="/" className="text-gold" style={{ fontWeight: 800, fontSize: "1.125rem", textDecoration: "none" }}>
+              <Link href="/" className="text-gold" style={{ fontWeight: 800, fontSize: "1.125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <img
+                  src="/LogoAcicalados.svg"
+                  alt="Logo Acicalados"
+                  style={{ height: 24, width: "auto" }}
+                />
                 ACICALADOS
               </Link>
               <h1 className="heading-lg" style={{ marginTop: 8 }}>Mi Cuenta</h1>

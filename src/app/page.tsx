@@ -38,19 +38,7 @@ export default async function HomePage() {
       <Navbar />
       <main>
         {/* Hero Section */}
-        <section
-          id="hero"
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            textAlign: "center",
-            position: "relative",
-            overflow: "hidden",
-            padding: "120px 24px 80px",
-          }}
-        >
+        <section id="inicio" className="hero-section">
           {/* Background gradient */}
           <div
             style={{
@@ -61,59 +49,76 @@ export default async function HomePage() {
               pointerEvents: "none",
             }}
           />
-          <div style={{ position: "relative", maxWidth: 720, margin: "0 auto" }}>
-            <span
-              className="badge badge-gold"
-              style={{
-                marginBottom: 20,
-                display: "inline-flex",
-                animation: "fadeInUp 0.5s ease-out forwards",
-              }}
-            >
-              ✨ Spa & Barbería Premium
-            </span>
-            <h1
-              className="heading-xl"
-              style={{
-                marginBottom: 20,
-                animation: "fadeInUp 0.6s ease-out 0.1s forwards",
-                opacity: 0,
-              }}
-            >
-              Tu mejor versión comienza en{" "}
-              <span className="text-gold">Acicalados</span>
-            </h1>
-            <p
-              className="text-muted"
-              style={{
-                fontSize: "1.125rem",
-                marginBottom: 40,
-                maxWidth: 560,
-                margin: "0 auto 40px",
-                lineHeight: 1.7,
-                animation: "fadeInUp 0.6s ease-out 0.2s forwards",
-                opacity: 0,
-              }}
-            >
-              Reserva en línea, paga tu adelanto y deja que nuestros especialistas
-              cuiden cada detalle. Barbería y Spa en un solo lugar.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                gap: 16,
-                justifyContent: "center",
-                flexWrap: "wrap",
-                animation: "fadeInUp 0.6s ease-out 0.3s forwards",
-                opacity: 0,
-              }}
-            >
-              <Link href="/reservar" className="btn btn-primary btn-lg">
-                Reservar Ahora
-              </Link>
-              <Link href="#servicios" className="btn btn-secondary btn-lg">
-                Ver Servicios
-              </Link>
+          <div className="container" style={{ position: "relative" }}>
+            <div className="hero-grid">
+              <div className="hero-content">
+                <span
+                  className="badge badge-gold"
+                  style={{
+                    marginBottom: 20,
+                    display: "inline-flex",
+                    animation: "fadeInUp 0.5s ease-out forwards",
+                  }}
+                >
+                  Spa & Barbería Premium
+                </span>
+                <h1
+                  className="heading-xl"
+                  style={{
+                    marginBottom: 20,
+                    animation: "fadeInUp 0.6s ease-out 0.1s forwards",
+                    opacity: 0,
+                  }}
+                >
+                  Tu mejor versión comienza en{" "}
+                  <span className="text-gold" style={{ display: "inline-flex", alignItems: "center", gap: 12, verticalAlign: "middle" }}>
+
+                    Acicalados
+                  </span>
+                </h1>
+                <p
+                  className="text-muted"
+                  style={{
+                    fontSize: "1.125rem",
+                    marginBottom: 40,
+                    maxWidth: 580,
+                    lineHeight: 1.7,
+                    animation: "fadeInUp 0.6s ease-out 0.2s forwards",
+                    opacity: 0,
+                  }}
+                >
+                  Reserva en línea, paga tu adelanto y deja que nuestros especialistas
+                  cuiden cada detalle. Barbería y Spa en un solo lugar.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 16,
+                    flexWrap: "wrap",
+                    animation: "fadeInUp 0.6s ease-out 0.3s forwards",
+                    opacity: 0,
+                  }}
+                >
+                  <Link href="/reservar" className="btn btn-primary btn-lg">
+                    Reservar Ahora
+                  </Link>
+                  <Link href="#servicios" className="btn btn-secondary btn-lg">
+                    Ver Servicios
+                  </Link>
+                </div>
+              </div>
+
+              <div className="hero-image-wrapper">
+                <div className="hero-image-glow" />
+                <img
+                  src="/barber-hero.png"
+                  alt="Barbería y Spa Acicalados"
+                  className="hero-image"
+                  style={{
+                    maxHeight: "90vh",
+                  }}
+                />
+              </div>
             </div>
           </div>
         </section>

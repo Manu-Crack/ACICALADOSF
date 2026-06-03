@@ -275,7 +275,12 @@ export default function ReservarPage() {
             ← Volver al Inicio
           </Link>
           <div style={{ textAlign: "center" }}>
-            <Link href="/" style={{ textDecoration: "none" }}>
+            <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <img
+                src="/LogoAcicalados.svg"
+                alt="Logo Acicalados"
+                style={{ height: 26, width: "auto" }}
+              />
               <span className="text-gold" style={{ fontWeight: 800, fontSize: "1.25rem" }}>
                 ACICALADOS
               </span>

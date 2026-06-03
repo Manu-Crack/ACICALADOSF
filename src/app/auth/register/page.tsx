@@ -106,11 +106,24 @@ export default function RegisterPage() {
     >
       <div className="card card-gold" style={{ maxWidth: 420, width: "100%", padding: 32 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Link href="/" style={{ textDecoration: "none" }}>
+          <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
             <h1
               className="text-gold"
-              style={{ fontSize: "1.5rem", fontWeight: 800, marginBottom: 8 }}
+              style={{
+                fontSize: "1.5rem",
+                fontWeight: 800,
+                marginBottom: 8,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+              }}
             >
+              <img
+                src="/LogoAcicalados.svg"
+                alt="Logo Acicalados"
+                style={{ height: 32, width: "auto" }}
+              />
               ACICALADOS
             </h1>
           </Link>

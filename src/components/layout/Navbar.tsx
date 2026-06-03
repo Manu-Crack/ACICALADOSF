@@ -58,6 +58,11 @@ export async function Navbar() {
             gap: 8,
           }}
         >
+          <img
+            src="/LogoAcicalados.svg"
+            alt="Logo Acicalados"
+            style={{ height: 28, width: "auto" }}
+          />
           <span className="text-gold">ACICALADOS</span>
         </Link>
 
@@ -69,6 +74,19 @@ export async function Navbar() {
             gap: 32,
           }}
         >
+          <Link
+            href="/#inicio"
+            className="btn-ghost"
+            style={{
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              color: "var(--color-text-muted)",
+              transition: "color var(--transition-fast)",
+              padding: "8px 0",
+            }}
+          >
+            Inicio
+          </Link>
           <Link
             href="/#servicios"
             className="btn-ghost"
@@ -93,7 +111,7 @@ export async function Navbar() {
               padding: "8px 0",
             }}
           >
-            Vestuario
+            Vestuarios
           </Link>
           <Link
             href="/tienda"

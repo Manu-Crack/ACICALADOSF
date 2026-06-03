@@ -45,8 +45,20 @@ export function Footer() {
         <div>
           <h3
             className="text-gold"
-            style={{ fontWeight: 800, fontSize: "1.25rem", marginBottom: 12 }}
+            style={{
+              fontWeight: 800,
+              fontSize: "1.25rem",
+              marginBottom: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
           >
+            <img
+              src="/LogoAcicalados.svg"
+              alt="Logo Acicalados"
+              style={{ height: 24, width: "auto" }}
+            />
             ACICALADOS
           </h3>
           <p
@@ -76,6 +88,12 @@ export function Footer() {
             style={{ display: "flex", flexDirection: "column", gap: 8 }}
           >
             <Link
+              href="/#inicio"
+              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
+            >
+              Inicio
+            </Link>
+            <Link
               href="/#servicios"
               style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
             >
@@ -85,7 +103,7 @@ export function Footer() {
               href="/vestuario"
               style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
             >
-              Vestuario
+              Vestuarios
             </Link>
             <Link
               href="/tienda"

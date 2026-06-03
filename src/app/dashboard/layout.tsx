@@ -59,7 +59,12 @@ export default async function DashboardLayout({
       >
         {/* Logo */}
         <div style={{ padding: "0 20px", marginBottom: 32 }}>
-          <Link href="/" style={{ textDecoration: "none" }}>
+          <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <img
+              src="/LogoAcicalados.svg"
+              alt="Logo Acicalados"
+              style={{ height: 24, width: "auto" }}
+            />
             <span
               className="text-gold"
               style={{ fontWeight: 800, fontSize: "1.125rem" }}
