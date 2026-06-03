@@ -390,7 +390,9 @@ export default function ReservarPage() {
                 width: "100%",
               }}
             >
-              <div style={{ fontSize: "2rem", marginBottom: 8 }}>✨</div>
+              <div style={{ marginBottom: 8 }}>
+                <img src="/LogoTodo.svg" alt="Todos los servicios" style={{ width: 48, height: 48, display: "inline-block" }} />
+              </div>
               <h3 className="heading-sm">Todos los servicios</h3>
               <p className="text-muted" style={{ fontSize: "0.875rem", marginTop: 8 }}>
                 Mezcla barbería y spa en una sola cita

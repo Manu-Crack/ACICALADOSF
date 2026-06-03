@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CartButton } from "@/components/cart/CartButton";
+import { MobileMenu } from "@/components/layout/MobileMenu";
 
 export async function Navbar() {
   const supabase = await createClient();
@@ -20,8 +21,15 @@ export async function Navbar() {
   }
 
   const isInternal =
-    profile &&
+    !!profile &&
     ["admin", "recepcionista", "empleado"].includes(profile.role);
+
+  async function handleSignOut() {
+    "use server";
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+    redirect("/");
+  }
 
   return (
     <header
@@ -66,14 +74,8 @@ export async function Navbar() {
           <span className="text-gold">ACICALADOS</span>
         </Link>
 
-        {/* Nav Links */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 32,
-          }}
-        >
+        {/* Nav Links - Desktop */}
+        <div className="nav-links-desktop">
           <Link
             href="/#inicio"
             className="btn-ghost"
@@ -154,38 +156,46 @@ export async function Navbar() {
           </Link>
         </div>
 
-        {/* Auth / Actions */}
+        {/* Actions / Auth / Mobile menu */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {user ? (
-            <>
-              {isInternal && (
-                <Link href="/dashboard" className="btn btn-ghost btn-sm">
-                  Panel
+          {/* Desktop Auth Links */}
+          <div className="nav-auth-desktop">
+            {user ? (
+              <>
+                {isInternal && (
+                  <Link href="/dashboard" className="btn btn-ghost btn-sm">
+                    Panel
+                  </Link>
+                )}
+                <Link href="/mi-cuenta" className="btn btn-secondary btn-sm">
+                  {profile?.first_name || "Mi Cuenta"}
                 </Link>
-              )}
-              <Link href="/mi-cuenta" className="btn btn-secondary btn-sm">
-                {profile?.first_name || "Mi Cuenta"}
+                <form
+                  action={handleSignOut}
+                  style={{ display: "inline" }}
+                >
+                  <button type="submit" className="btn btn-ghost btn-sm">
+                    Cerrar Sesión
+                  </button>
+                </form>
+              </>
+            ) : (
+              <Link href="/auth/login" className="btn btn-secondary btn-sm">
+                Iniciar Sesión
               </Link>
-              <form
-                action={async () => {
-                  "use server";
-                  const supabase = await createClient();
-                  await supabase.auth.signOut();
-                  redirect("/");
-                }}
-                style={{ display: "inline" }}
-              >
-                <button type="submit" className="btn btn-ghost btn-sm">
-                  Cerrar Sesión
-                </button>
-              </form>
-            </>
-          ) : (
-            <Link href="/auth/login" className="btn btn-secondary btn-sm">
-              Iniciar Sesión
-            </Link>
-          )}
+            )}
+          </div>
+
+          {/* Cart Button (visible on mobile and desktop) */}
           <CartButton />
+
+          {/* Mobile Menu Trigger & Panel */}
+          <MobileMenu
+            user={!!user}
+            profileName={profile?.first_name}
+            isInternal={isInternal}
+            onSignOut={handleSignOut}
+          />
         </div>
       </nav>
     </header>
