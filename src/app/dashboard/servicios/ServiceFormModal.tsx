@@ -265,8 +265,8 @@ export function ServiceFormModal({
                 value={type}
                 onChange={(e) => setType(e.target.value as "barberia" | "spa")}
               >
-                <option value="barberia">💈 Barbería</option>
-                <option value="spa">🧖‍♀️ Spa</option>
+                <option value="barberia">Barbería</option>
+                <option value="spa">Spa</option>
               </select>
             </div>
             <div>

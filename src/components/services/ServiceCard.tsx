@@ -61,9 +61,11 @@ export function ServiceCard({
         }}
       >
         {service.images.length === 0 && (
-          <span style={{ fontSize: "2rem", opacity: 0.4 }}>
-            {service.type === "barberia" ? "💈" : "🧖‍♀️"}
-          </span>
+          <img
+            src={service.type === "barberia" ? "/LogoBarberia.svg" : "/LogoSpa.svg"}
+            alt={service.type === "barberia" ? "Barbería" : "Spa"}
+            style={{ width: 48, height: "auto", opacity: 0.4 }}
+          />
         )}
       </div>
 

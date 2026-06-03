@@ -139,6 +139,19 @@ export async function Navbar() {
           >
             Blog
           </Link>
+          <Link
+            href="/ubicacion"
+            className="btn-ghost"
+            style={{
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              color: "var(--color-text-muted)",
+              transition: "color var(--transition-fast)",
+              padding: "8px 0",
+            }}
+          >
+            Ubicación
+          </Link>
         </div>
 
         {/* Auth / Actions */}

@@ -109,8 +109,15 @@ export function ServicesManager() {
               key={f}
               onClick={() => setFilter(f)}
               className={filter === f ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              {f === "all" ? "Todos" : f === "barberia" ? "💈 Barbería" : "🧖‍♀️ Spa"}
+              {f === "barberia" && (
+                <img src="/LogoBarberia.svg" alt="Barbería" style={{ height: 14, width: "auto" }} />
+              )}
+              {f === "spa" && (
+                <img src="/LogoSpa.svg" alt="Spa" style={{ height: 14, width: "auto" }} />
+              )}
+              {f === "all" ? "Todos" : f === "barberia" ? "Barbería" : "Spa"}
             </button>
           ))}
         </div>
@@ -165,9 +172,11 @@ export function ServicesManager() {
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                 ) : (
-                  <span style={{ fontSize: "2rem", opacity: 0.3 }}>
-                    {service.type === "barberia" ? "💈" : "🧖‍♀️"}
-                  </span>
+                  <img
+                    src={service.type === "barberia" ? "/LogoBarberia.svg" : "/LogoSpa.svg"}
+                    alt={service.type === "barberia" ? "Barbería" : "Spa"}
+                    style={{ width: 48, height: "auto", opacity: 0.3 }}
+                  />
                 )}
               </div>
 
@@ -177,8 +186,13 @@ export function ServicesManager() {
                   <h3 style={{ fontWeight: 600, fontSize: "1rem", marginBottom: 4 }}>
                     {service.name}
                   </h3>
-                  <span className="badge badge-gold" style={{ fontSize: "0.6875rem" }}>
-                    {service.type === "barberia" ? "💈 Barbería" : "🧖‍♀️ Spa"}
+                  <span className="badge badge-gold" style={{ fontSize: "0.6875rem", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <img
+                      src={service.type === "barberia" ? "/LogoBarberia.svg" : "/LogoSpa.svg"}
+                      alt={service.type === "barberia" ? "Barbería" : "Spa"}
+                      style={{ height: 10, width: "auto" }}
+                    />
+                    {service.type === "barberia" ? "Barbería" : "Spa"}
                   </span>
                 </div>
                 <p

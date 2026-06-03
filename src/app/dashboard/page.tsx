@@ -148,8 +148,13 @@ export default async function DashboardPage() {
                       </code>
                     </td>
                     <td style={{ padding: "12px" }}>
-                      <span className="badge badge-gold" style={{ fontSize: "0.75rem" }}>
-                        {b.service_type === "barberia" ? "💈 Barbería" : "🧖‍♀️ Spa"}
+                      <span className="badge badge-gold" style={{ fontSize: "0.75rem", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <img
+                          src={b.service_type === "barberia" ? "/LogoBarberia.svg" : "/LogoSpa.svg"}
+                          alt={b.service_type === "barberia" ? "Barbería" : "Spa"}
+                          style={{ height: 12, width: "auto" }}
+                        />
+                        {b.service_type === "barberia" ? "Barbería" : "Spa"}
                       </span>
                     </td>
                     <td style={{ padding: "12px" }}>

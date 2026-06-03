@@ -162,8 +162,12 @@ export default async function MiCuentaPage() {
                         <code style={{ color: "var(--color-primary)", fontWeight: 600 }}>
                           {b.booking_code}
                         </code>
-                        <span className="badge badge-gold" style={{ marginLeft: 8 }}>
-                          {b.service_type === "barberia" ? "💈" : "🧖‍♀️"}
+                        <span className="badge badge-gold" style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", padding: "4px 8px" }}>
+                          <img
+                            src={b.service_type === "barberia" ? "/LogoBarberia.svg" : "/LogoSpa.svg"}
+                            alt={b.service_type === "barberia" ? "Barbería" : "Spa"}
+                            style={{ height: 12, width: "auto" }}
+                          />
                         </span>
                       </div>
                       <span className={`badge ${b.status === "confirmada" ? "badge-success" : b.status === "completada" ? "badge-gold" : b.status === "cancelada" || b.status === "expirada" ? "badge-error" : "badge-warning"}`}>

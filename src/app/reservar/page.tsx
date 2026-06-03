@@ -351,7 +351,9 @@ export default function ReservarPage() {
                   border: "1px solid var(--color-primary-border)",
                 }}
               >
-                <div style={{ fontSize: "3rem", marginBottom: 12 }}>💈</div>
+                <div style={{ marginBottom: 12 }}>
+                  <img src="/LogoBarberia.svg" alt="Barbería" style={{ width: 64, height: 64, display: "inline-block" }} />
+                </div>
                 <h3 className="heading-sm">Barbería</h3>
                 <p className="text-muted" style={{ fontSize: "0.875rem", marginTop: 8 }}>
                   Cortes, barba, tratamientos capilares
@@ -367,7 +369,9 @@ export default function ReservarPage() {
                   border: "1px solid var(--color-primary-border)",
                 }}
               >
-                <div style={{ fontSize: "3rem", marginBottom: 12 }}>🧖‍♀️</div>
+                <div style={{ marginBottom: 12 }}>
+                  <img src="/LogoSpa.svg" alt="Spa" style={{ width: 64, height: 64, display: "inline-block" }} />
+                </div>
                 <h3 className="heading-sm">Spa</h3>
                 <p className="text-muted" style={{ fontSize: "0.875rem", marginTop: 8 }}>
                   Masajes, faciales, manicure, pedicure

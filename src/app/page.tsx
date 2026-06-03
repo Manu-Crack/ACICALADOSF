@@ -151,10 +151,15 @@ export default async function HomePage() {
                     marginBottom: 24,
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
+                    gap: 12,
                   }}
                 >
-                  💈 Barbería
+                  <img
+                    src="/LogoBarberia.svg"
+                    alt="Logo Barbería"
+                    style={{ height: 24, width: "auto" }}
+                  />
+                  Barbería
                 </h3>
                 <div className="grid grid-3" style={{ marginBottom: 48 }}>
                   {barberiaServices.map((service) => (
@@ -173,10 +178,15 @@ export default async function HomePage() {
                     marginBottom: 24,
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
+                    gap: 12,
                   }}
                 >
-                  🧖‍♀️ Spa
+                  <img
+                    src="/LogoSpa.svg"
+                    alt="Logo Spa"
+                    style={{ height: 24, width: "auto" }}
+                  />
+                  Spa
                 </h3>
                 <div className="grid grid-3">
                   {spaServices.map((service) => (
@@ -333,7 +343,7 @@ export default async function HomePage() {
         )}
 
         {/* Location / Google Maps */}
-        <section className="section">
+        <section id="ubicacion" className="section">
           <div className="container">
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <span className="badge badge-gold">Ubicación</span>

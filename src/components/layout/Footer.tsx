@@ -176,14 +176,12 @@ export function Footer() {
           <div
             style={{ display: "flex", flexDirection: "column", gap: 8 }}
           >
-            <a
-              href="https://maps.app.goo.gl/9ojPm9qdawhvqEYu9"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/ubicacion"
               style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
             >
               📍 Ver ubicación
-            </a>
+            </Link>
             <a
               href="https://wa.me/"
               target="_blank"
