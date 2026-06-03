@@ -72,7 +72,6 @@ export default async function HomePage() {
                 >
                   Tu mejor versión comienza en{" "}
                   <span className="text-gold" style={{ display: "inline-flex", alignItems: "center", gap: 12, verticalAlign: "middle" }}>
-
                     Acicalados
                   </span>
                 </h1>
