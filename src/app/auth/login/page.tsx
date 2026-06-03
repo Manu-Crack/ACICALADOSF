@@ -73,31 +73,37 @@ export default function LoginPage() {
         className="card card-gold"
         style={{ maxWidth: 420, width: "100%", padding: 32 }}
       >
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
-            <h1
-              className="text-gold"
-              style={{
-                fontSize: "1.5rem",
-                fontWeight: 800,
-                marginBottom: 8,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-              }}
-            >
-              <img
-                src="/LogoAcicalados.svg"
-                alt="Logo Acicalados"
-                style={{ height: 32, width: "auto" }}
-              />
-              ACICALADOS
-            </h1>
-          </Link>
-          <p className="text-muted" style={{ fontSize: "0.9375rem" }}>
-            Inicia sesión en tu cuenta
-          </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 32 }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/");
+              }
+            }}
+            className="btn btn-ghost btn-sm"
+            style={{ alignSelf: "flex-start", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            ← Volver
+          </button>
+          <div style={{ textAlign: "center" }}>
+            <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
+              <h1
+                className="text-gold"
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 800,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                INICIAR SESIÓN
+              </h1>
+            </Link>
+          </div>
         </div>
 
         {/* OAuth Buttons */}
