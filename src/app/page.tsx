@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ServiceCard } from "@/components/services/ServiceCard";
+import { HeroImageCarousel } from "@/components/layout/HeroImageCarousel";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -107,17 +108,7 @@ export default async function HomePage() {
                 </div>
               </div>
 
-              <div className="hero-image-wrapper">
-                <div className="hero-image-glow" />
-                <img
-                  src="/barber-hero.png"
-                  alt="Barbería y Spa Acicalados"
-                  className="hero-image"
-                  style={{
-                    maxHeight: "90vh",
-                  }}
-                />
-              </div>
+              <HeroImageCarousel />
             </div>
           </div>
         </section>
