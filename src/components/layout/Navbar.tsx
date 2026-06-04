@@ -90,7 +90,7 @@ export async function Navbar() {
             Inicio
           </Link>
           <Link
-            href="/#servicios"
+            href="/servicios"
             className="btn-ghost"
             style={{
               fontSize: "0.875rem",

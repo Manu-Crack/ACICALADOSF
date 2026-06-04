@@ -94,7 +94,7 @@ export function Footer() {
               Inicio
             </Link>
             <Link
-              href="/#servicios"
+              href="/servicios"
               style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
             >
               Servicios

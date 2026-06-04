@@ -38,7 +38,7 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
 
   const navLinks = [
     { label: "Inicio", href: "/#inicio" },
-    { label: "Servicios", href: "/#servicios" },
+    { label: "Servicios", href: "/servicios" },
     { label: "Vestuarios", href: "/vestuario" },
     { label: "Tienda", href: "/tienda" },
     { label: "Blog", href: "/blog" },

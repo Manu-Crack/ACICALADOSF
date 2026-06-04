@@ -2,22 +2,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { ServiceCard } from "@/components/services/ServiceCard";
 import { HeroImageCarousel } from "@/components/layout/HeroImageCarousel";
 
 export default async function HomePage() {
   const supabase = await createClient();
-
-  // Fetch public services
-  const { data: services } = await supabase
-    .from("services")
-    .select("id, name, slug, description, type, price_cents, duration_minutes, images")
-    .eq("is_active", true)
-    .eq("is_public", true)
-    .order("sort_order");
-
-  const barberiaServices = services?.filter((s) => s.type === "barberia") ?? [];
-  const spaServices = services?.filter((s) => s.type === "spa") ?? [];
 
   // Fetch published testimonials
   const { data: testimonials } = await supabase
@@ -102,7 +90,7 @@ export default async function HomePage() {
                   <Link href="/reservar" className="btn btn-primary btn-lg">
                     Reservar Ahora
                   </Link>
-                  <Link href="#servicios" className="btn btn-secondary btn-lg">
+                  <Link href="/servicios" className="btn btn-secondary btn-lg">
                     Ver Servicios
                   </Link>
                 </div>
@@ -113,95 +101,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Services Section */}
-        <section id="servicios" className="section">
-          <div className="container">
-            <div style={{ textAlign: "center", marginBottom: 60 }}>
-              <span className="badge badge-gold">Nuestros Servicios</span>
-              <h2
-                className="heading-lg"
-                style={{ marginTop: 16, marginBottom: 8 }}
-              >
-                Elige tu experiencia
-              </h2>
-              <div
-                className="divider-gold"
-                style={{ margin: "16px auto" }}
-              />
-              <p className="text-muted" style={{ maxWidth: 480, margin: "0 auto" }}>
-                Servicios pensados para que te veas y te sientas increíble.
-              </p>
-            </div>
 
-            {/* Barbería */}
-            {barberiaServices.length > 0 && (
-              <>
-                <h3
-                  className="heading-md"
-                  style={{
-                    marginBottom: 24,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <img
-                    src="/LogoBarberia.svg"
-                    alt="Logo Barbería"
-                    style={{ height: 24, width: "auto" }}
-                  />
-                  Barbería
-                </h3>
-                <div className="grid grid-3" style={{ marginBottom: 48 }}>
-                  {barberiaServices.map((service) => (
-                    <ServiceCard key={service.id} service={service} />
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* Spa */}
-            {spaServices.length > 0 && (
-              <>
-                <h3
-                  className="heading-md"
-                  style={{
-                    marginBottom: 24,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <img
-                    src="/LogoSpa.svg"
-                    alt="Logo Spa"
-                    style={{ height: 24, width: "auto" }}
-                  />
-                  Spa
-                </h3>
-                <div className="grid grid-3">
-                  {spaServices.map((service) => (
-                    <ServiceCard key={service.id} service={service} />
-                  ))}
-                </div>
-              </>
-            )}
-
-            {(!services || services.length === 0) && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "60px 20px",
-                  color: "var(--color-text-muted)",
-                }}
-              >
-                <p style={{ fontSize: "1.125rem" }}>
-                  Próximamente disponibles. ¡Mantente atento!
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
 
         {/* CTA Section */}
         <section
