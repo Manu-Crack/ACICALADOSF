@@ -15,6 +15,9 @@ export const metadata: Metadata = {
     "belleza",
     "reserva online",
   ],
+  icons: {
+    icon: "/LogoAcicalados.svg",
+  },
   openGraph: {
     title: "Acicalados Spa & Barber Shop",
     description:
