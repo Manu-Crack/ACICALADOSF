@@ -87,11 +87,17 @@ export default async function HomePage() {
                     opacity: 0,
                   }}
                 >
-                  <Link href="/reservar" className="btn btn-primary btn-lg">
+                  <Link
+                    href="/reservar"
+                    className="btn btn-primary btn-lg hero-cta-btn"
+                  >
                     Reservar Ahora
                   </Link>
-                  <Link href="/servicios" className="btn btn-secondary btn-lg">
-                    Ver Servicios
+                  <Link
+                    href="/servicios"
+                    className="btn btn-secondary btn-lg hero-cta-btn"
+                  >
+                    Ver Servicios »
                   </Link>
                 </div>
 

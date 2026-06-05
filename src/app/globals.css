@@ -216,6 +216,10 @@ a:hover {
   letter-spacing: 0.03em;
 }
 
+.hero-cta-btn {
+  min-width: 220px;
+}
+
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -444,6 +448,11 @@ a:hover {
 
   .section {
     padding: 48px 0;
+  }
+
+  .hero-cta-btn {
+    width: 100%;
+    max-width: 320px;
   }
 }
 
