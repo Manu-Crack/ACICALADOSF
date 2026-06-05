@@ -14,8 +14,8 @@
   --color-primary-border: rgba(200, 164, 92, 0.30);
 
   /* Backgrounds — Papel viejo / Parchment */
-  --color-bg: #1C1912;
-  --color-bg-card: #262117;
+  --color-bg: #000000;
+  --color-bg-card: #000000;
   --color-bg-elevated: #302A1F;
   --color-bg-overlay: rgba(20, 18, 12, 0.82);
 
@@ -25,7 +25,7 @@
 
   /* Text */
   --color-text: #F2E8D0;
-  --color-text-muted: #B8A98A;
+  --color-text-muted: #ffffff;
   --color-text-dim: #7A6E58;
 
   /* Semantic */
@@ -586,7 +586,7 @@ a:hover {
    ============================================================ */
 
 .glass {
-  background: rgba(28, 25, 18, 0.88);
+  background: rgba(0, 0, 0, 0.88);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   border: 1px solid rgba(200, 164, 92, 0.10);
@@ -882,5 +882,60 @@ details>summary {
 
   .mobile-menu-trigger {
     display: inline-flex !important;
+  }
+}
+
+/* Hero Informative Features */
+.hero-features {
+  margin-top: 48px;
+  width: 100%;
+  max-width: 600px;
+  animation: fadeInUp 0.6s ease-out 0.4s forwards;
+  opacity: 0;
+}
+
+.hero-feature-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+.hero-feature-icon {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  transition: transform var(--transition-normal);
+}
+
+.hero-feature-item:hover .hero-feature-icon {
+  transform: translateY(-4px) scale(1.05);
+}
+
+.hero-feature-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.hero-feature-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Responsiveness for hero features alignment */
+@media (max-width: 1024px) {
+  .hero-features {
+    margin: 40px auto 0;
+  }
+  .hero-feature-item {
+    align-items: center;
+    text-align: center;
   }
 }

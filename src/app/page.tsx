@@ -94,6 +94,54 @@ export default async function HomePage() {
                     Ver Servicios
                   </Link>
                 </div>
+
+                {/* Informative Section */}
+                <div className="grid grid-3 hero-features">
+                  {/* First Section */}
+                  <div className="hero-feature-item">
+                    <img
+                      src="/icons/insignia.svg"
+                      alt="Especialistas"
+                      className="hero-feature-icon"
+                    />
+                    <div>
+                      <h3 className="hero-feature-title">Especialistas</h3>
+                      <p className="hero-feature-desc">
+                        Profesionales<br />certificados
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Second Section */}
+                  <div className="hero-feature-item">
+                    <img
+                      src="/icons/silla.svg"
+                      alt="Experiencia"
+                      className="hero-feature-icon"
+                    />
+                    <div>
+                      <h3 className="hero-feature-title">Experiencia</h3>
+                      <p className="hero-feature-desc">
+                        Ambiente premium<br />y relajante
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Third Section */}
+                  <div className="hero-feature-item">
+                    <img
+                      src="/icons/botella.svg"
+                      alt="Productos"
+                      className="hero-feature-icon"
+                    />
+                    <div>
+                      <h3 className="hero-feature-title">Productos</h3>
+                      <p className="hero-feature-desc">
+                        De alta calidad para<br />tu cuidado
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <HeroImageCarousel />
