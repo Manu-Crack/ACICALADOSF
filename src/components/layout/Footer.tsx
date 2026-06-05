@@ -15,11 +15,6 @@ const socialLinks = [
     name: "TikTok",
     href: "https://www.tiktok.com/@acicalados_spa?is_from_webapp=1&sender_device=pc",
     icon: <img src="/icons/Tiktok.svg" alt="TikTok" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
-  },
-  {
-    name: "WhatsApp",
-    href: "https://wa.me/+51",
-    icon: <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   }
 ];
 

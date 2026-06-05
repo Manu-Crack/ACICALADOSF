@@ -192,7 +192,12 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
                   className="btn btn-secondary"
                   style={{ width: "100%", fontSize: "0.9375rem", textAlign: "center" }}
                 >
-                  👤 {profileName || "Mi Cuenta"}
+                  <img
+                    src="/IconUser.svg"
+                    alt="User"
+                    style={{ width: "35px", height: "35px" }}
+                  />
+                  <span>{profileName || "Mi Cuenta"}</span>
                 </Link>
                 <button
                   onClick={async () => {
