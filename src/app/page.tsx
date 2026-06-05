@@ -91,6 +91,11 @@ export default async function HomePage() {
                     href="/reservar"
                     className="btn btn-primary btn-lg hero-cta-btn"
                   >
+                    <img
+                      src="/calendario.svg"
+                      alt="Calendario"
+                      style={{ width: 20, height: 20 }}
+                    />
                     Reservar Ahora
                   </Link>
                   <Link
