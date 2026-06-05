@@ -137,7 +137,7 @@ export function Footer() {
               <img
                 src="/icons/whatsApp.svg"
                 alt="WhatsApp"
-                style={{ width: 16, height: 16 }}
+                style={{ width: 30, height: 30 }}
               />
               WhatsApp
             </a>
