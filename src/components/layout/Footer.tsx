@@ -173,17 +173,39 @@ export function Footer() {
           >
             <Link
               href="/ubicacion"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
+              style={{
+                fontSize: "0.875rem",
+                color: "var(--color-text-muted)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
             >
-              📍 Ver ubicación
+              <img
+                src="/icons/maps.svg"
+                alt="Ubicación"
+                style={{ width: 16, height: 16 }}
+              />
+              Ver ubicación
             </Link>
             <a
               href="https://wa.me/"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
+              style={{
+                fontSize: "0.875rem",
+                color: "var(--color-text-muted)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
             >
-              💬 WhatsApp
+              <img
+                src="/icons/whatsApp.svg"
+                alt="WhatsApp"
+                style={{ width: 16, height: 16 }}
+              />
+              WhatsApp
             </a>
           </div>
         </div>
