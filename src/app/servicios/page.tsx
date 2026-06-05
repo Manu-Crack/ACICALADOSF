@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { ServiceCard } from "@/components/services/ServiceCard";
+import { ServiceList } from "@/components/services/ServiceList";
 import Link from "next/link";
 
 export const metadata = {
@@ -20,9 +20,6 @@ export default async function ServiciosPage() {
     .eq("is_active", true)
     .eq("is_public", true)
     .order("sort_order");
-
-  const barberiaServices = services?.filter((s) => s.type === "barberia") ?? [];
-  const spaServices = services?.filter((s) => s.type === "spa") ?? [];
 
   return (
     <>
@@ -51,8 +48,7 @@ export default async function ServiciosPage() {
                   lineHeight: 1.7,
                 }}
               >
-                Elige la experiencia ideal para tu cuidado personal. Contamos con especialistas en cada área y productos de la más alta calidad para garantizar tu máxima satisfacción.
-              </p>
+</p>
             </div>
           </div>
         </section>
@@ -60,67 +56,11 @@ export default async function ServiciosPage() {
         {/* Services List Section */}
         <section style={{ paddingBottom: 80 }}>
           <div className="container">
-            
-            {/* Barbería Section */}
-            {barberiaServices.length > 0 && (
-              <div style={{ marginBottom: 64 }}>
-                <h2
-                  className="heading-lg text-gold"
-                  style={{
-                    marginBottom: 28,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    fontFamily: "'Playfair Display', serif",
-                  }}
-                >
-                  <img
-                    src="/LogoBarberia.svg"
-                    alt="Logo Barbería"
-                    style={{ height: 32, width: "auto" }}
-                  />
-                  Barbería
-                </h2>
-                <div className="grid grid-3">
-                  {barberiaServices.map((service) => (
-                    <ServiceCard key={service.id} service={service} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Spa Section */}
-            {spaServices.length > 0 && (
-              <div style={{ marginBottom: 64 }}>
-                <h2
-                  className="heading-lg text-gold"
-                  style={{
-                    marginBottom: 28,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    fontFamily: "'Playfair Display', serif",
-                  }}
-                >
-                  <img
-                    src="/LogoSpa.svg"
-                    alt="Logo Spa"
-                    style={{ height: 32, width: "auto" }}
-                  />
-                  Spa y Bienestar
-                </h2>
-                <div className="grid grid-3">
-                  {spaServices.map((service) => (
-                    <ServiceCard key={service.id} service={service} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Empty State */}
-            {(!services || services.length === 0) && (
+            {services && services.length > 0 ? (
+              <ServiceList services={services} />
+            ) : (
               <div
-                className="card card-gold"
+                className="card card-gold animate-fadeIn"
                 style={{
                   textAlign: "center",
                   padding: "80px 20px",
