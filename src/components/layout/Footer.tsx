@@ -64,56 +64,7 @@ export function Footer() {
           </p>
         </div>
 
-        {/* Quick Links */}
-        <div>
-          <h4
-            style={{
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontWeight: 600,
-              fontSize: "0.875rem",
-              marginBottom: 16,
-              color: "var(--color-primary)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            Enlaces
-          </h4>
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: 8 }}
-          >
-            <Link
-              href="/#inicio"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
-            >
-              Inicio
-            </Link>
-            <Link
-              href="/servicios"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
-            >
-              Servicios
-            </Link>
-            <Link
-              href="/vestuario"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
-            >
-              Vestuarios
-            </Link>
-            <Link
-              href="/tienda"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
-            >
-              Tienda
-            </Link>
-            <Link
-              href="/blog"
-              style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}
-            >
-              Blog
-            </Link>
-          </div>
-        </div>
+
 
         {/* Social */}
         <div>
@@ -171,23 +122,6 @@ export function Footer() {
           <div
             style={{ display: "flex", flexDirection: "column", gap: 8 }}
           >
-            <Link
-              href="/ubicacion"
-              style={{
-                fontSize: "0.875rem",
-                color: "var(--color-text-muted)",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <img
-                src="/icons/maps.svg"
-                alt="Ubicación"
-                style={{ width: 16, height: 16 }}
-              />
-              Ver ubicación
-            </Link>
             <a
               href="https://wa.me/"
               target="_blank"

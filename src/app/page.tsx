@@ -314,7 +314,12 @@ export default async function HomePage() {
                 className="btn btn-secondary btn-sm"
                 style={{ marginTop: 16 }}
               >
-                📍 Abrir en Google Maps
+                <img
+                  src="/icons/maps.svg"
+                  alt="Maps"
+                  style={{ width: 16, height: 16 }}
+                />
+                Abrir en Google Maps
               </a>
             </div>
             <div
