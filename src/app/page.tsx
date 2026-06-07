@@ -160,7 +160,72 @@ export default async function HomePage() {
           </div>
         </section>
 
+        {/* Benefits Section */}
+        <section className="benefits-section">
+          <div className="container">
+            <div className="grid grid-4">
+              {/* Bloque 1 */}
+              <div className="benefit-card">
+                <div className="benefit-icon-wrapper">
+                  <img
+                    src="/calendarioT.svg"
+                    alt="Reserva fácil y rápida"
+                    className="benefit-icon"
+                  />
+                </div>
+                <h3 className="benefit-title">Reserva fácil y rápida</h3>
+                <p className="benefit-desc">
+                  Agenda en línea en solo unos clics.
+                </p>
+              </div>
 
+              {/* Bloque 2 */}
+              <div className="benefit-card">
+                <div className="benefit-icon-wrapper">
+                  <img
+                    src="/tarjeta.svg"
+                    alt="Pago seguro"
+                    className="benefit-icon"
+                  />
+                </div>
+                <h3 className="benefit-title">Pago seguro</h3>
+                <p className="benefit-desc">
+                  Paga tu adelanto en línea con total seguridad.
+                </p>
+              </div>
+
+              {/* Bloque 3 */}
+              <div className="benefit-card">
+                <div className="benefit-icon-wrapper">
+                  <img
+                    src="/tiempo.svg"
+                    alt="Sin esperas"
+                    className="benefit-icon"
+                  />
+                </div>
+                <h3 className="benefit-title">Sin esperas</h3>
+                <p className="benefit-desc">
+                  Tu tiempo es valioso, evita filas y espera.
+                </p>
+              </div>
+
+              {/* Bloque 4 */}
+              <div className="benefit-card">
+                <div className="benefit-icon-wrapper">
+                  <img
+                    src="/ubicacion.svg"
+                    alt="Ubicación privilegiada"
+                    className="benefit-icon"
+                  />
+                </div>
+                <h3 className="benefit-title">Ubicación privilegiada</h3>
+                <p className="benefit-desc">
+                  Visítanos en el corazón de la ciudad.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* CTA Section */}
         <section

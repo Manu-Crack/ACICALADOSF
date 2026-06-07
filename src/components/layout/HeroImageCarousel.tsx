@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 
 const IMAGES = [
   {
-    src: "/barber-hero.png",
+    src: "/barber-hero.webp",
     alt: "Barbería Acicalados",
   },
   {

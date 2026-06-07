@@ -96,7 +96,8 @@ export default async function ServiciosPage() {
                   Reserva tu cita en línea de forma rápida. Paga un 30% de adelanto con cualquier método de pago y asegura tu cupo.
                 </p>
                 <Link href="/reservar" className="btn btn-primary btn-lg">
-                  📅 Reservar Turno Ahora
+                  <img src="/icons/calendario.svg" alt="Calendario" style={{ width: 20, height: 20, marginRight: 8 }} />
+                  Reservar Turno Ahora
                 </Link>
               </div>
             )}
