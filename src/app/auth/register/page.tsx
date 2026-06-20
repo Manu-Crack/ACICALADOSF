@@ -21,27 +21,32 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          full_name: `${firstName} ${lastName}`.trim(),
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            full_name: `${firstName} ${lastName}`.trim(),
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(true);
       setLoading(false);
-      return;
+    } catch (err: any) {
+      setError(err.message || "Error de conexión o configuración local.");
+      setLoading(false);
     }
-
-    setSuccess(true);
-    setLoading(false);
   }
 
   async function handleOAuth(provider: "google" | "facebook") {
@@ -106,20 +111,13 @@ export default function RegisterPage() {
     >
       <div className="card card-gold" style={{ maxWidth: 420, width: "100%", padding: 32 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 32 }}>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined" && window.history.length > 1) {
-                router.back();
-              } else {
-                router.push("/");
-              }
-            }}
+          <Link
+            href="/"
             className="btn btn-ghost btn-sm"
             style={{ alignSelf: "flex-start", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 6 }}
           >
             ← Volver
-          </button>
+          </Link>
           <div style={{ textAlign: "center" }}>
             <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
               <h1

@@ -27,16 +27,13 @@ export default async function MiCuentaPage() {
     .from("bookings")
     .select("id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, service_type")
     .eq("user_id", user.id)
+    .in("status", ["confirmada", "completada"])
     .order("booking_date", { ascending: false })
     .limit(20);
 
   const statusLabels: Record<string, string> = {
-    borrador: "Borrador",
-    pendiente: "Pendiente",
     confirmada: "Confirmada",
     completada: "Completada",
-    cancelada: "Cancelada",
-    expirada: "Expirada",
   };
 
   const paymentLabels: Record<string, string> = {
@@ -191,7 +188,7 @@ export default async function MiCuentaPage() {
             </div>
           ) : (
             <div style={{ textAlign: "center", padding: 32 }}>
-              <p className="text-muted">Aún no tienes reservas.</p>
+              <p className="text-muted">Aún no tienes reservas confirmadas.</p>
               <Link href="/reservar" className="btn btn-primary" style={{ marginTop: 16 }}>
                 Reservar Ahora
               </Link>

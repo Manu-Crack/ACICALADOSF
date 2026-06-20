@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 
 type Service = {
   id: string;
@@ -18,6 +18,93 @@ type Service = {
   sort_order: number;
 };
 
+/* ============================================================
+   CATÁLOGO PREDEFINIDO DE SERVICIOS
+   ============================================================ */
+
+type CatalogEntry = {
+  name: string;
+  duration_minutes: number;
+  price_soles: number;
+};
+
+const SPA_CATALOG: CatalogEntry[] = [
+  { name: "PEDICURE", duration_minutes: 90, price_soles: 40 },
+  { name: "DEPILACIÓN (PIERNA)", duration_minutes: 30, price_soles: 50 },
+  { name: "DEPILACIÓN (PIERNA Y MUSLO)", duration_minutes: 45, price_soles: 70 },
+  { name: "MANICURE", duration_minutes: 90, price_soles: 35 },
+  { name: "ACRÍLICAS (2H 30MIN)", duration_minutes: 150, price_soles: 70 },
+  { name: "ACRÍLICAS (2H)", duration_minutes: 120, price_soles: 65 },
+  { name: "FACIAL PROFUNDO", duration_minutes: 90, price_soles: 80 },
+  { name: "FACIAL BÁSICO", duration_minutes: 30, price_soles: 50 },
+  { name: "RIZADO DE PESTAÑAS", duration_minutes: 45, price_soles: 35 },
+  { name: "PIGMENTACIÓN DE CEJAS", duration_minutes: 30, price_soles: 25 },
+  { name: "PESTAÑAS POSTIZAS", duration_minutes: 30, price_soles: 35 },
+  { name: "PLANCHADO DE CEJAS", duration_minutes: 40, price_soles: 25 },
+  { name: "TINTE BUENO (1 SOLO COLOR)", duration_minutes: 90, price_soles: 120 },
+  { name: "TINTE NORMAL (1 SOLO COLOR)", duration_minutes: 90, price_soles: 100 },
+  { name: "TINTE BÁSICO (1 SOLO COLOR)", duration_minutes: 90, price_soles: 80 },
+  { name: "TOQUE DE RAÍZ", duration_minutes: 90, price_soles: 80 },
+  { name: "BAÑO DE COLOR", duration_minutes: 60, price_soles: 80 },
+  { name: "BALAGE", duration_minutes: 210, price_soles: 350 },
+  { name: "ALIZADO BÁSICO", duration_minutes: 180, price_soles: 200 },
+  { name: "ALIZADO DUAL (PORTUGAL)", duration_minutes: 240, price_soles: 350 },
+  { name: "ALIZADO VIP", duration_minutes: 420, price_soles: 450 },
+  { name: "DEPILACIÓN DE BOZO", duration_minutes: 10, price_soles: 10 },
+  { name: "DEPILACIÓN DE BOZO CON HILO", duration_minutes: 10, price_soles: 10 },
+  { name: "DEPILACIÓN DE BOZO CON CERA", duration_minutes: 10, price_soles: 10 },
+  { name: "DEPILACIÓN FACIAL CON HILO", duration_minutes: 45, price_soles: 30 },
+  { name: "DEPILACIÓN CON CERA", duration_minutes: 30, price_soles: 45 },
+  { name: "BOTOX DE 150", duration_minutes: 120, price_soles: 150 },
+  { name: "BOTOX DE 80", duration_minutes: 120, price_soles: 80 },
+  { name: "PIGMENTACIÓN DE 3 DÍAS", duration_minutes: 4320, price_soles: 10 },
+  { name: "PIGMENTACIÓN DE 2 SEMANAS", duration_minutes: 20160, price_soles: 25 },
+  { name: "RAYITOS", duration_minutes: 120, price_soles: 200 },
+  { name: "MECHAS + COLOR", duration_minutes: 180, price_soles: 280 },
+  { name: "BALAGE + COLOR", duration_minutes: 240, price_soles: 450 },
+  { name: "EXTENSIONES DE CABELLO 1", duration_minutes: 60, price_soles: 100 },
+  { name: "EXTENSIONES DE CABELLO 2", duration_minutes: 180, price_soles: 700 },
+  { name: "EXTENSIONES DE CABELLO 3", duration_minutes: 300, price_soles: 1000 },
+  { name: "BLANQUEAMIENTO", duration_minutes: 30, price_soles: 30 },
+  { name: "PESTAÑAS POSTIZAS 1X1", duration_minutes: 35, price_soles: 35 },
+  { name: "PESTAÑAS POSTIZAS ANIME", duration_minutes: 25, price_soles: 25 },
+  { name: "LAVADO DE CABELLO", duration_minutes: 10, price_soles: 10 },
+  { name: "PLANCHADO DE CABELLO", duration_minutes: 30, price_soles: 30 },
+  { name: "SECADO + PLANCHADO", duration_minutes: 45, price_soles: 30 },
+  { name: "ONDULACIÓN CABELLO CORTO", duration_minutes: 120, price_soles: 50 },
+  { name: "ONDULACIÓN CABELLO MEDIANO", duration_minutes: 180, price_soles: 70 },
+  { name: "ONDULACIÓN CABELLO LARGO", duration_minutes: 240, price_soles: 120 },
+  { name: "MICRO BLADING", duration_minutes: 120, price_soles: 250 },
+  { name: "MICRO CHEADING", duration_minutes: 180, price_soles: 350 },
+  { name: "LABIOS", duration_minutes: 150, price_soles: 450 },
+  { name: "CEPILLADO DE CABELLO", duration_minutes: 60, price_soles: 30 },
+  { name: "DELINEADO DE OJOS SUPERIOR", duration_minutes: 120, price_soles: 250 },
+  { name: "DELINEADO DE OJOS BEAGLE", duration_minutes: 120, price_soles: 200 },
+  { name: "DELINEADO DE OJOS INFERIOR", duration_minutes: 120, price_soles: 150 },
+  { name: "YELITIPS", duration_minutes: 150, price_soles: 50 },
+];
+
+const BARBERIA_CATALOG: CatalogEntry[] = [
+  { name: "CORTE CLÁSICO", duration_minutes: 30, price_soles: 20 },
+  { name: "CORTE FADE", duration_minutes: 60, price_soles: 25 },
+  { name: "CORTE + BARBA", duration_minutes: 60, price_soles: 30 },
+  { name: "CORTE + DISEÑO", duration_minutes: 80, price_soles: 50 },
+];
+
+/* ============================================================
+   Helper: format duration for display
+   ============================================================ */
+function formatDuration(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}min`;
+}
+
+/* ============================================================
+   Helper: slugify
+   ============================================================ */
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -27,6 +114,9 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+/* ============================================================
+   COMPONENT
+   ============================================================ */
 export function ServiceFormModal({
   service,
   onClose,
@@ -58,8 +148,49 @@ export function ServiceFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // For the catalog selector
+  const [selectedCatalogIndex, setSelectedCatalogIndex] = useState<number>(-1);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slugManuallyEdited = useRef(false);
+
+  // Get current catalog based on type
+  const currentCatalog = useMemo(
+    () => (type === "spa" ? SPA_CATALOG : BARBERIA_CATALOG),
+    [type]
+  );
+
+  /* When selecting from catalog dropdown */
+  function handleCatalogSelect(index: number) {
+    setSelectedCatalogIndex(index);
+    if (index < 0) {
+      // Reset fields if "Seleccionar..." is chosen
+      setName("");
+      setPriceSoles("");
+      setDurationMinutes("");
+      setSlug("");
+      return;
+    }
+    const entry = currentCatalog[index];
+    setName(entry.name);
+    setPriceSoles(entry.price_soles.toFixed(2));
+    setDurationMinutes(entry.duration_minutes.toString());
+    if (!slugManuallyEdited.current) {
+      setSlug(slugify(entry.name));
+    }
+  }
+
+  /* When switching type, reset catalog selection */
+  function handleTypeChange(newType: "barberia" | "spa") {
+    setType(newType);
+    if (!isEditing) {
+      setSelectedCatalogIndex(-1);
+      setName("");
+      setPriceSoles("");
+      setDurationMinutes("");
+      setSlug("");
+    }
+  }
 
   function handleNameChange(value: string) {
     setName(value);
@@ -108,6 +239,12 @@ export function ServiceFormModal({
     e.preventDefault();
     setSaving(true);
     setError("");
+
+    if (!name.trim()) {
+      setError("Selecciona un servicio del catálogo");
+      setSaving(false);
+      return;
+    }
 
     const priceCents = Math.round(parseFloat(priceSoles) * 100);
     if (isNaN(priceCents) || priceCents < 0) {
@@ -212,21 +349,116 @@ export function ServiceFormModal({
         )}
 
         <form onSubmit={handleSubmit}>
-          {/* Name & Slug */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-            <div>
-              <label className="label" htmlFor="svc-name">Nombre del servicio *</label>
-              <input
-                id="svc-name"
-                className="input"
-                value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="Ej: Corte Clásico"
-                required
-              />
+          {/* Type Selector — must be first so catalog list updates */}
+          <div style={{ marginBottom: 16 }}>
+            <label className="label">Tipo de servicio *</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => handleTypeChange("barberia")}
+                className={type === "barberia" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              >
+                <img src="/LogoBarberia.svg" alt="Barbería" style={{ height: 16, width: "auto" }} />
+                Barbería
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTypeChange("spa")}
+                className={type === "spa" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              >
+                <img src="/LogoSpa.svg" alt="Spa" style={{ height: 16, width: "auto" }} />
+                Spa
+              </button>
             </div>
-            <div>
-              <label className="label" htmlFor="svc-slug">Slug *</label>
+          </div>
+
+          {/* Catalog Selector (for new services) OR Name input (for editing) */}
+          {!isEditing ? (
+            <div style={{ marginBottom: 16 }}>
+              <label className="label" htmlFor="svc-catalog">Seleccionar servicio del catálogo *</label>
+              <select
+                id="svc-catalog"
+                className="select"
+                value={selectedCatalogIndex}
+                onChange={(e) => handleCatalogSelect(parseInt(e.target.value))}
+                style={{
+                  borderColor: selectedCatalogIndex >= 0 ? "var(--color-primary)" : undefined,
+                }}
+              >
+                <option value={-1}>— Seleccionar servicio —</option>
+                {currentCatalog.map((entry, i) => (
+                  <option key={`${entry.name}-${i}`} value={i}>
+                    {entry.name} — {formatDuration(entry.duration_minutes)} — S/ {entry.price_soles.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+
+              {/* Preview card when selected */}
+              {selectedCatalogIndex >= 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "14px 18px",
+                    background: "rgba(200,164,92,0.06)",
+                    border: "1px solid var(--color-primary-border)",
+                    borderRadius: "var(--radius-md)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    animation: "fadeIn 0.2s ease-out",
+                  }}
+                >
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 2 }}>
+                      {currentCatalog[selectedCatalogIndex].name}
+                    </p>
+                    <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                      ⏱️ {formatDuration(currentCatalog[selectedCatalogIndex].duration_minutes)}
+                    </p>
+                  </div>
+                  <p style={{ fontWeight: 700, fontSize: "1.25rem", color: "var(--color-primary)" }}>
+                    S/ {currentCatalog[selectedCatalogIndex].price_soles.toFixed(2)}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* When editing: show name as read-only input */
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label className="label" htmlFor="svc-name">Nombre del servicio *</label>
+                <input
+                  id="svc-name"
+                  className="input"
+                  value={name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="Ej: Corte Clásico"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="svc-slug">Slug *</label>
+                <input
+                  id="svc-slug"
+                  className="input"
+                  value={slug}
+                  onChange={(e) => {
+                    slugManuallyEdited.current = true;
+                    setSlug(e.target.value);
+                  }}
+                  placeholder="corte-clasico"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Slug (for new services — shown below catalog) */}
+          {!isEditing && (
+            <div style={{ marginBottom: 16 }}>
+              <label className="label" htmlFor="svc-slug">Slug (URL)</label>
               <input
                 id="svc-slug"
                 className="input"
@@ -235,11 +467,10 @@ export function ServiceFormModal({
                   slugManuallyEdited.current = true;
                   setSlug(e.target.value);
                 }}
-                placeholder="corte-clasico"
-                required
+                placeholder="se genera automáticamente"
               />
             </div>
-          </div>
+          )}
 
           {/* Description */}
           <div style={{ marginBottom: 16 }}>
@@ -255,22 +486,17 @@ export function ServiceFormModal({
             />
           </div>
 
-          {/* Type & Price */}
+          {/* Price & Duration (auto-filled but editable) */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
-              <label className="label" htmlFor="svc-type">Tipo *</label>
-              <select
-                id="svc-type"
-                className="input"
-                value={type}
-                onChange={(e) => setType(e.target.value as "barberia" | "spa")}
-              >
-                <option value="barberia">Barbería</option>
-                <option value="spa">Spa</option>
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="svc-price">Precio (S/) *</label>
+              <label className="label" htmlFor="svc-price">
+                Precio (S/) *
+                {!isEditing && selectedCatalogIndex >= 0 && (
+                  <span style={{ color: "var(--color-success)", fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>
+                    ✓ Auto
+                  </span>
+                )}
+              </label>
               <input
                 id="svc-price"
                 className="input"
@@ -281,14 +507,21 @@ export function ServiceFormModal({
                 onChange={(e) => setPriceSoles(e.target.value)}
                 placeholder="35.00"
                 required
+                style={{
+                  borderColor: !isEditing && selectedCatalogIndex >= 0 ? "var(--color-success)" : undefined,
+                  background: !isEditing && selectedCatalogIndex >= 0 ? "rgba(106,153,78,0.06)" : undefined,
+                }}
               />
             </div>
-          </div>
-
-          {/* Duration, Capacity, Staff */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
-              <label className="label" htmlFor="svc-duration">Duración (min) *</label>
+              <label className="label" htmlFor="svc-duration">
+                Duración (min) *
+                {!isEditing && selectedCatalogIndex >= 0 && (
+                  <span style={{ color: "var(--color-success)", fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 6 }}>
+                    ✓ Auto
+                  </span>
+                )}
+              </label>
               <input
                 id="svc-duration"
                 className="input"
@@ -298,8 +531,16 @@ export function ServiceFormModal({
                 onChange={(e) => setDurationMinutes(e.target.value)}
                 placeholder="30"
                 required
+                style={{
+                  borderColor: !isEditing && selectedCatalogIndex >= 0 ? "var(--color-success)" : undefined,
+                  background: !isEditing && selectedCatalogIndex >= 0 ? "rgba(106,153,78,0.06)" : undefined,
+                }}
               />
             </div>
+          </div>
+
+          {/* Capacity, Staff, Sort Order */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
               <label className="label" htmlFor="svc-capacity">Capacidad</label>
               <input
@@ -322,20 +563,17 @@ export function ServiceFormModal({
                 onChange={(e) => setStaffRequired(e.target.value)}
               />
             </div>
-          </div>
-
-          {/* Sort Order */}
-          <div style={{ marginBottom: 16 }}>
-            <label className="label" htmlFor="svc-sort">Orden de aparición</label>
-            <input
-              id="svc-sort"
-              className="input"
-              type="number"
-              min="0"
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              style={{ maxWidth: 120 }}
-            />
+            <div>
+              <label className="label" htmlFor="svc-sort">Orden</label>
+              <input
+                id="svc-sort"
+                className="input"
+                type="number"
+                min="0"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Images */}
@@ -475,7 +713,7 @@ export function ServiceFormModal({
             </button>
             <button
               type="submit"
-              disabled={saving || uploading}
+              disabled={saving || uploading || (!isEditing && selectedCatalogIndex < 0)}
               className="btn btn-primary"
               style={{ flex: 1 }}
             >

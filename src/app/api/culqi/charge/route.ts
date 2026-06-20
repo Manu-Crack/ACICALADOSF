@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
         antifraud_details: {
           first_name: booking.client_first_name,
           last_name: booking.client_last_name,
-          phone_number: booking.client_phone || "",
-          address: "",
-          address_city: "",
+          phone_number: booking.client_phone || "999999999",
+          address: "Av. Principal 123",
+          address_city: "Lima",
           country_code: "PE",
         },
         metadata: {

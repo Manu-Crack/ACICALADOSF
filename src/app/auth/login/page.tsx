@@ -13,31 +13,47 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  console.log("Supabase URL local:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    // Check role via server-side API (uses cookies, bypasses RLS issues)
     try {
-      const res = await fetch("/api/auth/check-role");
-      const { redirect: redirectTo } = await res.json();
-      router.push(redirectTo || "/");
-    } catch {
-      router.push("/");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        const internalRoles = ["admin", "recepcionista", "empleado"];
+        const redirectTo = profile && internalRoles.includes(profile.role)
+          ? "/dashboard"
+          : "/";
+
+        window.location.href = redirectTo;
+        } catch {
+          window.location.href = "/";
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Error de conexión o configuración local.");
+      setLoading(false);
     }
-    router.refresh();
   }
 
   async function handleOAuth(provider: "google" | "facebook") {
@@ -74,20 +90,13 @@ export default function LoginPage() {
         style={{ maxWidth: 420, width: "100%", padding: 32 }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 32 }}>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined" && window.history.length > 1) {
-                router.back();
-              } else {
-                router.push("/");
-              }
-            }}
+          <Link
+            href="/"
             className="btn btn-ghost btn-sm"
             style={{ alignSelf: "flex-start", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 6 }}
           >
             ← Volver
-          </button>
+          </Link>
           <div style={{ textAlign: "center" }}>
             <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
               <h1
