@@ -3,17 +3,17 @@ import Link from "next/link";
 const socialLinks = [
   {
     name: "Facebook",
-    href: "https://www.facebook.com/spaacicalados",
+    href: "https://www.facebook.com/SpaAcicaladosBarberShop",
     icon: <img src="/icons/Facebook.svg" alt="Facebook" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   },
   {
     name: "Instagram",
-    href: "https://www.instagram.com/acicaladosacicalados/",
+    href: "https://www.instagram.com/spaacicaladosbarbershop",
     icon: <img src="/icons/Instagram.svg" alt="Instagram" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   },
   {
     name: "TikTok",
-    href: "https://www.tiktok.com/@acicalados_spa?is_from_webapp=1&sender_device=pc",
+    href: "https://www.tiktok.com/@spa_acicalados?lang=es",
     icon: <img src="/icons/Tiktok.svg" alt="TikTok" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   }
 ];
@@ -123,7 +123,7 @@ export function Footer() {
             style={{ display: "flex", flexDirection: "column", gap: 8 }}
           >
             <a
-              href="https://wa.me/"
+              href="https://wa.me/51997766828"
               target="_blank"
               rel="noopener noreferrer"
               style={{
