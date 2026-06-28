@@ -16,7 +16,7 @@ export default function UbicacionPage() {
     { day: "Jueves", hours: "9:00 AM - 9:00 PM" },
     { day: "Viernes", hours: "9:00 AM - 9:00 PM" },
     { day: "Sábado", hours: "9:00 AM - 9:00 PM" },
-    { day: "Domingo", hours: "10:00 AM - 6:00 PM" },
+    { day: "Domingo", hours: "10:00 AM - 8:00 PM" },
   ];
 
   return (
@@ -46,7 +46,7 @@ export default function UbicacionPage() {
                   lineHeight: 1.7,
                 }}
               >
-                Visítanos en nuestro exclusivo y confortable establecimiento en Pichari. 
+                Visítanos en nuestro exclusivo y confortable establecimiento en Pichari.
                 Disfruta de la mejor atención por parte de nuestros especialistas en cortes y spa.
               </p>
             </div>
@@ -57,10 +57,10 @@ export default function UbicacionPage() {
         <section style={{ paddingBottom: 80 }}>
           <div className="container">
             <div className="grid grid-2" style={{ alignItems: "stretch", gap: 32 }}>
-              
+
               {/* Left Column: Details & Hours */}
               <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-                
+
                 {/* Contact Card */}
                 <div className="card card-gold">
                   <h2 className="heading-md" style={{ marginBottom: 16, color: "var(--color-primary)" }}>
@@ -72,7 +72,7 @@ export default function UbicacionPage() {
                   <p className="text-muted" style={{ marginBottom: 16, fontSize: "0.9375rem" }}>
                     Av. Kimbiri s/n (Frente a la Plaza de Armas), Pichari, VRAEM, Perú.
                   </p>
-                  
+
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
                     <a
                       href="https://maps.app.goo.gl/9ojPm9qdawhvqEYu9"
@@ -83,7 +83,7 @@ export default function UbicacionPage() {
                       🗺️ Abrir en Google Maps
                     </a>
                     <a
-                      href="https://wa.me/+51" // Reemplazar con el número del negocio si aplica
+                      href="https://wa.me/51997766828" // Reemplazar con el número del negocio si aplica
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-secondary btn-sm"

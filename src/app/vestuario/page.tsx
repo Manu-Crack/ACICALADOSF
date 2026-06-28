@@ -47,7 +47,7 @@ export default async function VestuarioPage() {
                 se realiza presencialmente o a través de nuestro WhatsApp.
               </p>
               <a
-                href="https://wa.me/"
+                href="https://wa.me/51997766828"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary"
@@ -119,7 +119,7 @@ export default async function VestuarioPage() {
               <p className="text-muted" style={{ marginBottom: 20 }}>
                 Coordina tu reserva directamente con nosotros
               </p>
-              <a href="https://wa.me/" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
+              <a href="https://wa.me/51997766828" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
                 💬 Escribir por WhatsApp
               </a>
             </div>

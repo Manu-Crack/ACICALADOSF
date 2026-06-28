@@ -106,7 +106,7 @@ export default async function TiendaPage() {
               <p className="text-muted" style={{ marginBottom: 20 }}>
                 Adquiérelo en nuestro local o coordina por WhatsApp
               </p>
-              <a href="https://wa.me/" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
+              <a href="https://wa.me/51997766828" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
                 💬 Consultar Disponibilidad
               </a>
             </div>
