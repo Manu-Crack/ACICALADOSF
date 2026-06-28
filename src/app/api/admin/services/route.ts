@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       name,
-      slug,
       description,
       type,
       price_cents,
@@ -74,8 +73,8 @@ export async function POST(request: NextRequest) {
       sort_order,
     } = body;
 
-    if (!name || !slug || !type) {
-      return NextResponse.json({ error: "name, slug y type son obligatorios" }, { status: 422 });
+    if (!name || !type) {
+      return NextResponse.json({ error: "name y type son obligatorios" }, { status: 422 });
     }
     if (!["spa", "barberia"].includes(type)) {
       return NextResponse.json({ error: "type debe ser 'spa' o 'barberia'" }, { status: 422 });
@@ -92,7 +91,6 @@ export async function POST(request: NextRequest) {
       .from("services")
       .insert({
         name,
-        slug,
         description: description || null,
         type,
         price_cents: price_cents || 0,
@@ -110,7 +108,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       if (error.code === "23505") {
-        return NextResponse.json({ error: "El slug ya está en uso" }, { status: 409 });
+        return NextResponse.json({ error: "Ya existe un servicio con ese nombre" }, { status: 409 });
       }
       throw error;
     }
@@ -154,7 +152,7 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       if (error.code === "23505") {
-        return NextResponse.json({ error: "El slug ya está en uso" }, { status: 409 });
+        return NextResponse.json({ error: "Ya existe un servicio con ese nombre" }, { status: 409 });
       }
       throw error;
     }

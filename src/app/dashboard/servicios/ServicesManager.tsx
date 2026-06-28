@@ -6,7 +6,6 @@ import { ServiceFormModal } from "./ServiceFormModal";
 type Service = {
   id: string;
   name: string;
-  slug: string;
   description: string | null;
   type: "barberia" | "spa";
   price_cents: number;

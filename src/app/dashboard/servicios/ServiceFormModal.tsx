@@ -5,7 +5,6 @@ import { useState, useRef, useMemo } from "react";
 type Service = {
   id: string;
   name: string;
-  slug: string;
   description: string | null;
   type: "barberia" | "spa";
   price_cents: number;
@@ -102,17 +101,7 @@ function formatDuration(min: number): string {
   return `${h}h ${m}min`;
 }
 
-/* ============================================================
-   Helper: slugify
-   ============================================================ */
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+
 
 /* ============================================================
    COMPONENT
@@ -129,7 +118,6 @@ export function ServiceFormModal({
   const isEditing = !!service;
 
   const [name, setName] = useState(service?.name || "");
-  const [slug, setSlug] = useState(service?.slug || "");
   const [description, setDescription] = useState(service?.description || "");
   const [type, setType] = useState<"barberia" | "spa">(service?.type || "barberia");
   const [priceSoles, setPriceSoles] = useState(
@@ -152,7 +140,6 @@ export function ServiceFormModal({
   const [selectedCatalogIndex, setSelectedCatalogIndex] = useState<number>(-1);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const slugManuallyEdited = useRef(false);
 
   // Get current catalog based on type
   const currentCatalog = useMemo(
@@ -168,16 +155,12 @@ export function ServiceFormModal({
       setName("");
       setPriceSoles("");
       setDurationMinutes("");
-      setSlug("");
       return;
     }
     const entry = currentCatalog[index];
     setName(entry.name);
     setPriceSoles(entry.price_soles.toFixed(2));
     setDurationMinutes(entry.duration_minutes.toString());
-    if (!slugManuallyEdited.current) {
-      setSlug(slugify(entry.name));
-    }
   }
 
   /* When switching type, reset catalog selection */
@@ -188,15 +171,11 @@ export function ServiceFormModal({
       setName("");
       setPriceSoles("");
       setDurationMinutes("");
-      setSlug("");
     }
   }
 
   function handleNameChange(value: string) {
     setName(value);
-    if (!slugManuallyEdited.current && !isEditing) {
-      setSlug(slugify(value));
-    }
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -263,7 +242,6 @@ export function ServiceFormModal({
     const body = {
       ...(isEditing ? { id: service.id } : {}),
       name,
-      slug,
       description: description || null,
       type,
       price_cents: priceCents,
@@ -425,52 +403,21 @@ export function ServiceFormModal({
               )}
             </div>
           ) : (
-            /* When editing: show name as read-only input */
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-              <div>
-                <label className="label" htmlFor="svc-name">Nombre del servicio *</label>
-                <input
-                  id="svc-name"
-                  className="input"
-                  value={name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Ej: Corte Clásico"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="svc-slug">Slug *</label>
-                <input
-                  id="svc-slug"
-                  className="input"
-                  value={slug}
-                  onChange={(e) => {
-                    slugManuallyEdited.current = true;
-                    setSlug(e.target.value);
-                  }}
-                  placeholder="corte-clasico"
-                  required
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Slug (for new services — shown below catalog) */}
-          {!isEditing && (
+            /* When editing: show name input */
             <div style={{ marginBottom: 16 }}>
-              <label className="label" htmlFor="svc-slug">Slug (URL)</label>
+              <label className="label" htmlFor="svc-name">Nombre del servicio *</label>
               <input
-                id="svc-slug"
+                id="svc-name"
                 className="input"
-                value={slug}
-                onChange={(e) => {
-                  slugManuallyEdited.current = true;
-                  setSlug(e.target.value);
-                }}
-                placeholder="se genera automáticamente"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="Ej: Corte Clásico"
+                required
               />
             </div>
           )}
+
+
 
           {/* Description */}
           <div style={{ marginBottom: 16 }}>
