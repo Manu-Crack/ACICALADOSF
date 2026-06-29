@@ -15,6 +15,11 @@ const socialLinks = [
     name: "TikTok",
     href: "https://www.tiktok.com/@spa_acicalados?lang=es",
     icon: <img src="/icons/Tiktok.svg" alt="TikTok" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
+  },
+  {
+    name: "Youtube",
+    href: "https://www.youtube.com/@AcicaladosSPA",
+    icon: <img src="/icons/Youtube.svg" alt="Youtube" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
   }
 ];
 
