@@ -19,7 +19,7 @@ const socialLinks = [
   {
     name: "Youtube",
     href: "https://www.youtube.com/@AcicaladosSPA",
-    icon: <img src="/icons/Youtube.svg" alt="Youtube" style={{ width: "100%", height: "100%", borderRadius: "9px" }} />
+    icon: <img src="/icons/Youtube.svg" alt="Youtube" style={{ width: "95%", height: "95%", borderRadius: "9px" }} />
   }
 ];
 
