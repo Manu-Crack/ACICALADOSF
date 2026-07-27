@@ -62,13 +62,17 @@ export function ServicesManager() {
     setDeleting(id);
     try {
       const res = await fetch(`/api/admin/services?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
       if (res.ok) {
         setServices((prev) => prev.filter((s) => s.id !== id));
+      } else {
+        alert(data.error || "No se pudo eliminar el servicio");
       }
     } catch {
-      console.error("Error deleting service");
+      alert("Error de conexión al intentar eliminar el servicio");
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }
 
   function handleEdit(service: Service) {

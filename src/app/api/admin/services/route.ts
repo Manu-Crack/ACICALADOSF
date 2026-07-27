@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { extractStoragePath } from "@/lib/utils/storage";
 
 /**
  * GET  /api/admin/services — list all services (admin view, includes inactive)
@@ -140,6 +141,28 @@ export async function PUT(request: NextRequest) {
     }
 
     const admin = createAdminClient();
+
+    // Obtener servicio anterior para limpiar imágenes eliminadas en Storage
+    const { data: existingService } = await admin
+      .from("services")
+      .select("images")
+      .eq("id", id)
+      .single();
+
+    if (existingService?.images?.length && Array.isArray(updates.images)) {
+      const removedImages = existingService.images.filter(
+        (oldUrl: string) => !updates.images.includes(oldUrl)
+      );
+
+      const pathsToRemove = removedImages
+        .map((url: string) => extractStoragePath(url))
+        .filter((path: string | null): path is string => !!path);
+
+      if (pathsToRemove.length > 0) {
+        await admin.storage.from("services-images").remove(pathsToRemove);
+      }
+    }
+
     const { data, error } = await admin
       .from("services")
       .update({
@@ -175,40 +198,74 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json({ error: "id es obligatorio" }, { status: 422 });
+      return NextResponse.json({ error: "El ID del servicio es obligatorio" }, { status: 422 });
     }
 
     const admin = createAdminClient();
 
-    // First get the service to clean up images
-    const { data: service } = await admin
+    // 1. Obtener la información del servicio (imágenes) antes de eliminar
+    const { data: service, error: fetchError } = await admin
       .from("services")
-      .select("images")
+      .select("id, name, images")
       .eq("id", id)
       .single();
 
-    // Delete associated images from storage
-    if (service?.images?.length) {
-      const paths = service.images.map((url: string) => {
-        const parts = url.split("/services-images/");
-        return parts[1] || "";
-      }).filter(Boolean);
-
-      if (paths.length) {
-        await admin.storage.from("services-images").remove(paths);
-      }
+    if (fetchError || !service) {
+      return NextResponse.json(
+        { error: "El servicio no existe o ya fue eliminado anteriormente" },
+        { status: 404 }
+      );
     }
 
-    const { error } = await admin
+    // 2. Eliminar referencias en employee_skills si existen
+    await admin.from("employee_skills").delete().eq("service_id", id);
+
+    // 3. Ejecutar el borrado en la base de datos PRIMERO
+    const { error: deleteError } = await admin
       .from("services")
       .delete()
       .eq("id", id);
 
-    if (error) throw error;
+    if (deleteError) {
+      console.error("Error al eliminar servicio en la BD:", deleteError);
+      if (deleteError.code === "23503") {
+        return NextResponse.json(
+          {
+            error:
+              "No se puede eliminar este servicio porque ya cuenta con reservas asociadas en el sistema. Puedes ocultarlo desmarcando la opción 'Activo'.",
+          },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json(
+        { error: "Error al eliminar el servicio de la base de datos: " + deleteError.message },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({ success: true });
+    // 4. Si el borrado en BD fue exitoso (200 OK), eliminar imágenes físicamente de Supabase Storage
+    if (service.images?.length) {
+      const paths = service.images
+        .map((url: string) => extractStoragePath(url))
+        .filter((path: string | null): path is string => !!path);
+
+      if (paths.length > 0) {
+        const { error: storageError } = await admin.storage
+          .from("services-images")
+          .remove(paths);
+
+        if (storageError) {
+          console.warn("Advertencia: No se pudieron borrar algunas imágenes de Storage:", storageError);
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, id });
   } catch (err) {
     console.error("Services DELETE error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error interno al procesar la eliminación del servicio" },
+      { status: 500 }
+    );
   }
 }
