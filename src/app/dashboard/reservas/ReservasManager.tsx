@@ -130,6 +130,31 @@ export function ReservasManager() {
     setActionLoading(null);
   }
 
+  async function deleteBookingPermanently(booking: Booking) {
+    const confirmMessage =
+      `⚠️ ¿Estás seguro de ELIMINAR PERMANENTEMENTE la reserva ${booking.booking_code} de ${booking.client_first_name} ${booking.client_last_name}?\n\n` +
+      `Esta acción eliminará definitivamente el registro de la base de datos y liberará las restricciones en servicios. ¡No se puede deshacer!`;
+
+    if (!confirm(confirmMessage)) return;
+
+    setActionLoading(booking.id);
+    try {
+      const res = await fetch(`/api/admin/bookings?id=${booking.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+      } else {
+        alert(data.error || "No se pudo eliminar la reserva.");
+      }
+    } catch {
+      alert("Error de conexión al intentar eliminar la reserva.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   const filteredBookings = bookings.filter((b) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -544,18 +569,38 @@ export function ReservasManager() {
                       >
                         S/ {(b.total_price_cents / 100).toFixed(2)}
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <span
-                          style={{
-                            color: "var(--color-text-muted)",
-                            fontSize: "0.8125rem",
-                            transition: "transform var(--transition-fast)",
-                            display: "inline-block",
-                            transform: expandedId === b.id ? "rotate(180deg)" : "rotate(0deg)",
-                          }}
-                        >
-                          ▼
-                        </span>
+                      <td style={{ padding: "14px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteBookingPermanently(b);
+                            }}
+                            disabled={actionLoading === b.id}
+                            className="btn btn-ghost btn-sm"
+                            title="Eliminar reserva definitivamente"
+                            style={{
+                              padding: "4px 8px",
+                              color: "var(--color-error)",
+                              borderColor: "rgba(184,59,46,0.3)",
+                              fontSize: "0.8125rem",
+                            }}
+                          >
+                            🗑️
+                          </button>
+                          <span
+                            style={{
+                              color: "var(--color-text-muted)",
+                              fontSize: "0.8125rem",
+                              transition: "transform var(--transition-fast)",
+                              display: "inline-block",
+                              transform: expandedId === b.id ? "rotate(180deg)" : "rotate(0deg)",
+                            }}
+                          >
+                            ▼
+                          </span>
+                        </div>
                       </td>
                     </tr>
 
@@ -694,39 +739,58 @@ export function ReservasManager() {
                             </div>
 
                             {/* Actions */}
-                            {b.status === "confirmada" && (
-                              <div
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 10,
+                                flexWrap: "wrap",
+                                paddingTop: 16,
+                                borderTop: "1px solid var(--color-border)",
+                              }}
+                            >
+                              {b.status === "confirmada" && (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateBookingStatus(b.id, "completada");
+                                    }}
+                                    disabled={actionLoading === b.id}
+                                    className="btn btn-primary btn-sm"
+                                  >
+                                    {actionLoading === b.id ? "Procesando..." : "🏁 Marcar Completada"}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm("¿Estás seguro de cancelar esta reserva?")) {
+                                        updateBookingStatus(b.id, "cancelada");
+                                      }
+                                    }}
+                                    disabled={actionLoading === b.id}
+                                    className="btn btn-danger btn-sm"
+                                  >
+                                    ✕ Cancelar Reserva
+                                  </button>
+                                </>
+                              )}
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteBookingPermanently(b);
+                                }}
+                                disabled={actionLoading === b.id}
+                                className="btn btn-ghost btn-sm"
                                 style={{
-                                  display: "flex",
-                                  gap: 10,
-                                  paddingTop: 16,
-                                  borderTop: "1px solid var(--color-border)",
+                                  color: "var(--color-error)",
+                                  borderColor: "rgba(184,59,46,0.3)",
+                                  marginLeft: "auto",
                                 }}
                               >
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateBookingStatus(b.id, "completada");
-                                  }}
-                                  disabled={actionLoading === b.id}
-                                  className="btn btn-primary btn-sm"
-                                >
-                                  {actionLoading === b.id ? "Procesando..." : "🏁 Marcar Completada"}
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (confirm("¿Estás seguro de cancelar esta reserva?")) {
-                                      updateBookingStatus(b.id, "cancelada");
-                                    }
-                                  }}
-                                  disabled={actionLoading === b.id}
-                                  className="btn btn-danger btn-sm"
-                                >
-                                  ✕ Cancelar Reserva
-                                </button>
-                              </div>
-                            )}
+                                {actionLoading === b.id ? "Eliminando..." : "🗑️ Eliminar Definitivamente"}
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
