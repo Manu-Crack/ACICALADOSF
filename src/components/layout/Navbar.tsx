@@ -81,6 +81,7 @@ export async function Navbar() {
           <Link href="/vestuario">Vestuario</Link>
           <Link href="/tienda">Productos</Link>
           <Link href="/blog">Blog</Link>
+          <Link href="/ubicacion">Ubicación</Link>
         </div>
 
         {/* Actions / Auth / Mobile menu */}

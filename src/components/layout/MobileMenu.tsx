@@ -42,6 +42,7 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
     { label: "Vestuario", href: "/vestuario" },
     { label: "Productos", href: "/tienda" },
     { label: "Blog", href: "/blog" },
+    { label: "Ubicación", href: "/ubicacion" },
   ];
 
   return (

@@ -93,6 +93,7 @@ export function Footer() {
               { name: "Vestuario", href: "/vestuario" },
               { name: "Productos", href: "/tienda" },
               { name: "Blog", href: "/blog" },
+              { name: "Ubicación", href: "/ubicacion" },
             ].map((sec) => (
               <li key={sec.name}>
                 <Link
