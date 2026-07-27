@@ -8,7 +8,7 @@ import { extractStoragePath } from "@/lib/utils/storage";
  * GET  /api/admin/services — Listar todos los servicios (vista admin, incluye inactivos)
  * POST /api/admin/services — Crear un nuevo servicio
  * PUT  /api/admin/services — Actualizar servicio y limpiar imágenes removidas de Storage
- * DELETE /api/admin/services — Eliminar servicio (Hard delete si no tiene reservas; Soft delete si tiene reservas)
+ * DELETE /api/admin/services — Eliminar físicamente (HARD DELETE) un servicio de la base de datos y Storage
  */
 
 async function verifyAdmin(requiredRole: string[] = ["admin"]) {
@@ -48,7 +48,7 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (err) {
     console.error("Services GET error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({ error: "Error interno al obtener servicios" }, { status: 500 });
   }
 }
 
@@ -143,7 +143,7 @@ export async function PUT(request: NextRequest) {
     const { id, ...updates } = body;
 
     if (!id) {
-      return NextResponse.json({ error: "El ID es obligatorio" }, { status: 422 });
+      return NextResponse.json({ error: "El ID del servicio es obligatorio" }, { status: 422 });
     }
 
     if (updates.type && !["spa", "barberia"].includes(updates.type)) {
@@ -218,7 +218,7 @@ export async function DELETE(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // 1. Obtener información del servicio antes de intentar eliminar
+    // 1. Obtener la información del servicio (imágenes) antes de la eliminación definitiva
     const { data: service, error: fetchError } = await admin
       .from("services")
       .select("id, name, images")
@@ -232,51 +232,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 2. Eliminar referencias de habilidades del personal (employee_skills)
+    // 2. Limpiar asociaciones explícitamente en employee_skills y desvincular booking_services
     await admin.from("employee_skills").delete().eq("service_id", id);
+    await admin.from("booking_services").update({ service_id: null }).eq("service_id", id);
 
-    // 3. Intentar Borrado Físico (Hard Delete) en la base de datos
+    // 3. Ejecutar ELIMINACIÓN FÍSICA DEFINITIVA (Hard Delete) en la tabla services
     const { error: deleteError } = await admin
       .from("services")
       .delete()
       .eq("id", id);
 
     if (deleteError) {
-      console.error("Services DELETE Error en BD:", deleteError);
-
-      // Si existe conflicto de clave foránea (ej. reservas en booking_services) -> Aplicar Borrado Lógico (Soft Delete)
-      if (deleteError.code === "23503") {
-        const { error: softDeleteError } = await admin
-          .from("services")
-          .update({
-            is_active: false,
-            is_public: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", id);
-
-        if (softDeleteError) {
-          return NextResponse.json(
-            { error: "Error al inhabilitar el servicio con reservas: " + softDeleteError.message },
-            { status: 500 }
-          );
-        }
-
-        return NextResponse.json({
-          success: true,
-          id,
-          softDeleted: true,
-          message: "El servicio tiene reservas asociadas. Se ha inhabilitado y ocultado del panel de administración.",
-        });
-      }
-
+      console.error("Error al eliminar servicio definitivamente en la BD:", deleteError);
       return NextResponse.json(
         { error: "Error al eliminar el servicio de la base de datos: " + deleteError.message },
         { status: 500 }
       );
     }
 
-    // 4. Si el Hard Delete en BD fue exitoso, limpiar las imágenes de Supabase Storage
+    // 4. Eliminar físicamente los archivos de imágenes alojados en Supabase Storage
     if (service.images?.length) {
       const paths = service.images
         .map((url: string) => extractStoragePath(url))
@@ -288,12 +262,17 @@ export async function DELETE(request: NextRequest) {
           .remove(paths);
 
         if (storageError) {
-          console.warn("Advertencia: No se pudieron borrar algunas imágenes de Storage:", storageError);
+          console.warn("Advertencia al eliminar imágenes del servicio en Storage:", storageError);
         }
       }
     }
 
-    return NextResponse.json({ success: true, id, hardDeleted: true });
+    return NextResponse.json({
+      success: true,
+      id,
+      hardDeleted: true,
+      message: `Servicio '${service.name}' eliminado físicamente de la base de datos y de Storage.`,
+    });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error("Services DELETE Exception:", errorMsg);
