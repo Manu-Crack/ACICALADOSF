@@ -99,8 +99,22 @@ export default function UbicacionPage() {
 
                 {/* Hours Card */}
                 <div className="card card-gold" style={{ flexGrow: 1 }}>
-                  <h2 className="heading-md" style={{ marginBottom: 16, color: "var(--color-primary)" }}>
-                    📅 Horarios de Atención
+                  <h2
+                    className="heading-md"
+                    style={{
+                      marginBottom: 16,
+                      color: "var(--color-primary)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <img
+                      src="/icons/calendario.svg"
+                      alt="Calendario"
+                      style={{ width: 22, height: 22, objectFit: "contain" }}
+                    />
+                    <span>Horarios de Atención</span>
                   </h2>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {businessHours.map((bh) => (
