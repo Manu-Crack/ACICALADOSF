@@ -78,7 +78,8 @@ export default function UbicacionPage() {
                       href="https://maps.app.goo.gl/9ojPm9qdawhvqEYu9"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-maps-location btn-sm"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
                     >
                       🗺️ Abrir en Google Maps
                     </a>
@@ -86,7 +87,7 @@ export default function UbicacionPage() {
                       href="https://wa.me/51997766828"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-whatsapp-location btn-sm"
                       style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
                     >
                       <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 18, height: 18, objectFit: "contain" }} />
