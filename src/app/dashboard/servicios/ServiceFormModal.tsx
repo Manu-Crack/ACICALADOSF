@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useMemo } from "react";
+import { convertToWebP } from "@/lib/utils/image-converter";
 
 type Service = {
   id: string;
@@ -186,10 +187,14 @@ export function ServiceFormModal({
     setError("");
 
     for (const file of Array.from(files)) {
-      const formData = new FormData();
-      formData.append("file", file);
-
       try {
+        // Convertir automáticamente cualquier formato de imagen (PNG, JPG, etc.) a WebP optimizado
+        const webpFile = await convertToWebP(file, name || "servicio", 0.85);
+
+        const formData = new FormData();
+        formData.append("file", webpFile);
+        formData.append("serviceName", name || "servicio");
+
         const res = await fetch("/api/admin/services/upload", {
           method: "POST",
           body: formData,
@@ -199,10 +204,11 @@ export function ServiceFormModal({
         if (res.ok) {
           setImages((prev) => [...prev, data.url]);
         } else {
-          setError(data.error || "Error al subir imagen");
+          setError(data.error || "Error al subir la imagen WebP");
         }
-      } catch {
-        setError("Error de conexión al subir imagen");
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Error al procesar la imagen";
+        setError(msg);
       }
     }
 
