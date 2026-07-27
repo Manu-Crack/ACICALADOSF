@@ -81,7 +81,8 @@ export default function UbicacionPage() {
                       className="btn btn-maps-location btn-sm"
                       style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
                     >
-                      🗺️ Abrir en Google Maps
+                      <img src="/icons/maps.svg" alt="maps-location" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                      <span>Abrir en Google Maps</span>
                     </a>
                     <a
                       href="https://wa.me/51997766828"
