@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { slugify } from "@/lib/utils/slugify";
 import { extractStoragePath } from "@/lib/utils/storage";
 
 /**
- * GET  /api/admin/services — list all services (admin view, includes inactive)
- * POST /api/admin/services — create a new service
- * PUT  /api/admin/services — update an existing service
- * DELETE /api/admin/services — delete a service
+ * GET  /api/admin/services — Listar todos los servicios (vista admin, incluye inactivos)
+ * POST /api/admin/services — Crear un nuevo servicio
+ * PUT  /api/admin/services — Actualizar servicio y limpiar imágenes removidas de Storage
+ * DELETE /api/admin/services — Eliminar servicio (Hard delete si no tiene reservas; Soft delete si tiene reservas)
  */
 
 async function verifyAdmin(requiredRole: string[] = ["admin"]) {
@@ -75,23 +76,28 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!name || !type) {
-      return NextResponse.json({ error: "name y type son obligatorios" }, { status: 422 });
+      return NextResponse.json({ error: "El nombre y el tipo son obligatorios" }, { status: 422 });
     }
     if (!["spa", "barberia"].includes(type)) {
-      return NextResponse.json({ error: "type debe ser 'spa' o 'barberia'" }, { status: 422 });
+      return NextResponse.json({ error: "El tipo debe ser 'spa' o 'barberia'" }, { status: 422 });
     }
-    if (price_cents < 0) {
-      return NextResponse.json({ error: "price_cents debe ser >= 0" }, { status: 422 });
+    if (price_cents === undefined || price_cents < 0) {
+      return NextResponse.json({ error: "El precio debe ser mayor o igual a 0" }, { status: 422 });
     }
     if (!duration_minutes || duration_minutes <= 0) {
-      return NextResponse.json({ error: "duration_minutes debe ser > 0" }, { status: 422 });
+      return NextResponse.json({ error: "La duración debe ser mayor a 0 minutos" }, { status: 422 });
     }
+
+    // Generar slug obligatorio no nulo para la tabla services
+    const baseSlug = slugify(name);
+    const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
 
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("services")
       .insert({
         name,
+        slug: uniqueSlug,
         description: description || null,
         type,
         price_cents: price_cents || 0,
@@ -108,16 +114,21 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
+      console.error("Supabase Services POST Error:", error);
       if (error.code === "23505") {
         return NextResponse.json({ error: "Ya existe un servicio con ese nombre" }, { status: 409 });
       }
-      throw error;
+      return NextResponse.json(
+        { error: "Error al crear el servicio en la base de datos: " + error.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(data, { status: 201 });
-  } catch (err) {
-    console.error("Services POST error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Services POST Exception:", errorMsg);
+    return NextResponse.json({ error: "Error interno al crear el servicio: " + errorMsg }, { status: 500 });
   }
 }
 
@@ -132,17 +143,16 @@ export async function PUT(request: NextRequest) {
     const { id, ...updates } = body;
 
     if (!id) {
-      return NextResponse.json({ error: "id es obligatorio" }, { status: 422 });
+      return NextResponse.json({ error: "El ID es obligatorio" }, { status: 422 });
     }
 
-    // Validate type if provided
     if (updates.type && !["spa", "barberia"].includes(updates.type)) {
-      return NextResponse.json({ error: "type debe ser 'spa' o 'barberia'" }, { status: 422 });
+      return NextResponse.json({ error: "El tipo debe ser 'spa' o 'barberia'" }, { status: 422 });
     }
 
     const admin = createAdminClient();
 
-    // Obtener servicio anterior para limpiar imágenes eliminadas en Storage
+    // Obtener servicio anterior para comparar y limpiar imágenes removidas de Storage
     const { data: existingService } = await admin
       .from("services")
       .select("images")
@@ -174,16 +184,21 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) {
+      console.error("Supabase Services PUT Error:", error);
       if (error.code === "23505") {
         return NextResponse.json({ error: "Ya existe un servicio con ese nombre" }, { status: 409 });
       }
-      throw error;
+      return NextResponse.json(
+        { error: "Error al actualizar el servicio en la base de datos: " + error.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(data);
-  } catch (err) {
-    console.error("Services PUT error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Services PUT Exception:", errorMsg);
+    return NextResponse.json({ error: "Error interno al actualizar el servicio: " + errorMsg }, { status: 500 });
   }
 }
 
@@ -203,7 +218,7 @@ export async function DELETE(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // 1. Obtener la información del servicio (imágenes) antes de eliminar
+    // 1. Obtener información del servicio antes de intentar eliminar
     const { data: service, error: fetchError } = await admin
       .from("services")
       .select("id, name, images")
@@ -217,33 +232,51 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 2. Eliminar referencias en employee_skills si existen
+    // 2. Eliminar referencias de habilidades del personal (employee_skills)
     await admin.from("employee_skills").delete().eq("service_id", id);
 
-    // 3. Ejecutar el borrado en la base de datos PRIMERO
+    // 3. Intentar Borrado Físico (Hard Delete) en la base de datos
     const { error: deleteError } = await admin
       .from("services")
       .delete()
       .eq("id", id);
 
     if (deleteError) {
-      console.error("Error al eliminar servicio en la BD:", deleteError);
+      console.error("Services DELETE Error en BD:", deleteError);
+
+      // Si existe conflicto de clave foránea (ej. reservas en booking_services) -> Aplicar Borrado Lógico (Soft Delete)
       if (deleteError.code === "23503") {
-        return NextResponse.json(
-          {
-            error:
-              "No se puede eliminar este servicio porque ya cuenta con reservas asociadas en el sistema. Puedes ocultarlo desmarcando la opción 'Activo'.",
-          },
-          { status: 409 }
-        );
+        const { error: softDeleteError } = await admin
+          .from("services")
+          .update({
+            is_active: false,
+            is_public: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id);
+
+        if (softDeleteError) {
+          return NextResponse.json(
+            { error: "Error al inhabilitar el servicio con reservas: " + softDeleteError.message },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          id,
+          softDeleted: true,
+          message: "El servicio tiene reservas asociadas. Se ha inhabilitado y ocultado del panel de administración.",
+        });
       }
+
       return NextResponse.json(
         { error: "Error al eliminar el servicio de la base de datos: " + deleteError.message },
         { status: 500 }
       );
     }
 
-    // 4. Si el borrado en BD fue exitoso (200 OK), eliminar imágenes físicamente de Supabase Storage
+    // 4. Si el Hard Delete en BD fue exitoso, limpiar las imágenes de Supabase Storage
     if (service.images?.length) {
       const paths = service.images
         .map((url: string) => extractStoragePath(url))
@@ -260,11 +293,12 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, id });
-  } catch (err) {
-    console.error("Services DELETE error:", err);
+    return NextResponse.json({ success: true, id, hardDeleted: true });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Services DELETE Exception:", errorMsg);
     return NextResponse.json(
-      { error: "Error interno al procesar la eliminación del servicio" },
+      { error: "Error interno al procesar la eliminación del servicio: " + errorMsg },
       { status: 500 }
     );
   }
