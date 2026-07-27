@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { findAvailableEmployeeForBooking } from "@/lib/utils/employee-assignment";
 
 /**
  * POST /api/bookings
@@ -119,7 +120,17 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // 7. Lock the slot — create booking with temporary lock
+    // 7. Algoritmo de asignación automática de empleado
+    const serviceIds = services.map((s: { id: string }) => s.id);
+    const assignedEmployeeId = await findAvailableEmployeeForBooking({
+      serviceIds,
+      serviceType,
+      bookingDate: booking_date,
+      startTime: start_time,
+      endTime: endTime,
+    });
+
+    // 8. Lock the slot — create booking with temporary lock
     const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
 
     const { data: booking, error: bookingError } = await admin
@@ -132,6 +143,7 @@ export async function POST(request: NextRequest) {
         client_email: client_email || null,
         client_dni: client_dni || null,
         service_type: serviceType,
+        assigned_employee_id: assignedEmployeeId,
         booking_date,
         start_time,
         end_time: endTime,
