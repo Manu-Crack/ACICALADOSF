@@ -259,6 +259,22 @@ export default function ReservarPage() {
     if (h < 19) timeSlots.push(`${String(h).padStart(2, "0")}:30`);
   }
 
+  function handlePrevStep() {
+    if (step === "services") {
+      setStep("type");
+      setCart([]);
+      setServiceType(null);
+    } else if (step === "datetime") {
+      setStep("services");
+    } else if (step === "contact") {
+      setStep("datetime");
+    } else if (step === "payment") {
+      setStep("contact");
+    } else if (step === "type") {
+      window.location.href = "/";
+    }
+  }
+
   // Min date = today (allow same-day bookings)
   const today = new Date();
   const minDate = today.toISOString().split("T")[0];
@@ -273,31 +289,64 @@ export default function ReservarPage() {
       }}
     >
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ marginBottom: 40 }}>
+        {/* Navigation Bar — Volver (Izquierda) <---> Volver al Inicio (Derecha) */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 20,
+            gap: 16,
+          }}
+        >
+          {/* Lado Izquierdo: Botón Volver al paso anterior */}
+          <button
+            type="button"
+            onClick={handlePrevStep}
+            className="btn btn-ghost btn-sm"
+            style={{
+              padding: "6px 14px",
+              fontSize: "0.875rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            ← Volver
+          </button>
+
+          {/* Lado Derecho: Botón Volver al Inicio */}
           <Link
             href="/"
             className="btn btn-ghost btn-sm"
-            style={{ marginBottom: 16, display: "inline-flex", padding: "6px 12px", fontSize: "0.875rem" }}
+            style={{
+              padding: "6px 14px",
+              fontSize: "0.875rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
           >
-            ← Volver al Inicio
+            🏠 Volver al Inicio
           </Link>
-          <div style={{ textAlign: "center" }}>
-            <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <img
-                src="/LogoAcicalados.svg"
-                alt="Logo Acicalados"
-                style={{ height: 26, width: "auto" }}
-              />
-              <span className="text-gold" style={{ fontWeight: 800, fontSize: "1.25rem" }}>
-                ACICALADOS
-              </span>
-            </Link>
-            <h1 className="heading-lg" style={{ marginTop: 16 }}>
-              Reservar Cita
-            </h1>
-            <div className="divider-gold" style={{ margin: "12px auto" }} />
-          </div>
+        </div>
+
+        {/* Header */}
+        <div style={{ marginBottom: 36, textAlign: "center" }}>
+          <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <img
+              src="/LogoAcicalados.svg"
+              alt="Logo Acicalados"
+              style={{ height: 26, width: "auto" }}
+            />
+            <span className="text-gold" style={{ fontWeight: 800, fontSize: "1.25rem" }}>
+              ACICALADOS
+            </span>
+          </Link>
+          <h1 className="heading-lg" style={{ marginTop: 12 }}>
+            Reservar Cita
+          </h1>
+          <div className="divider-gold" style={{ margin: "12px auto 0" }} />
         </div>
 
         {/* Progress */}
