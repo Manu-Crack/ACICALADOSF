@@ -76,83 +76,26 @@ export async function Navbar() {
 
         {/* Nav Links - Desktop */}
         <div className="nav-links-desktop">
-          <Link
-            href="/#inicio"
-            className="btn-ghost"
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              transition: "color var(--transition-fast)",
-              padding: "8px 0",
-            }}
-          >
-            Inicio
+          <Link href="/">
+            <span>🏠</span> Inicio
           </Link>
-          <Link
-            href="/servicios"
-            className="btn-ghost"
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              transition: "color var(--transition-fast)",
-              padding: "8px 0",
-            }}
-          >
-            Servicios
+          <Link href="/reservar">
+            <span>📋</span> Reservas
           </Link>
-          <Link
-            href="/vestuario"
-            className="btn-ghost"
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              transition: "color var(--transition-fast)",
-              padding: "8px 0",
-            }}
-          >
-            Vestuarios
+          <Link href="/dashboard/empleados">
+            <span>👥</span> Empleados
           </Link>
-          <Link
-            href="/tienda"
-            className="btn-ghost"
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              transition: "color var(--transition-fast)",
-              padding: "8px 0",
-            }}
-          >
-            Tienda
+          <Link href="/servicios">
+            <span>✂️</span> Servicios
           </Link>
-          <Link
-            href="/blog"
-            className="btn-ghost"
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              transition: "color var(--transition-fast)",
-              padding: "8px 0",
-            }}
-          >
-            Blog
+          <Link href="/vestuario">
+            <span>👔</span> Vestuario
           </Link>
-          <Link
-            href="/ubicacion"
-            className="btn-ghost"
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--color-text-muted)",
-              transition: "color var(--transition-fast)",
-              padding: "8px 0",
-            }}
-          >
-            Ubicación
+          <Link href="/tienda">
+            <span>🛍️</span> Productos
+          </Link>
+          <Link href="/blog">
+            <span>📝</span> Blog
           </Link>
         </div>
 

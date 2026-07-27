@@ -37,12 +37,13 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
   }, [isOpen]);
 
   const navLinks = [
-    { label: "Inicio", href: "/#inicio" },
-    { label: "Servicios", href: "/servicios" },
-    { label: "Vestuarios", href: "/vestuario" },
-    { label: "Tienda", href: "/tienda" },
-    { label: "Blog", href: "/blog" },
-    { label: "Ubicación", href: "/ubicacion" },
+    { label: "Inicio", href: "/", icon: "🏠" },
+    { label: "Reservas", href: "/reservar", icon: "📋" },
+    { label: "Empleados", href: "/dashboard/empleados", icon: "👥" },
+    { label: "Servicios", href: "/servicios", icon: "✂️" },
+    { label: "Vestuario", href: "/vestuario", icon: "👔" },
+    { label: "Productos", href: "/tienda", icon: "🛍️" },
+    { label: "Blog", href: "/blog", icon: "📝" },
   ];
 
   return (
@@ -86,7 +87,7 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: 32,
+              marginBottom: 24,
               borderBottom: "1px solid var(--color-border)",
               paddingBottom: 16,
             }}
@@ -113,11 +114,12 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
               onClick={() => setIsOpen(false)}
               style={{
                 background: "transparent",
-                border: "none",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-md)",
                 color: "var(--color-text-muted)",
-                fontSize: "1.5rem",
+                fontSize: "1.25rem",
                 cursor: "pointer",
-                padding: 4,
+                padding: "4px 10px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -133,8 +135,8 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 16,
-              marginBottom: 32,
+              gap: 10,
+              marginBottom: 24,
             }}
           >
             {navLinks.map((link) => (
@@ -144,21 +146,24 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
                 onClick={() => setIsOpen(false)}
                 style={{
                   fontFamily: "'Playfair Display', Georgia, serif",
-                  fontSize: "1.125rem",
+                  fontSize: "1rem",
                   fontWeight: 600,
                   color: "var(--color-text)",
-                  padding: "10px 12px",
+                  padding: "12px 14px",
                   borderRadius: "var(--radius-md)",
-                  border: "1px solid transparent",
+                  border: "1px solid var(--color-border)",
+                  background: "rgba(30, 26, 19, 0.5)",
                   transition: "all var(--transition-fast)",
                   display: "flex",
-                  justifyContent: "space-between",
                   alignItems: "center",
+                  justifyContent: "space-between",
                 }}
-                className="btn-ghost"
               >
-                <span>{link.label}</span>
-                <span style={{ fontSize: "0.75rem", opacity: 0.5 }}>➔</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: "1.2rem" }}>{link.icon}</span>
+                  <span>{link.label}</span>
+                </div>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", opacity: 0.8 }}>➔</span>
               </Link>
             ))}
           </nav>

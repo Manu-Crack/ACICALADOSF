@@ -71,6 +71,51 @@ export function Footer() {
 
 
 
+        {/* Navigation */}
+        <div>
+          <h4
+            style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              marginBottom: 16,
+              color: "var(--color-primary)",
+              textTransform: "uppercase" as const,
+              letterSpacing: "0.05em",
+            }}
+          >
+            Navegación
+          </h4>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+            {[
+              { name: "Inicio", icon: "🏠", href: "/" },
+              { name: "Reservas", icon: "📋", href: "/reservar" },
+              { name: "Empleados", icon: "👥", href: "/dashboard/empleados" },
+              { name: "Servicios", icon: "✂️", href: "/servicios" },
+              { name: "Vestuario", icon: "👔", href: "/vestuario" },
+              { name: "Productos", icon: "🛍️", href: "/tienda" },
+              { name: "Blog", icon: "📝", href: "/blog" },
+            ].map((sec) => (
+              <li key={sec.name}>
+                <Link
+                  href={sec.href}
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "var(--color-text-muted)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    transition: "color var(--transition-fast)",
+                  }}
+                >
+                  <span>{sec.icon}</span>
+                  <span>{sec.name}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         {/* Social */}
         <div>
           <h4
