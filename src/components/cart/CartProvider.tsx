@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { CartDrawer } from "./CartDrawer";
 
 export type CartService = {
   id: string;
@@ -23,6 +24,12 @@ type CartContextType = {
   cartCount: number;
   totalCents: number;
   totalDuration: number;
+
+  // Cart Drawer open/close states
+  isCartOpen: boolean;
+  openCart: () => void;
+  closeCart: () => void;
+  toggleCart: () => void;
 };
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -32,6 +39,7 @@ const CART_KEY = "acicalados_cart";
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartService[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Load from sessionStorage on mount
   useEffect(() => {
@@ -56,11 +64,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [cart, loaded]);
 
+  const openCart = useCallback(() => setIsCartOpen(true), []);
+  const closeCart = useCallback(() => setIsCartOpen(false), []);
+  const toggleCart = useCallback(() => setIsCartOpen((prev) => !prev), []);
+
   const addToCart = useCallback((service: CartService) => {
     setCart((prev) => {
       if (prev.find((s) => s.id === service.id)) return prev;
       return [...prev, service];
     });
+    setIsCartOpen(true); // Abrir el carrito automáticamente al agregar un ítem
   }, []);
 
   const removeFromCart = useCallback((id: string) => {
@@ -68,11 +81,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleCartItem = useCallback((service: CartService) => {
-    setCart((prev) =>
-      prev.find((s) => s.id === service.id)
-        ? prev.filter((s) => s.id !== service.id)
-        : [...prev, service]
-    );
+    setCart((prev) => {
+      const exists = prev.find((s) => s.id === service.id);
+      if (exists) {
+        return prev.filter((s) => s.id !== service.id);
+      } else {
+        setIsCartOpen(true);
+        return [...prev, service];
+      }
+    });
   }, []);
 
   const clearCart = useCallback(() => {
@@ -100,9 +117,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         cartCount,
         totalCents,
         totalDuration,
+        isCartOpen,
+        openCart,
+        closeCart,
+        toggleCart,
       }}
     >
       {children}
+      <CartDrawer />
     </CartContext.Provider>
   );
 }
