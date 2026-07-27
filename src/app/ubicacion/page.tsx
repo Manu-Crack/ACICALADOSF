@@ -63,8 +63,22 @@ export default function UbicacionPage() {
 
                 {/* Contact Card */}
                 <div className="card card-gold">
-                  <h2 className="heading-md" style={{ marginBottom: 16, color: "var(--color-primary)" }}>
-                    📍 Dirección y Teléfono
+                  <h2
+                    className="heading-md"
+                    style={{
+                      marginBottom: 16,
+                      color: "var(--color-primary)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <img
+                      src="/ubicacion.svg"
+                      alt="Ubicación"
+                      style={{ width: 22, height: 22, objectFit: "contain" }}
+                    />
+                    <span>Dirección y Teléfono</span>
                   </h2>
                   <p style={{ fontSize: "1.0625rem", fontWeight: 500, marginBottom: 8 }}>
                     Spa Acicalados Barber Shop
