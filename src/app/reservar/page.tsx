@@ -82,10 +82,18 @@ export default function ReservarPage() {
           .eq("id", user.id)
           .single();
         if (profile) {
+          let fn = (profile.first_name || "").trim();
+          let ln = (profile.last_name || "").trim();
+          // Si last_name está vacío pero first_name contiene apellido concatenado
+          if (!ln && fn.includes(" ")) {
+            const parts = fn.split(" ");
+            fn = parts[0];
+            ln = parts.slice(1).join(" ");
+          }
           setContact((c) => ({
             ...c,
-            firstName: profile.first_name || c.firstName,
-            lastName: profile.last_name || c.lastName,
+            firstName: fn || c.firstName,
+            lastName: ln || c.lastName,
             phone: profile.phone || c.phone,
             dni: profile.dni || c.dni,
             email: user.email || c.email,
