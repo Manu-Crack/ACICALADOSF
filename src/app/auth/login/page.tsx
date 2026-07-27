@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { getAuthRedirectURL } from "@/lib/utils/url";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,8 +13,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
   const supabase = createClient();
-
-  console.log("Supabase URL local:", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -63,7 +62,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getAuthRedirectURL("/auth/callback"),
       },
     });
 

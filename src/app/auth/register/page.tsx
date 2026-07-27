@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { getAuthRedirectURL } from "@/lib/utils/url";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -31,7 +32,7 @@ export default function RegisterPage() {
             last_name: lastName.trim(),
             full_name: `${firstName} ${lastName}`.trim(),
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: getAuthRedirectURL("/auth/callback"),
         },
       });
 
@@ -54,7 +55,7 @@ export default function RegisterPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getAuthRedirectURL("/auth/callback"),
       },
     });
     if (error) {
