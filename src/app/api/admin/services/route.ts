@@ -232,9 +232,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 2. Limpiar asociaciones explícitamente en employee_skills y desvincular booking_services
+    // 2. Limpiar asociaciones explícitamente en employee_skills y booking_services
     await admin.from("employee_skills").delete().eq("service_id", id);
-    await admin.from("booking_services").update({ service_id: null }).eq("service_id", id);
+    await admin.from("booking_services").delete().eq("service_id", id);
 
     // 3. Ejecutar ELIMINACIÓN FÍSICA DEFINITIVA (Hard Delete) en la tabla services
     const { error: deleteError } = await admin
