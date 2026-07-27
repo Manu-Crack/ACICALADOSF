@@ -76,27 +76,11 @@ export async function Navbar() {
 
         {/* Nav Links - Desktop */}
         <div className="nav-links-desktop">
-          <Link href="/">
-            <span>🏠</span> Inicio
-          </Link>
-          <Link href="/reservar">
-            <span>📋</span> Reservas
-          </Link>
-          <Link href="/dashboard/empleados">
-            <span>👥</span> Empleados
-          </Link>
-          <Link href="/servicios">
-            <span>✂️</span> Servicios
-          </Link>
-          <Link href="/vestuario">
-            <span>👔</span> Vestuario
-          </Link>
-          <Link href="/tienda">
-            <span>🛍️</span> Productos
-          </Link>
-          <Link href="/blog">
-            <span>📝</span> Blog
-          </Link>
+          <Link href="/">Inicio</Link>
+          <Link href="/servicios">Servicios</Link>
+          <Link href="/vestuario">Vestuario</Link>
+          <Link href="/tienda">Productos</Link>
+          <Link href="/blog">Blog</Link>
         </div>
 
         {/* Actions / Auth / Mobile menu */}

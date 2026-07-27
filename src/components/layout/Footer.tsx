@@ -88,13 +88,11 @@ export function Footer() {
           </h4>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { name: "Inicio", icon: "🏠", href: "/" },
-              { name: "Reservas", icon: "📋", href: "/reservar" },
-              { name: "Empleados", icon: "👥", href: "/dashboard/empleados" },
-              { name: "Servicios", icon: "✂️", href: "/servicios" },
-              { name: "Vestuario", icon: "👔", href: "/vestuario" },
-              { name: "Productos", icon: "🛍️", href: "/tienda" },
-              { name: "Blog", icon: "📝", href: "/blog" },
+              { name: "Inicio", href: "/" },
+              { name: "Servicios", href: "/servicios" },
+              { name: "Vestuario", href: "/vestuario" },
+              { name: "Productos", href: "/tienda" },
+              { name: "Blog", href: "/blog" },
             ].map((sec) => (
               <li key={sec.name}>
                 <Link
@@ -104,11 +102,9 @@ export function Footer() {
                     color: "var(--color-text-muted)",
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 8,
                     transition: "color var(--transition-fast)",
                   }}
                 >
-                  <span>{sec.icon}</span>
                   <span>{sec.name}</span>
                 </Link>
               </li>

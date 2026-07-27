@@ -37,13 +37,11 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
   }, [isOpen]);
 
   const navLinks = [
-    { label: "Inicio", href: "/", icon: "🏠" },
-    { label: "Reservas", href: "/reservar", icon: "📋" },
-    { label: "Empleados", href: "/dashboard/empleados", icon: "👥" },
-    { label: "Servicios", href: "/servicios", icon: "✂️" },
-    { label: "Vestuario", href: "/vestuario", icon: "👔" },
-    { label: "Productos", href: "/tienda", icon: "🛍️" },
-    { label: "Blog", href: "/blog", icon: "📝" },
+    { label: "Inicio", href: "/" },
+    { label: "Servicios", href: "/servicios" },
+    { label: "Vestuario", href: "/vestuario" },
+    { label: "Productos", href: "/tienda" },
+    { label: "Blog", href: "/blog" },
   ];
 
   return (
@@ -159,10 +157,7 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
                   justifyContent: "space-between",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: "1.2rem" }}>{link.icon}</span>
-                  <span>{link.label}</span>
-                </div>
+                <span>{link.label}</span>
                 <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", opacity: 0.8 }}>➔</span>
               </Link>
             ))}
