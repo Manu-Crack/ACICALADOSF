@@ -110,7 +110,7 @@ export default function UbicacionPage() {
                     }}
                   >
                     <img
-                      src="/public/calendarioT.svg"
+                      src="/calendarioT.svg"
                       alt="Calendario"
                       style={{ width: 22, height: 22, objectFit: "contain" }}
                     />
