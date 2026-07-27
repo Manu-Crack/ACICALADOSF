@@ -345,11 +345,12 @@ export default function ReservarPage() {
         {/* Step 1: Choose type */}
         {step === "type" && (
           <div className="animate-fadeInUp">
-            <h2 className="heading-md" style={{ marginBottom: 24, textAlign: "center" }}>
+            <h2 className="heading-md" style={{ marginBottom: 24, textAlign: "center", color: "#FFFFFF" }}>
               ¿Qué servicio necesitas?
             </h2>
             <div className="grid grid-2">
               <button
+                type="button"
                 onClick={() => { setServiceType("barberia"); setStep("services"); }}
                 className="card card-gold"
                 style={{
@@ -357,17 +358,20 @@ export default function ReservarPage() {
                   textAlign: "center",
                   padding: 32,
                   border: "1px solid var(--color-primary-border)",
+                  background: "rgba(20, 18, 12, 0.9)",
+                  color: "#FFFFFF",
                 }}
               >
                 <div style={{ marginBottom: 12 }}>
                   <img src="/LogoBarberia.svg" alt="Barbería" style={{ width: 64, height: 64, display: "inline-block" }} />
                 </div>
-                <h3 className="heading-sm">Barbería</h3>
-                <p className="text-muted" style={{ fontSize: "0.875rem", marginTop: 8 }}>
+                <h3 className="heading-sm" style={{ color: "var(--color-primary)", fontSize: "1.25rem", fontWeight: 700 }}>Barbería</h3>
+                <p style={{ fontSize: "0.875rem", marginTop: 8, color: "rgba(255, 255, 255, 0.85)" }}>
                   Cortes, barba, tratamientos capilares
                 </p>
               </button>
               <button
+                type="button"
                 onClick={() => { setServiceType("spa"); setStep("services"); }}
                 className="card card-gold"
                 style={{
@@ -375,34 +379,39 @@ export default function ReservarPage() {
                   textAlign: "center",
                   padding: 32,
                   border: "1px solid var(--color-primary-border)",
+                  background: "rgba(20, 18, 12, 0.9)",
+                  color: "#FFFFFF",
                 }}
               >
                 <div style={{ marginBottom: 12 }}>
                   <img src="/LogoSpa.svg" alt="Spa" style={{ width: 64, height: 64, display: "inline-block" }} />
                 </div>
-                <h3 className="heading-sm">Spa</h3>
-                <p className="text-muted" style={{ fontSize: "0.875rem", marginTop: 8 }}>
+                <h3 className="heading-sm" style={{ color: "var(--color-primary)", fontSize: "1.25rem", fontWeight: 700 }}>Spa</h3>
+                <p style={{ fontSize: "0.875rem", marginTop: 8, color: "rgba(255, 255, 255, 0.85)" }}>
                   Masajes, faciales, manicure, pedicure
                 </p>
               </button>
             </div>
             <button
+              type="button"
               onClick={() => { setServiceType(null); setStep("services"); }}
               className="card card-gold"
               style={{
                 cursor: "pointer",
                 textAlign: "center",
                 padding: 24,
-                marginTop: 12,
+                marginTop: 16,
                 border: "1px solid var(--color-primary-border)",
                 width: "100%",
+                background: "rgba(20, 18, 12, 0.9)",
+                color: "#FFFFFF",
               }}
             >
               <div style={{ marginBottom: 8 }}>
                 <img src="/LogoTodo.svg" alt="Todos los servicios" style={{ width: 48, height: 48, display: "inline-block" }} />
               </div>
-              <h3 className="heading-sm">Todos los servicios</h3>
-              <p className="text-muted" style={{ fontSize: "0.875rem", marginTop: 8 }}>
+              <h3 className="heading-sm" style={{ color: "var(--color-primary)", fontSize: "1.25rem", fontWeight: 700 }}>Todos los servicios</h3>
+              <p style={{ fontSize: "0.875rem", marginTop: 8, color: "rgba(255, 255, 255, 0.85)" }}>
                 Mezcla barbería y spa en una sola cita
               </p>
             </button>
@@ -412,7 +421,7 @@ export default function ReservarPage() {
         {/* Step 2: Select services */}
         {step === "services" && (
           <div className="animate-fadeInUp">
-            <h2 className="heading-md" style={{ marginBottom: 24 }}>
+            <h2 className="heading-md" style={{ marginBottom: 24, color: "#FFFFFF" }}>
               Selecciona tus servicios
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -421,8 +430,9 @@ export default function ReservarPage() {
                 return (
                   <button
                     key={service.id}
+                    type="button"
                     onClick={() => toggleService(service)}
-                    className="card"
+                    className="card card-gold"
                     style={{
                       cursor: "pointer",
                       display: "flex",
@@ -430,36 +440,76 @@ export default function ReservarPage() {
                       alignItems: "center",
                       borderColor: isSelected
                         ? "var(--color-primary)"
-                        : "var(--color-border)",
+                        : "var(--color-primary-border)",
                       background: isSelected
-                        ? "rgba(200,164,92,0.05)"
-                        : "var(--color-bg-card)",
+                        ? "rgba(200,164,92,0.15)"
+                        : "rgba(20, 18, 12, 0.9)",
                       textAlign: "left",
+                      color: "#FFFFFF",
+                      padding: "20px 24px",
+                      transition: "all var(--transition-normal)",
                     }}
                   >
-                    <div>
-                      <h4 style={{ fontWeight: 600, marginBottom: 4 }}>{service.name}</h4>
-                      <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                        {service.duration_minutes} min
+                    <div style={{ flex: 1, paddingRight: 16 }}>
+                      <h4
+                        style={{
+                          fontWeight: 700,
+                          marginBottom: 4,
+                          color: isSelected ? "var(--color-primary)" : "#FFFFFF",
+                          fontSize: "1.0625rem",
+                          letterSpacing: "0.01em",
+                        }}
+                      >
+                        {service.name}
+                      </h4>
+                      {service.description && (
+                        <p
+                          style={{
+                            fontSize: "0.84rem",
+                            color: "rgba(255, 255, 255, 0.8)",
+                            marginBottom: 6,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {service.description}
+                        </p>
+                      )}
+                      <p
+                        style={{
+                          fontSize: "0.8125rem",
+                          color: "var(--color-primary-light)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        ⏱️ {service.duration_minutes} min
                       </p>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <span style={{ fontWeight: 700, color: "var(--color-primary)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          color: "var(--color-primary)",
+                          fontSize: "1.125rem",
+                        }}
+                      >
                         S/ {(service.price_cents / 100).toFixed(2)}
                       </span>
                       <div
                         style={{
-                          width: 24,
-                          height: 24,
+                          width: 26,
+                          height: 26,
                           borderRadius: "var(--radius-sm)",
-                          border: `2px solid ${isSelected ? "var(--color-primary)" : "var(--color-border)"}`,
+                          border: `2px solid ${isSelected ? "var(--color-primary)" : "var(--color-primary-border)"}`,
                           background: isSelected ? "var(--color-primary)" : "transparent",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          color: "#1C1912",
-                          fontSize: "0.875rem",
-                          fontWeight: 700,
+                          color: "#000000",
+                          fontSize: "0.9375rem",
+                          fontWeight: 800,
+                          boxShadow: isSelected ? "0 0 8px rgba(200, 164, 92, 0.4)" : "none",
                         }}
                       >
                         {isSelected ? "✓" : ""}
