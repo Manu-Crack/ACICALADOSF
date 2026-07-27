@@ -83,12 +83,14 @@ export default function UbicacionPage() {
                       🗺️ Abrir en Google Maps
                     </a>
                     <a
-                      href="https://wa.me/51997766828" // Reemplazar con el número del negocio si aplica
+                      href="https://wa.me/51997766828"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-secondary btn-sm"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
                     >
-                      💬 WhatsApp Directo
+                      <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                      <span>WhatsApp Directo</span>
                     </a>
                   </div>
                 </div>

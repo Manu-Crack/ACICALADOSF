@@ -51,9 +51,10 @@ export default async function VestuarioPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary"
-                style={{ marginTop: 24 }}
+                style={{ marginTop: 24, display: "inline-flex", alignItems: "center", gap: 8 }}
               >
-                💬 Coordinar por WhatsApp
+                <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                <span>Coordinar por WhatsApp</span>
               </a>
             </div>
 
@@ -119,8 +120,15 @@ export default async function VestuarioPage() {
               <p className="text-muted" style={{ marginBottom: 20 }}>
                 Coordina tu reserva directamente con nosotros
               </p>
-              <a href="https://wa.me/51997766828" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-lg">
-                💬 Escribir por WhatsApp
+              <a
+                href="https://wa.me/51997766828"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary btn-lg"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 22, height: 22, objectFit: "contain" }} />
+                <span>Escribir por WhatsApp</span>
               </a>
             </div>
           </div>
