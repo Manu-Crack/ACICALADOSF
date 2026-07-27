@@ -19,7 +19,8 @@
 
 # production
 /build
-
+.specify
+/specify
 # misc
 .DS_Store
 *.pem
