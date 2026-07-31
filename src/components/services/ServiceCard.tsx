@@ -110,7 +110,22 @@ export function ServiceCard({
       {/* Action Buttons */}
       <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
         <Link
-          href={`/reservar?type=${service.type}`}
+          href={`/reservar?type=${service.type}&serviceId=${service.id}`}
+          onClick={() => {
+            const cartItem: CartService = {
+              id: service.id,
+              name: service.name,
+              slug: service.slug,
+              description: service.description,
+              type: service.type as "barberia" | "spa",
+              price_cents: service.price_cents,
+              duration_minutes: service.duration_minutes,
+              images: service.images,
+            };
+            if (!inCart) {
+              addToCart(cartItem);
+            }
+          }}
           className="btn btn-primary btn-sm"
           style={{ flex: 1, textAlign: "center" }}
         >

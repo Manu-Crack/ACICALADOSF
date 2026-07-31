@@ -10,7 +10,11 @@ type Service = CartService;
 export default function ReservarPage() {
   const { cart: sessionCart, clearCart: clearSessionCart } = useCart();
 
-  const [step, setStep] = useState<"type" | "services" | "datetime" | "contact" | "payment" | "success">("type");
+  type Step = "type" | "services" | "datetime" | "contact" | "payment" | "success";
+
+  const [stepHistory, setStepHistory] = useState<Step[]>(["type"]);
+  const step = stepHistory[stepHistory.length - 1] || "type";
+
   const [serviceType, setServiceType] = useState<"barberia" | "spa" | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [cart, setCart] = useState<Service[]>([]);
@@ -37,20 +41,74 @@ export default function ReservarPage() {
 
   const supabase = createClient();
 
-  // Load cart from session on mount
+  function goToStep(nextStep: Step) {
+    setError("");
+    setStepHistory((prev) => {
+      if (prev[prev.length - 1] === nextStep) return prev;
+      return [...prev, nextStep];
+    });
+  }
+
+  function handlePrevStep() {
+    setError("");
+    if (stepHistory.length > 1) {
+      setStepHistory((prev) => prev.slice(0, -1));
+    } else {
+      window.location.href = "/";
+    }
+  }
+
+  // Load cart and URL params on mount
   useEffect(() => {
-    if (sessionCart.length > 0) {
-      setCart(sessionCart);
-      // Skip directly to datetime if cart has items
-      setStep("datetime");
+    async function initBookingState() {
+      const params = new URLSearchParams(window.location.search);
+      const typeParam = params.get("type") as "barberia" | "spa" | null;
+      const serviceIdParam = params.get("serviceId") || params.get("service");
+
+      let currentCart = [...sessionCart];
+
+      // If a specific serviceId is passed in URL and not yet in cart, fetch it
+      if (serviceIdParam) {
+        const existsInCart = currentCart.some((s) => s.id === serviceIdParam);
+        if (!existsInCart) {
+          const { data: fetchedService } = await supabase
+            .from("services")
+            .select("id, name, slug, description, type, price_cents, duration_minutes, images")
+            .eq("id", serviceIdParam)
+            .single();
+
+          if (fetchedService) {
+            const newService: Service = {
+              id: fetchedService.id,
+              name: fetchedService.name,
+              slug: fetchedService.slug,
+              description: fetchedService.description,
+              type: fetchedService.type as "barberia" | "spa",
+              price_cents: fetchedService.price_cents,
+              duration_minutes: fetchedService.duration_minutes,
+              images: fetchedService.images || [],
+            };
+            currentCart = [...currentCart, newService];
+          }
+        }
+      }
+
+      // Update cart state if we have services
+      if (currentCart.length > 0) {
+        setCart(currentCart);
+        const primaryType = currentCart[0]?.type || typeParam;
+        if (primaryType === "barberia" || primaryType === "spa") {
+          setServiceType(primaryType);
+        }
+        // Advance to datetime step with history stack initialized
+        setStepHistory(["type", "services", "datetime"]);
+      } else if (typeParam === "barberia" || typeParam === "spa") {
+        setServiceType(typeParam);
+        setStepHistory(["type", "services"]);
+      }
     }
-    // Check URL params
-    const params = new URLSearchParams(window.location.search);
-    const typeParam = params.get("type");
-    if (typeParam === "barberia" || typeParam === "spa") {
-      setServiceType(typeParam);
-      if (sessionCart.length === 0) setStep("services");
-    }
+
+    initBookingState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -145,7 +203,7 @@ export default function ReservarPage() {
       }
 
       setBookingResult(data);
-      setStep("payment");
+      goToStep("payment");
       clearSessionCart();
     } catch {
       setError("Error de conexión");
@@ -216,7 +274,7 @@ export default function ReservarPage() {
 
           const data = await res.json();
           if (res.ok) {
-            setStep("success");
+            goToStep("success");
           } else {
             setError(data.error || "Error al procesar el pago");
           }
@@ -230,7 +288,7 @@ export default function ReservarPage() {
     };
 
     (window as unknown as Record<string, unknown>).__culqi = culqi;
-  }, [bookingResult, contact.email]);
+  }, [bookingResult, contact.email, goToStep]);
 
   useEffect(() => {
     if (step === "payment") {
@@ -257,22 +315,6 @@ export default function ReservarPage() {
   for (let h = 8; h <= 19; h++) {
     timeSlots.push(`${String(h).padStart(2, "0")}:00`);
     if (h < 19) timeSlots.push(`${String(h).padStart(2, "0")}:30`);
-  }
-
-  function handlePrevStep() {
-    if (step === "services") {
-      setStep("type");
-      setCart([]);
-      setServiceType(null);
-    } else if (step === "datetime") {
-      setStep("services");
-    } else if (step === "contact") {
-      setStep("datetime");
-    } else if (step === "payment") {
-      setStep("contact");
-    } else if (step === "type") {
-      window.location.href = "/";
-    }
   }
 
   // Min date = today (allow same-day bookings)
@@ -400,7 +442,7 @@ export default function ReservarPage() {
             <div className="grid grid-2">
               <button
                 type="button"
-                onClick={() => { setServiceType("barberia"); setStep("services"); }}
+                onClick={() => { setServiceType("barberia"); goToStep("services"); }}
                 className="card card-gold"
                 style={{
                   cursor: "pointer",
@@ -421,7 +463,7 @@ export default function ReservarPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setServiceType("spa"); setStep("services"); }}
+                onClick={() => { setServiceType("spa"); goToStep("services"); }}
                 className="card card-gold"
                 style={{
                   cursor: "pointer",
@@ -443,7 +485,7 @@ export default function ReservarPage() {
             </div>
             <button
               type="button"
-              onClick={() => { setServiceType(null); setStep("services"); }}
+              onClick={() => { setServiceType(null); goToStep("services"); }}
               className="card card-gold"
               style={{
                 cursor: "pointer",
@@ -582,13 +624,13 @@ export default function ReservarPage() {
                     Total: S/ {(totalCents / 100).toFixed(2)}
                   </p>
                 </div>
-                <button onClick={() => setStep("datetime")} className="btn btn-primary">
+                <button onClick={() => goToStep("datetime")} className="btn btn-primary">
                   Continuar
                 </button>
               </div>
             )}
 
-            <button onClick={() => { setStep("type"); setCart([]); setServiceType(null); }} className="btn btn-ghost" style={{ marginTop: 12, width: "100%" }}>
+            <button onClick={handlePrevStep} className="btn btn-ghost" style={{ marginTop: 12, width: "100%" }}>
               ← Volver
             </button>
           </div>
@@ -632,11 +674,11 @@ export default function ReservarPage() {
             </div>
 
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setStep("services")} className="btn btn-ghost" style={{ flex: 1 }}>
+              <button onClick={handlePrevStep} className="btn btn-ghost" style={{ flex: 1 }}>
                 ← Volver
               </button>
               <button
-                onClick={() => setStep("contact")}
+                onClick={() => goToStep("contact")}
                 disabled={!bookingDate || !startTime}
                 className="btn btn-primary"
                 style={{ flex: 1 }}
@@ -782,7 +824,7 @@ export default function ReservarPage() {
             </div>
 
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setStep("datetime")} className="btn btn-ghost" style={{ flex: 1 }}>
+              <button onClick={handlePrevStep} className="btn btn-ghost" style={{ flex: 1 }}>
                 ← Volver
               </button>
               <button
