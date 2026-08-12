@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { ProfileForm } from "./ProfileForm";
+import { formatDuration } from "@/lib/utils/format";
 
 export const metadata = {
   title: "Mi Cuenta — Acicalados",
@@ -25,7 +26,7 @@ export default async function MiCuentaPage() {
 
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, service_type")
+    .select("id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, service_type, total_duration_minutes")
     .eq("user_id", user.id)
     .in("status", ["confirmada", "completada"])
     .order("booking_date", { ascending: false })
@@ -172,7 +173,7 @@ export default async function MiCuentaPage() {
                       </span>
                     </div>
                     <p className="text-muted" style={{ fontSize: "0.875rem" }}>
-                      📅 {b.booking_date} · ⏰ {b.start_time?.slice(0, 5)} · S/ {(b.total_price_cents / 100).toFixed(2)}
+                      📅 {b.booking_date} · ⏰ {b.start_time?.slice(0, 5)}{b.total_duration_minutes ? ` · ⏱️ ${formatDuration(b.total_duration_minutes)}` : ""} · S/ {(b.total_price_cents / 100).toFixed(2)}
                     </p>
                     <p className="text-muted" style={{ fontSize: "0.8125rem", marginTop: 4 }}>
                       Pago: {paymentLabels[b.payment_status]}

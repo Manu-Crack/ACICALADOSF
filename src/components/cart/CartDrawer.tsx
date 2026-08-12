@@ -3,6 +3,7 @@
 import { useCart } from "./CartProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { formatDuration } from "@/lib/utils/format";
 
 export function CartDrawer() {
   const {
@@ -214,7 +215,7 @@ export function CartDrawer() {
                       {item.name}
                     </h4>
                     <p style={{ fontSize: "0.75rem", color: "var(--color-primary-light)" }}>
-                      ⏱️ {item.duration_minutes} min
+                      ⏱️ {formatDuration(item.duration_minutes)}
                     </p>
                   </div>
 
@@ -291,7 +292,7 @@ export function CartDrawer() {
               >
                 <span>Duración estimada total:</span>
                 <span style={{ fontWeight: 600, color: "var(--color-primary-light)" }}>
-                  ⏱️ {totalDuration} min
+                  ⏱️ {formatDuration(totalDuration)}
                 </span>
               </div>
               <div

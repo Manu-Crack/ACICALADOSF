@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { formatDuration } from "@/lib/utils/format";
 
 type Booking = {
   id: string;
@@ -682,7 +683,7 @@ export function ReservasManager() {
                                   📅 {b.booking_date}
                                 </p>
                                 <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
-                                  ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)} ({b.total_duration_minutes} min)
+                                  ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)} ({formatDuration(b.total_duration_minutes)})
                                 </p>
                                 {b.confirmed_at && (
                                   <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>

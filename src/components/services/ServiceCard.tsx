@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCart, CartService } from "@/components/cart/CartProvider";
+import { formatDuration } from "@/lib/utils/format";
 
 export function ServiceCard({
   service,
@@ -103,7 +104,7 @@ export function ServiceCard({
           S/ {priceFormatted}
         </span>
         <span className="badge badge-neutral">
-          ⏱️ {service.duration_minutes} min
+          ⏱️ {formatDuration(service.duration_minutes)}
         </span>
       </div>
 

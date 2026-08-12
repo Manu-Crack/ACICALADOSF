@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useCart, CartService } from "@/components/cart/CartProvider";
+import { formatDuration } from "@/lib/utils/format";
 
 type Service = CartService;
 
@@ -574,7 +575,7 @@ export default function ReservarPage() {
                           gap: 4,
                         }}
                       >
-                        ⏱️ {service.duration_minutes} min
+                        ⏱️ {formatDuration(service.duration_minutes)}
                       </p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -618,7 +619,7 @@ export default function ReservarPage() {
               >
                 <div>
                   <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                    {cart.length} servicio(s) · {totalDuration} min
+                    {cart.length} servicio(s) · {formatDuration(totalDuration)}
                   </p>
                   <p style={{ fontWeight: 700, fontSize: "1.125rem", color: "var(--color-primary)" }}>
                     Total: S/ {(totalCents / 100).toFixed(2)}
@@ -743,7 +744,7 @@ export default function ReservarPage() {
                 </div>
               </div>
               <p className="text-muted" style={{ fontSize: "0.8125rem", marginTop: 12 }}>
-                📅 {bookingDate} · ⏰ {startTime} · ⏱️ {totalDuration} min
+                📅 {bookingDate} · ⏰ {startTime} · ⏱️ {formatDuration(totalDuration)}
               </p>
             </div>
 

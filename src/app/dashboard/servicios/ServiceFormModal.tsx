@@ -2,6 +2,7 @@
 
 import { useState, useRef, useMemo } from "react";
 import { convertToWebP } from "@/lib/utils/image-converter";
+import { formatDuration } from "@/lib/utils/format";
 
 type Service = {
   id: string;
@@ -90,17 +91,6 @@ const BARBERIA_CATALOG: CatalogEntry[] = [
   { name: "CORTE + BARBA", duration_minutes: 60, price_soles: 30 },
   { name: "CORTE + DISEÑO", duration_minutes: 80, price_soles: 50 },
 ];
-
-/* ============================================================
-   Helper: format duration for display
-   ============================================================ */
-function formatDuration(min: number): string {
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}min`;
-}
 
 
 

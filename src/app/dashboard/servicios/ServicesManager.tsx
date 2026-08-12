@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ServiceFormModal } from "./ServiceFormModal";
+import { formatDuration } from "@/lib/utils/format";
 
 type Service = {
   id: string;
@@ -227,7 +228,7 @@ export function ServicesManager() {
               )}
 
               <div className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 16, display: "flex", gap: 16 }}>
-                <span>⏱️ {service.duration_minutes} min</span>
+                <span>⏱️ {formatDuration(service.duration_minutes)}</span>
                 <span>👥 Cap: {service.capacity}</span>
                 <span>📋 Orden: {service.sort_order}</span>
               </div>
