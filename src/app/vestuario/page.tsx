@@ -1,134 +1,122 @@
 import { createClient } from "@/lib/supabase/server";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { WardrobeClientGallery } from "./WardrobeClientGallery";
 
 export const metadata = {
-  title: "Vestuario — Acicalados Spa & Barber Shop",
-  description: "Explora nuestro catálogo de vestuario. Alquiler y venta de trajes y prendas para toda ocasión.",
+  title: "Vestuario & Trajes Exclusivos — Acicalados Spa & Barber Shop",
+  description: "Explora nuestra colección de trajes, vestidos y prendas de alta costura. Alquiler y confección para toda ocasión especial.",
 };
 
 export default async function VestuarioPage() {
   const supabase = await createClient();
 
+  // Obtener prendas de vestuario activas
   const { data: items } = await supabase
     .from("wardrobe_items")
-    .select("id, name, description, section, price_cents, availability_status, images")
+    .select("id, name, description, section, images, availability_status")
     .eq("is_active", true)
-    .order("sort_order");
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false });
 
-  const statusLabels: Record<string, string> = {
-    disponible: "Disponible",
-    reservado: "Reservado",
-    en_uso: "En uso",
-    en_mantenimiento: "En mantenimiento",
-  };
+  // Obtener teléfono o WhatsApp configurado en business_config
+  const { data: config } = await supabase
+    .from("business_config")
+    .select("whatsapp_url")
+    .single();
 
-  const statusColors: Record<string, string> = {
-    disponible: "badge-success",
-    reservado: "badge-warning",
-    en_uso: "badge-gold",
-    en_mantenimiento: "badge-neutral",
-  };
+  let whatsappNumber = "51997766828";
+  if (config?.whatsapp_url) {
+    const extracted = config.whatsapp_url.replace(/[^0-9]/g, "");
+    if (extracted && extracted.length >= 9) {
+      whatsappNumber = extracted;
+    }
+  }
+
+  const cleanItems = items || [];
 
   return (
     <>
       <Navbar />
-      <main style={{ paddingTop: 100 }}>
+      <main style={{ paddingTop: 110, paddingBottom: 80, minHeight: "85vh" }}>
         <section className="section">
           <div className="container">
-            <div style={{ textAlign: "center", marginBottom: 48 }}>
-              <span className="badge badge-gold">Vestuario</span>
-              <h1 className="heading-lg" style={{ marginTop: 16, marginBottom: 8 }}>
+            {/* Header Hero Section */}
+            <div style={{ textAlign: "center", marginBottom: 44 }}>
+              <span className="badge badge-gold" style={{ fontSize: "0.8125rem", padding: "6px 16px" }}>
+                Colección Exclusiva
+              </span>
+              <h1 className="heading-lg" style={{ marginTop: 16, marginBottom: 12 }}>
                 Nuestro Catálogo de <span className="text-gold">Vestuario</span>
               </h1>
-              <div className="divider-gold" style={{ margin: "16px auto" }} />
-              <p className="text-muted" style={{ maxWidth: 540, margin: "0 auto", lineHeight: 1.7 }}>
-                Trajes y prendas para cada ocasión. La coordinación y adquisición
-                se realiza presencialmente o a través de nuestro WhatsApp.
-              </p>
-              <a
-                href="https://wa.me/51997766828"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary"
-                style={{ marginTop: 24, display: "inline-flex", alignItems: "center", gap: 8 }}
+              <div className="divider-gold" style={{ margin: "16px auto 20px" }} />
+              <p
+                className="text-muted"
+                style={{
+                  maxWidth: 580,
+                  margin: "0 auto",
+                  lineHeight: 1.7,
+                  fontSize: "1rem",
+                }}
               >
-                <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 20, height: 20, objectFit: "contain" }} />
-                <span>Coordinar por WhatsApp</span>
-              </a>
+                Trajes, vestidos de gala y prendas de alta costura seleccionadas para que luzcas impecable en tus eventos y celebraciones más importantes.
+              </p>
             </div>
 
-            {items && items.length > 0 ? (
-              <div className="grid grid-3">
-                {items.map((item) => (
-                  <div key={item.id} className="card card-gold" style={{ display: "flex", flexDirection: "column" }}>
-                    <div
-                      style={{
-                        width: "100%",
-                        aspectRatio: "3/4",
-                        borderRadius: "var(--radius-md)",
-                        marginBottom: 16,
-                        overflow: "hidden",
-                        background:
-                          item.images.length > 0
-                            ? `url(${item.images[0]}) center/cover`
-                            : "linear-gradient(135deg, var(--color-bg), rgba(200,164,92,0.1))",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {item.images.length === 0 && (
-                        <span style={{ fontSize: "2.5rem", opacity: 0.3 }}>👔</span>
-                      )}
-                    </div>
-                    <h3 className="heading-sm" style={{ marginBottom: 4 }}>{item.name}</h3>
-                    {item.section && (
-                      <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 8 }}>
-                        {item.section}
-                      </p>
-                    )}
-                    {item.description && (
-                      <p className="text-muted" style={{ fontSize: "0.875rem", lineHeight: 1.6, marginBottom: 16, flex: 1 }}>
-                        {item.description}
-                      </p>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-                      <span style={{ fontWeight: 700, color: "var(--color-primary)" }}>
-                        S/ {(item.price_cents / 100).toFixed(2)}
-                      </span>
-                      <span className={`badge ${statusColors[item.availability_status] || "badge-neutral"}`}>
-                        {statusLabels[item.availability_status] || item.availability_status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: "center", padding: "60px 20px" }}>
-                <p className="text-muted" style={{ fontSize: "1.125rem" }}>
-                  Próximamente disponible.
-                </p>
-              </div>
-            )}
+            {/* Interactive Client Gallery (Hides price completely, vertical 9:16 images, WhatsApp CTA) */}
+            <WardrobeClientGallery
+              items={cleanItems}
+              whatsappNumber={whatsappNumber}
+            />
 
-            {/* WhatsApp CTA */}
-            <div style={{ textAlign: "center", marginTop: 48, padding: 40, background: "rgba(200,164,92,0.05)", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-primary-border)" }}>
-              <p style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: 8 }}>
-                ¿Te interesa alguna prenda?
-              </p>
-              <p className="text-muted" style={{ marginBottom: 20 }}>
-                Coordina tu reserva directamente con nosotros
+            {/* In-Salon Fitting & Custom Tailoring Banner */}
+            <div
+              className="card card-gold"
+              style={{
+                textAlign: "center",
+                marginTop: 64,
+                padding: "44px 24px",
+                background: "radial-gradient(ellipse at center, rgba(200,164,92,0.08) 0%, rgba(20,20,20,0.95) 100%)",
+                borderRadius: "var(--radius-lg)",
+                border: "1px solid var(--color-primary-border)",
+              }}
+            >
+              <span style={{ fontSize: "2.5rem", display: "block", marginBottom: 12 }}>✨</span>
+              <h2 className="heading-md" style={{ marginBottom: 10 }}>
+                ¿Deseas una prueba de vestuario o asesoría personalizada?
+              </h2>
+              <p
+                className="text-muted"
+                style={{
+                  maxWidth: 520,
+                  margin: "0 auto 24px",
+                  fontSize: "0.95rem",
+                  lineHeight: 1.6,
+                }}
+              >
+                Visítanos en nuestro salón para probarte las prendas o contáctanos para agendar una cita previa con nuestros estilistas.
               </p>
               <a
-                href="https://wa.me/51997766828"
+                href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+                  "¡Hola Acicalados! Quisiera coordinar una cita para prueba de vestuario."
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary btn-lg"
-                style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "14px 28px",
+                  fontSize: "1rem",
+                }}
               >
-                <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 22, height: 22, objectFit: "contain" }} />
-                <span>Escribir por WhatsApp</span>
+                <img
+                  src="/icons/whatsApp.svg"
+                  alt="WhatsApp"
+                  style={{ width: 22, height: 22, objectFit: "contain" }}
+                />
+                <span>Coordinar Cita por WhatsApp</span>
               </a>
             </div>
           </div>
