@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { WardrobeFormModal, WardrobeItem } from "./WardrobeFormModal";
 
+function formatGroupLetter(section?: string | null): string {
+  if (!section) return "A";
+  return section.replace(/^(grupo|categor[ií]a)\s*:?\s*/i, "").trim() || section;
+}
+
 export function WardrobeManager() {
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,24 +36,30 @@ export function WardrobeManager() {
     loadWardrobe();
   }, [loadWardrobe]);
 
-  // Grupos únicos disponibles
+  // Grupos únicos disponibles ordenados alfabéticamente
   const availableGroups = useMemo(() => {
     const set = new Set<string>();
     items.forEach((item) => {
       if (item.section) set.add(item.section);
     });
-    return Array.from(set);
+    return Array.from(set).sort((a, b) => {
+      const letterA = formatGroupLetter(a);
+      const letterB = formatGroupLetter(b);
+      return letterA.localeCompare(letterB, undefined, { numeric: true });
+    });
   }, [items]);
 
   // Filtrado reactivo
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const matchesGroup = selectedGroup === "all" || item.section === selectedGroup;
+      const formattedSection = formatGroupLetter(item.section);
       const matchesSearch =
         searchQuery.trim() === "" ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.section && item.section.toLowerCase().includes(searchQuery.toLowerCase()));
+        (item.section && item.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        formattedSection.toLowerCase().includes(searchQuery.toLowerCase());
 
       return matchesGroup && matchesSearch;
     });
@@ -142,7 +153,7 @@ export function WardrobeManager() {
               className="input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por título o grupo..."
+              placeholder="Buscar por título o letra..."
               style={{ paddingLeft: 34, height: 40 }}
             />
             {searchQuery && (
@@ -194,13 +205,15 @@ export function WardrobeManager() {
         </button>
         {availableGroups.map((group) => {
           const count = items.filter((i) => i.section === group).length;
+          const displayLetter = formatGroupLetter(group);
           return (
             <button
               key={group}
               onClick={() => setSelectedGroup(group)}
               className={selectedGroup === group ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+              style={{ fontWeight: 700, minWidth: 40 }}
             >
-              {group} ({count})
+              {displayLetter} ({count})
             </button>
           );
         })}
@@ -233,7 +246,7 @@ export function WardrobeManager() {
           <p className="text-muted" style={{ maxWidth: 440, margin: "0 auto 20px", fontSize: "0.875rem" }}>
             {items.length === 0
               ? "Crea tu primera prenda con dimensiones verticales 1080 x 1920 px en formato WebP para exhibirla en el catálogo."
-              : "Prueba cambiando de grupo o limpiando la barra de búsqueda."}
+              : "Prueba cambiando de letra o limpiando la barra de búsqueda."}
           </p>
           <button onClick={handleNew} className="btn btn-primary">
             + Agregar primera prenda
@@ -250,6 +263,7 @@ export function WardrobeManager() {
           {filteredItems.map((item) => {
             const hasImage = item.images && item.images.length > 0;
             const price = (item.price_cents / 100).toFixed(2);
+            const groupLetter = formatGroupLetter(item.section);
 
             return (
               <div
@@ -302,23 +316,29 @@ export function WardrobeManager() {
                     </div>
                   )}
 
-                  {/* Group Badge overlay */}
+                  {/* Group Badge overlay (Solo letra del abecedario) */}
                   <div
                     style={{
                       position: "absolute",
                       top: 10,
                       left: 10,
-                      background: "rgba(10,10,10,0.85)",
+                      background: "rgba(10,10,10,0.88)",
                       backdropFilter: "blur(4px)",
-                      padding: "4px 10px",
+                      padding: "2px 10px",
+                      minWidth: 28,
+                      height: 28,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                       borderRadius: "var(--radius-full)",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
                       color: "var(--color-primary)",
-                      border: "1px solid var(--color-primary-border)",
+                      border: "1.5px solid var(--color-primary)",
                     }}
+                    title={`Grupo ${groupLetter}`}
                   >
-                    {item.section || "General"}
+                    {groupLetter}
                   </div>
 
                   {/* WebP / Dimensions Indicator */}

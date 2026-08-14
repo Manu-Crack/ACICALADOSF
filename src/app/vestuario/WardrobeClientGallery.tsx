@@ -11,6 +11,11 @@ export type PublicWardrobeItem = {
   availability_status?: string;
 };
 
+function formatGroupLetter(section?: string | null): string {
+  if (!section) return "A";
+  return section.replace(/^(grupo|categor[ií]a)\s*:?\s*/i, "").trim() || section;
+}
+
 export function WardrobeClientGallery({
   items,
   whatsappNumber = "51997766828",
@@ -21,24 +26,30 @@ export function WardrobeClientGallery({
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Extract unique groups from active items
+  // Extract unique groups from active items and sort alphabetically
   const groups = useMemo(() => {
     const set = new Set<string>();
     items.forEach((item) => {
       if (item.section) set.add(item.section);
     });
-    return Array.from(set);
+    return Array.from(set).sort((a, b) => {
+      const letterA = formatGroupLetter(a);
+      const letterB = formatGroupLetter(b);
+      return letterA.localeCompare(letterB, undefined, { numeric: true });
+    });
   }, [items]);
 
   // Filter items by group and search query
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const matchesGroup = selectedGroup === "all" || item.section === selectedGroup;
+      const formattedSection = formatGroupLetter(item.section);
       const matchesSearch =
         searchQuery.trim() === "" ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.section && item.section.toLowerCase().includes(searchQuery.toLowerCase()));
+        (item.section && item.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        formattedSection.toLowerCase().includes(searchQuery.toLowerCase());
 
       return matchesGroup && matchesSearch;
     });
@@ -77,7 +88,7 @@ export function WardrobeClientGallery({
             className="input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por prenda, estilo o grupo..."
+            placeholder="Buscar por prenda, descripción o letra..."
             style={{
               paddingLeft: 38,
               height: 44,
@@ -123,18 +134,24 @@ export function WardrobeClientGallery({
               className={selectedGroup === "all" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
               style={{ borderRadius: "var(--radius-full)", padding: "8px 18px" }}
             >
-              Todas las colecciones ({items.length})
+              Todos ({items.length})
             </button>
             {groups.map((group) => {
               const count = items.filter((i) => i.section === group).length;
+              const displayLetter = formatGroupLetter(group);
               return (
                 <button
                   key={group}
                   onClick={() => setSelectedGroup(group)}
                   className={selectedGroup === group ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-                  style={{ borderRadius: "var(--radius-full)", padding: "8px 18px" }}
+                  style={{
+                    borderRadius: "var(--radius-full)",
+                    padding: "8px 18px",
+                    fontWeight: 700,
+                    minWidth: 44,
+                  }}
                 >
-                  {group} ({count})
+                  {displayLetter} ({count})
                 </button>
               );
             })}
@@ -184,9 +201,10 @@ export function WardrobeClientGallery({
           {filteredItems.map((item) => {
             const hasImage = item.images && item.images.length > 0;
             const imageUrl = hasImage ? item.images[0] : null;
+            const groupLetter = formatGroupLetter(item.section);
 
             // WhatsApp consultation message
-            const whatsappMessage = `¡Hola Acicalados! 👋 Estoy interesado/a en la prenda "${item.name}" de la categoría "${item.section || "Vestuario"}" que vi en su catálogo web. ¿Podrían brindarme mayor información sobre disponibilidad y tallas?`;
+            const whatsappMessage = `¡Hola Acicalados! 👋 Estoy interesado/a en la prenda "${item.name}" (${groupLetter}) que vi en su catálogo web. ¿Podrían brindarme mayor información sobre disponibilidad y tallas?`;
             const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
 
             return (
@@ -247,26 +265,32 @@ export function WardrobeClientGallery({
                     </div>
                   )}
 
-                  {/* 4. Grupo (Badge flotante sobre la imagen) */}
+                  {/* 4. Grupo (Badge flotante sobre la imagen con solo la letra del abecedario) */}
                   <div
                     style={{
                       position: "absolute",
                       top: 12,
                       left: 12,
-                      background: "rgba(10, 10, 10, 0.88)",
+                      background: "rgba(10, 10, 10, 0.9)",
                       backdropFilter: "blur(6px)",
-                      border: "1px solid var(--color-primary-border)",
+                      border: "1.5px solid var(--color-primary)",
                       color: "var(--color-primary)",
-                      padding: "4px 12px",
+                      minWidth: 32,
+                      height: 32,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "0 10px",
                       borderRadius: "var(--radius-full)",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.03em",
+                      fontSize: "0.875rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
                       textTransform: "uppercase",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+                      boxShadow: "0 4px 14px rgba(0,0,0,0.6)",
                     }}
+                    title={`Grupo ${groupLetter}`}
                   >
-                    {item.section || "General"}
+                    {groupLetter}
                   </div>
                 </div>
 

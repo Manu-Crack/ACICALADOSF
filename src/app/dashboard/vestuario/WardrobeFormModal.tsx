@@ -19,15 +19,7 @@ export type WardrobeItem = {
   updated_at?: string;
 };
 
-const SUGGESTED_GROUPS = [
-  "Trajes de Novio",
-  "Vestidos de Gala",
-  "Vestidos de Quinceañera",
-  "Smokings & Fracs",
-  "Ternos Clásicos",
-  "Trajes de Paje",
-  "Accesorios & Calzado",
-];
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export function WardrobeFormModal({
   item,
@@ -42,12 +34,8 @@ export function WardrobeFormModal({
 
   const [name, setName] = useState(item?.name || "");
   const [description, setDescription] = useState(item?.description || "");
-  const [section, setSection] = useState(item?.section || "Trajes de Novio");
-  const [customSection, setCustomSection] = useState(
-    item?.section && !SUGGESTED_GROUPS.includes(item.section) ? item.section : ""
-  );
-  const [isCustomGroup, setIsCustomGroup] = useState(
-    item?.section ? !SUGGESTED_GROUPS.includes(item.section) : false
+  const [section, setSection] = useState(
+    item?.section ? item.section.replace(/^(grupo|categor[ií]a)\s*:?\s*/i, "").trim().toUpperCase() : "A"
   );
 
   const [priceSoles, setPriceSoles] = useState(
@@ -124,9 +112,7 @@ export function WardrobeFormModal({
       return;
     }
 
-    const finalSection = isCustomGroup
-      ? customSection.trim() || "General"
-      : section.trim();
+    const finalSection = section.trim().toUpperCase() || "A";
 
     const priceCents = Math.round(parseFloat(priceSoles || "0") * 100);
     if (isNaN(priceCents) || priceCents < 0) {
@@ -266,44 +252,82 @@ export function WardrobeFormModal({
             />
           </div>
 
-          {/* 3. Grupo (Categoría) */}
-          <div style={{ marginBottom: 18 }}>
-            <label className="label">
-              3. Grupo (Categoría) *
-            </label>
-            <div style={{ display: "flex", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-              <select
-                className="select"
-                value={isCustomGroup ? "otro" : section}
-                onChange={(e) => {
-                  if (e.target.value === "otro") {
-                    setIsCustomGroup(true);
-                  } else {
-                    setIsCustomGroup(false);
-                    setSection(e.target.value);
-                  }
-                }}
-                style={{ flex: 1, minWidth: 200 }}
-              >
-                {SUGGESTED_GROUPS.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-                <option value="otro">+ Escribir otro grupo...</option>
-              </select>
+          {/* 3. Grupo (Abecedario) */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+              <label className="label" htmlFor="w-section" style={{ marginBottom: 0 }}>
+                3. Grupo (Letra del Abecedario) *
+              </label>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", fontWeight: 600 }}>
+                Seleccionado: <strong style={{ fontSize: "1rem", color: "#fff", background: "var(--color-primary)", padding: "1px 8px", borderRadius: "var(--radius-sm)" }}>{section || "A"}</strong>
+              </span>
             </div>
 
-            {isCustomGroup && (
+            {/* Manual input for letter of alphabet */}
+            <div style={{ marginBottom: 10 }}>
               <input
+                id="w-section"
                 className="input"
-                value={customSection}
-                onChange={(e) => setCustomSection(e.target.value)}
-                placeholder="Escribe el nombre del nuevo grupo (ej. Trajes Típicos)"
-                style={{ marginTop: 6 }}
+                type="text"
+                value={section}
+                onChange={(e) => setSection(e.target.value.toUpperCase())}
+                placeholder="Escribe la letra manualmente (ej. A, B, C...)"
+                maxLength={5}
+                style={{
+                  fontWeight: 700,
+                  fontSize: "1rem",
+                  letterSpacing: "0.05em",
+                }}
                 required
               />
-            )}
+            </div>
+
+            {/* Alphabet Quick Picker Buttons */}
+            <div>
+              <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 6 }}>
+                O pulsa una letra para asignarla rápidamente:
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  maxHeight: 110,
+                  overflowY: "auto",
+                  padding: "8px 6px",
+                  background: "rgba(0,0,0,0.25)",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-border)",
+                }}
+              >
+                {ALPHABET.map((letter) => {
+                  const isSelected = section.toUpperCase() === letter;
+                  return (
+                    <button
+                      key={letter}
+                      type="button"
+                      onClick={() => setSection(letter)}
+                      className={isSelected ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        padding: 0,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "0.875rem",
+                        fontWeight: isSelected ? 800 : 600,
+                        borderRadius: "var(--radius-sm)",
+                        border: isSelected ? "1px solid var(--color-primary)" : "1px solid var(--color-border)",
+                      }}
+                      title={`Grupo ${letter}`}
+                    >
+                      {letter}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* 4. Precio (Admin) */}
