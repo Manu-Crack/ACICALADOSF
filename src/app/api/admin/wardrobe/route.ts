@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       name,
       description,
       section,
+      category,
       price_cents,
       images,
       is_active,
@@ -81,7 +82,8 @@ export async function POST(request: NextRequest) {
       .insert({
         name: name.trim(),
         description: description ? description.trim() : null,
-        section: section ? section.trim() : "General",
+        section: section ? section.trim().toUpperCase() : "A",
+        category: category ? category.trim() : "Bodas & Matrimonios",
         price_cents: typeof price_cents === "number" && price_cents >= 0 ? price_cents : 0,
         images: Array.isArray(images) ? images : [],
         is_active: is_active ?? true,
@@ -154,7 +156,8 @@ export async function PUT(request: NextRequest) {
 
     if (updates.name !== undefined) cleanUpdates.name = updates.name.trim();
     if (updates.description !== undefined) cleanUpdates.description = updates.description?.trim() || null;
-    if (updates.section !== undefined) cleanUpdates.section = updates.section?.trim() || "General";
+    if (updates.section !== undefined) cleanUpdates.section = updates.section?.trim().toUpperCase() || "A";
+    if (updates.category !== undefined) cleanUpdates.category = updates.category?.trim() || "Bodas & Matrimonios";
     if (updates.price_cents !== undefined) cleanUpdates.price_cents = Math.max(0, updates.price_cents);
     if (updates.images !== undefined) cleanUpdates.images = updates.images;
     if (updates.is_active !== undefined) cleanUpdates.is_active = updates.is_active;

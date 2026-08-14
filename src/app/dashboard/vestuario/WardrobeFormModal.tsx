@@ -8,6 +8,7 @@ export type WardrobeItem = {
   name: string;
   description: string | null;
   section: string;
+  category?: string | null;
   price_cents: number;
   deposit_cents?: number;
   guarantee_cents?: number;
@@ -18,6 +19,14 @@ export type WardrobeItem = {
   created_at?: string;
   updated_at?: string;
 };
+
+export const EVENT_CATEGORIES = [
+  { name: "Bodas & Matrimonios", icon: "💍", desc: "Novios, novias, padrinos y pajecitos" },
+  { name: "Quinceañeras", icon: "👑", desc: "Vestidos de 15 años y acompañantes" },
+  { name: "Gala & Noche", icon: "🍷", desc: "Smokings, trajes elegantes y vestidos de gala" },
+  { name: "Trajes Típicos & Costumbristas", icon: "🎭", desc: "Danzas, folclore y trajes tradicionales" },
+  { name: "Casual & Sesiones de Fotos", icon: "📸", desc: "Outfits modernos, urbanos y producciones" },
+] as const;
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -34,6 +43,9 @@ export function WardrobeFormModal({
 
   const [name, setName] = useState(item?.name || "");
   const [description, setDescription] = useState(item?.description || "");
+  const [category, setCategory] = useState<string>(
+    item?.category || "Bodas & Matrimonios"
+  );
   const [section, setSection] = useState(
     item?.section ? item.section.replace(/^(grupo|categor[ií]a)\s*:?\s*/i, "").trim().toUpperCase() : "A"
   );
@@ -126,6 +138,7 @@ export function WardrobeFormModal({
       name: name.trim(),
       description: description.trim() || null,
       section: finalSection,
+      category: category.trim() || "Bodas & Matrimonios",
       price_cents: priceCents,
       images,
       is_active: isActive,
@@ -236,30 +249,69 @@ export function WardrobeFormModal({
             />
           </div>
 
-          {/* 2. Descripción */}
-          <div style={{ marginBottom: 18 }}>
-            <label className="label" htmlFor="w-desc">
-              2. Descripción
-            </label>
-            <textarea
-              id="w-desc"
-              className="input"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe el corte, material, complementos incluidos, tallas disponibles..."
-              style={{ resize: "vertical" }}
-            />
+          {/* 2. Categoría del Evento (Obligatorio - 5 Opciones) */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+              <label className="label" style={{ marginBottom: 0 }}>
+                2. Categoría del Evento *
+              </label>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", fontWeight: 600 }}>
+                {category}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: 8,
+              }}
+            >
+              {EVENT_CATEGORIES.map((cat) => {
+                const isSelected = category === cat.name;
+                return (
+                  <button
+                    key={cat.name}
+                    type="button"
+                    onClick={() => setCategory(cat.name)}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      padding: "10px 12px",
+                      borderRadius: "var(--radius-md)",
+                      border: isSelected
+                        ? "2px solid var(--color-primary)"
+                        : "1px solid var(--color-border)",
+                      background: isSelected
+                        ? "rgba(200,164,92,0.12)"
+                        : "rgba(255,255,255,0.02)",
+                      color: isSelected ? "var(--color-primary)" : "var(--color-text)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all var(--transition-fast)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: "0.85rem", marginBottom: 2 }}>
+                      <span style={{ fontSize: "1.05rem" }}>{cat.icon}</span>
+                      <span>{cat.name}</span>
+                    </div>
+                    <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", lineHeight: 1.2 }}>
+                      {cat.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* 3. Grupo (Abecedario) */}
+          {/* 3. Letra del Abecedario / Código Interno */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
               <label className="label" htmlFor="w-section" style={{ marginBottom: 0 }}>
-                3. Grupo (Letra del Abecedario) *
+                3. Código Interno (Letra del Abecedario A-Z) *
               </label>
               <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", fontWeight: 600 }}>
-                Seleccionado: <strong style={{ fontSize: "1rem", color: "#fff", background: "var(--color-primary)", padding: "1px 8px", borderRadius: "var(--radius-sm)" }}>{section || "A"}</strong>
+                Letra asignada: <strong style={{ fontSize: "1rem", color: "#fff", background: "var(--color-primary)", padding: "1px 8px", borderRadius: "var(--radius-sm)" }}>{section || "A"}</strong>
               </span>
             </div>
 
@@ -330,11 +382,27 @@ export function WardrobeFormModal({
             </div>
           </div>
 
-          {/* 4. Precio (Admin) */}
+          {/* 4. Descripción */}
+          <div style={{ marginBottom: 18 }}>
+            <label className="label" htmlFor="w-desc">
+              4. Descripción
+            </label>
+            <textarea
+              id="w-desc"
+              className="input"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe el corte, material, complementos incluidos, tallas disponibles..."
+              style={{ resize: "vertical" }}
+            />
+          </div>
+
+          {/* 5. Precio (Admin) */}
           <div style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <label className="label" htmlFor="w-price" style={{ marginBottom: 0 }}>
-                4. Precio de referencia (S/) *
+                5. Precio de referencia (S/) *
               </label>
               <span className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>
                 🔒 Solo visible en Administrador (Oculto al cliente)
@@ -368,11 +436,11 @@ export function WardrobeFormModal({
             </div>
           </div>
 
-          {/* 5. Imagen con Uploader WebP y soporte vertical 1080 x 1920 */}
+          {/* 6. Imagen con Uploader WebP y soporte vertical 1080 x 1920 */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
               <label className="label" style={{ marginBottom: 0 }}>
-                5. Imagen del vestuario (Vertical 1080 x 1920 px) *
+                6. Imagen del vestuario (Vertical 1080 x 1920 px) *
               </label>
               <span style={{ fontSize: "0.75rem", color: "var(--color-primary)" }}>
                 ✨ Convierte automáticamente a .WebP

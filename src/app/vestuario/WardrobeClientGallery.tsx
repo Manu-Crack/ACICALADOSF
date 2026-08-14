@@ -7,9 +7,18 @@ export type PublicWardrobeItem = {
   name: string;
   description: string | null;
   section: string;
+  category?: string | null;
   images: string[];
   availability_status?: string;
 };
+
+export const EVENT_CATEGORIES = [
+  "Bodas & Matrimonios",
+  "Quinceañeras",
+  "Gala & Noche",
+  "Trajes Típicos & Costumbristas",
+  "Casual & Sesiones de Fotos",
+] as const;
 
 function formatGroupLetter(section?: string | null): string {
   if (!section) return "A";
@@ -23,55 +32,48 @@ export function WardrobeClientGallery({
   items: PublicWardrobeItem[];
   whatsappNumber?: string;
 }) {
-  const [selectedGroup, setSelectedGroup] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Extract unique groups from active items and sort alphabetically
-  const groups = useMemo(() => {
-    const set = new Set<string>();
-    items.forEach((item) => {
-      if (item.section) set.add(item.section);
-    });
-    return Array.from(set).sort((a, b) => {
-      const letterA = formatGroupLetter(a);
-      const letterB = formatGroupLetter(b);
-      return letterA.localeCompare(letterB, undefined, { numeric: true });
-    });
-  }, [items]);
-
-  // Filter items by group and search query
+  // Filter items by category and search query
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const matchesGroup = selectedGroup === "all" || item.section === selectedGroup;
-      const formattedSection = formatGroupLetter(item.section);
-      const matchesSearch =
-        searchQuery.trim() === "" ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.section && item.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        formattedSection.toLowerCase().includes(searchQuery.toLowerCase());
+      const itemCategory = item.category || "Bodas & Matrimonios";
+      const matchesCategory =
+        selectedCategory === "all" || itemCategory === selectedCategory;
 
-      return matchesGroup && matchesSearch;
+      const query = searchQuery.trim().toLowerCase();
+      const groupLetter = formatGroupLetter(item.section).toLowerCase();
+
+      const matchesSearch =
+        query === "" ||
+        item.name.toLowerCase().includes(query) ||
+        (item.description && item.description.toLowerCase().includes(query)) ||
+        groupLetter === query ||
+        (item.section && item.section.toLowerCase().includes(query)) ||
+        itemCategory.toLowerCase().includes(query);
+
+      return matchesCategory && matchesSearch;
     });
-  }, [items, selectedGroup, searchQuery]);
+  }, [items, selectedCategory, searchQuery]);
 
   // Clean WhatsApp number
   const cleanPhone = whatsappNumber.replace(/[^0-9]/g, "") || "51997766828";
 
   return (
     <div>
-      {/* Category / Group Navigation Bar */}
+      {/* Category / Search Navigation Bar */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 16,
+          gap: 18,
           marginBottom: 36,
         }}
       >
         {/* Search Input for Public Gallery */}
-        <div style={{ position: "relative", width: "100%", maxWidth: 360 }}>
+        <div style={{ position: "relative", width: "100%", maxWidth: 420 }}>
           <span
             style={{
               position: "absolute",
@@ -88,10 +90,10 @@ export function WardrobeClientGallery({
             className="input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por prenda, descripción o letra..."
+            placeholder="Buscar por prenda, letra (A, B, C...) o estilo..."
             style={{
               paddingLeft: 38,
-              height: 44,
+              height: 46,
               borderRadius: "var(--radius-full)",
               background: "var(--color-bg-card)",
               border: "1px solid var(--color-primary-border)",
@@ -118,45 +120,51 @@ export function WardrobeClientGallery({
           )}
         </div>
 
-        {/* Group Filter Chips */}
-        {groups.length > 0 && (
-          <div
+        {/* 5 Event Category Filter Buttons */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            flexWrap: "wrap",
+            gap: 10,
+            padding: "4px 0",
+            maxWidth: 960,
+          }}
+        >
+          <button
+            onClick={() => setSelectedCategory("all")}
+            className={selectedCategory === "all" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
             style={{
-              display: "flex",
-              justifyContent: "center",
-              flexWrap: "wrap",
-              gap: 10,
-              padding: "4px 0",
+              borderRadius: "var(--radius-full)",
+              padding: "9px 20px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
             }}
           >
-            <button
-              onClick={() => setSelectedGroup("all")}
-              className={selectedGroup === "all" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-              style={{ borderRadius: "var(--radius-full)", padding: "8px 18px" }}
-            >
-              Todos ({items.length})
-            </button>
-            {groups.map((group) => {
-              const count = items.filter((i) => i.section === group).length;
-              const displayLetter = formatGroupLetter(group);
-              return (
-                <button
-                  key={group}
-                  onClick={() => setSelectedGroup(group)}
-                  className={selectedGroup === group ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-                  style={{
-                    borderRadius: "var(--radius-full)",
-                    padding: "8px 18px",
-                    fontWeight: 700,
-                    minWidth: 44,
-                  }}
-                >
-                  {displayLetter} ({count})
-                </button>
-              );
-            })}
-          </div>
-        )}
+            Todos ({items.length})
+          </button>
+          {EVENT_CATEGORIES.map((catName) => {
+            const count = items.filter(
+              (i) => (i.category || "Bodas & Matrimonios") === catName
+            ).length;
+            const isSelected = selectedCategory === catName;
+            return (
+              <button
+                key={catName}
+                onClick={() => setSelectedCategory(catName)}
+                className={isSelected ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                style={{
+                  borderRadius: "var(--radius-full)",
+                  padding: "9px 20px",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                }}
+              >
+                {catName} {count > 0 ? `(${count})` : "(0)"}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Public Gallery Grid */}
@@ -172,7 +180,7 @@ export function WardrobeClientGallery({
         >
           <div style={{ fontSize: "3rem", marginBottom: 12 }}>👔</div>
           <h3 className="heading-sm" style={{ marginBottom: 8 }}>
-            No hay prendas disponibles en este grupo
+            No hay prendas disponibles en esta categoría
           </h3>
           <p className="text-muted" style={{ marginBottom: 20, fontSize: "0.9rem" }}>
             Contáctanos directamente por WhatsApp para consultar sobre diseños y confecciones personalizadas.
@@ -202,9 +210,10 @@ export function WardrobeClientGallery({
             const hasImage = item.images && item.images.length > 0;
             const imageUrl = hasImage ? item.images[0] : null;
             const groupLetter = formatGroupLetter(item.section);
+            const itemCategory = item.category || "Bodas & Matrimonios";
 
             // WhatsApp consultation message
-            const whatsappMessage = `¡Hola Acicalados! 👋 Estoy interesado/a en la prenda "${item.name}" (${groupLetter}) que vi en su catálogo web. ¿Podrían brindarme mayor información sobre disponibilidad y tallas?`;
+            const whatsappMessage = `¡Hola Acicalados! 👋 Estoy interesado/a en la prenda "${item.name}" (Código: ${groupLetter}, Categoría: ${itemCategory}) que vi en su catálogo web. ¿Podrían brindarme mayor información sobre disponibilidad y tallas?`;
             const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
 
             return (
@@ -288,9 +297,29 @@ export function WardrobeClientGallery({
                       textTransform: "uppercase",
                       boxShadow: "0 4px 14px rgba(0,0,0,0.6)",
                     }}
-                    title={`Grupo ${groupLetter}`}
+                    title={`Código / Grupo ${groupLetter}`}
                   >
                     {groupLetter}
+                  </div>
+
+                  {/* 5. Badge Categoría de Evento */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 12,
+                      right: 12,
+                      background: "rgba(10, 10, 10, 0.85)",
+                      backdropFilter: "blur(6px)",
+                      border: "1px solid rgba(200,164,92,0.3)",
+                      color: "var(--color-text)",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "0.7rem",
+                      fontWeight: 600,
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {itemCategory}
                   </div>
                 </div>
 

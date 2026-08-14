@@ -14,7 +14,7 @@ export default async function VestuarioPage() {
   // Obtener prendas de vestuario activas
   const { data: items } = await supabase
     .from("wardrobe_items")
-    .select("id, name, description, section, images, availability_status")
+    .select("id, name, description, section, category, images, availability_status")
     .eq("is_active", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false });

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { WardrobeFormModal, WardrobeItem } from "./WardrobeFormModal";
 
+import { EVENT_CATEGORIES } from "./WardrobeFormModal";
+
 function formatGroupLetter(section?: string | null): string {
   if (!section) return "A";
   return section.replace(/^(grupo|categor[ií]a)\s*:?\s*/i, "").trim() || section;
@@ -14,7 +16,7 @@ export function WardrobeManager() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<WardrobeItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [selectedGroup, setSelectedGroup] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const loadWardrobe = useCallback(async () => {
@@ -36,34 +38,27 @@ export function WardrobeManager() {
     loadWardrobe();
   }, [loadWardrobe]);
 
-  // Grupos únicos disponibles ordenados alfabéticamente
-  const availableGroups = useMemo(() => {
-    const set = new Set<string>();
-    items.forEach((item) => {
-      if (item.section) set.add(item.section);
-    });
-    return Array.from(set).sort((a, b) => {
-      const letterA = formatGroupLetter(a);
-      const letterB = formatGroupLetter(b);
-      return letterA.localeCompare(letterB, undefined, { numeric: true });
-    });
-  }, [items]);
-
-  // Filtrado reactivo
+  // Filtrado reactivo por categoría y búsqueda
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const matchesGroup = selectedGroup === "all" || item.section === selectedGroup;
-      const formattedSection = formatGroupLetter(item.section);
-      const matchesSearch =
-        searchQuery.trim() === "" ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.section && item.section.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        formattedSection.toLowerCase().includes(searchQuery.toLowerCase());
+      const itemCategory = item.category || "Bodas & Matrimonios";
+      const matchesCategory =
+        selectedCategory === "all" || itemCategory === selectedCategory;
 
-      return matchesGroup && matchesSearch;
+      const formattedSection = formatGroupLetter(item.section);
+      const query = searchQuery.trim().toLowerCase();
+
+      const matchesSearch =
+        query === "" ||
+        item.name.toLowerCase().includes(query) ||
+        (item.description && item.description.toLowerCase().includes(query)) ||
+        (item.section && item.section.toLowerCase().includes(query)) ||
+        formattedSection.toLowerCase() === query ||
+        itemCategory.toLowerCase().includes(query);
+
+      return matchesCategory && matchesSearch;
     });
-  }, [items, selectedGroup, searchQuery]);
+  }, [items, selectedCategory, searchQuery]);
 
   async function handleToggleActive(item: WardrobeItem) {
     try {
@@ -130,7 +125,7 @@ export function WardrobeManager() {
           justifyContent: "space-between",
           alignItems: "center",
           gap: 16,
-          marginBottom: 24,
+          marginBottom: 20,
           flexWrap: "wrap",
         }}
       >
@@ -153,7 +148,7 @@ export function WardrobeManager() {
               className="input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por título o letra..."
+              placeholder="Buscar por título, categoría o letra (A, B...)..."
               style={{ paddingLeft: 34, height: 40 }}
             />
             {searchQuery && (
@@ -186,7 +181,7 @@ export function WardrobeManager() {
         </button>
       </div>
 
-      {/* Group Filter Chips */}
+      {/* Category Filter Chips */}
       <div
         style={{
           display: "flex",
@@ -198,22 +193,25 @@ export function WardrobeManager() {
         }}
       >
         <button
-          onClick={() => setSelectedGroup("all")}
-          className={selectedGroup === "all" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+          onClick={() => setSelectedCategory("all")}
+          className={selectedCategory === "all" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+          style={{ borderRadius: "var(--radius-full)", padding: "6px 16px" }}
         >
-          Todos ({items.length})
+          Todas las categorías ({items.length})
         </button>
-        {availableGroups.map((group) => {
-          const count = items.filter((i) => i.section === group).length;
-          const displayLetter = formatGroupLetter(group);
+        {EVENT_CATEGORIES.map((cat) => {
+          const count = items.filter(
+            (i) => (i.category || "Bodas & Matrimonios") === cat.name
+          ).length;
+          const isSelected = selectedCategory === cat.name;
           return (
             <button
-              key={group}
-              onClick={() => setSelectedGroup(group)}
-              className={selectedGroup === group ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-              style={{ fontWeight: 700, minWidth: 40 }}
+              key={cat.name}
+              onClick={() => setSelectedCategory(cat.name)}
+              className={isSelected ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+              style={{ borderRadius: "var(--radius-full)", padding: "6px 16px", fontWeight: 600 }}
             >
-              {displayLetter} ({count})
+              {cat.icon} {cat.name} ({count})
             </button>
           );
         })}
@@ -336,9 +334,28 @@ export function WardrobeManager() {
                       color: "var(--color-primary)",
                       border: "1.5px solid var(--color-primary)",
                     }}
-                    title={`Grupo ${groupLetter}`}
+                    title={`Código / Grupo ${groupLetter}`}
                   >
                     {groupLetter}
+                  </div>
+
+                  {/* Category Badge overlay */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      right: 10,
+                      background: "rgba(10,10,10,0.88)",
+                      backdropFilter: "blur(4px)",
+                      padding: "3px 8px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "0.6875rem",
+                      fontWeight: 600,
+                      color: "var(--color-text)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    {item.category || "Bodas & Matrimonios"}
                   </div>
 
                   {/* WebP / Dimensions Indicator */}
