@@ -87,11 +87,11 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
         >
           {/* Minimalist Drawer Panel */}
           <div
-            className="w-full max-w-[290px] sm:max-w-[320px] h-full bg-black border-l border-[#C8A45C]/35 shadow-[-15px_0_40px_rgba(0,0,0,0.95)] p-7 flex flex-col justify-between overflow-y-auto animate-fadeIn"
+            className="w-full max-w-[290px] sm:max-w-[320px] h-full bg-black border-l border-[#C8A45C]/35 shadow-[-15px_0_40px_rgba(0,0,0,0.95)] p-7 flex flex-col justify-between items-center text-center overflow-y-auto animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Close Button ("X") */}
-            <div className="flex justify-end mb-6">
+            <div className="w-full flex justify-end mb-4">
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -103,8 +103,8 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
               </button>
             </div>
 
-            {/* Exclusive Vertical Navigation List */}
-            <nav className="flex flex-col gap-5 my-auto">
+            {/* Exclusive Centered Vertical Navigation List */}
+            <nav className="flex flex-col items-center justify-center gap-6 my-auto text-center w-full">
               {NAV_ITEMS.map((item) => {
                 const isActive =
                   item.href === "/"
@@ -112,14 +112,14 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
                     : pathname === item.href || pathname.startsWith(item.href + "/");
 
                 return (
-                  <div key={item.label} className="flex">
+                  <div key={item.label} className="w-full flex justify-center text-center">
                     <Link
                       href={item.href}
                       onClick={() => setIsOpen(false)}
-                      className={`text-lg sm:text-xl font-serif tracking-wider transition-all duration-200 relative pb-1 ${
+                      className={`text-xl sm:text-2xl font-serif tracking-wider transition-all duration-200 relative pb-1.5 inline-block text-center ${
                         isActive
-                          ? "text-[#C8A45C] font-bold after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-[2.5px] after:bg-[#C8A45C] after:rounded-full after:shadow-[0_0_12px_rgba(200,164,92,0.85)] drop-shadow-[0_0_6px_rgba(200,164,92,0.4)]"
-                          : "text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_4px_rgba(200,164,92,0.3)] font-medium"
+                          ? "text-[#C8A45C] font-bold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:mx-auto after:w-full after:h-[2.5px] after:bg-[#C8A45C] after:rounded-full after:shadow-[0_0_14px_rgba(200,164,92,0.9)] drop-shadow-[0_0_8px_rgba(200,164,92,0.5)]"
+                          : "text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_6px_rgba(200,164,92,0.35)] font-medium"
                       }`}
                       style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
                     >
@@ -129,8 +129,8 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
                 );
               })}
 
-              {/* Cerrar Sesión / Iniciar Sesión */}
-              <div className="flex pt-3 border-t border-[#C8A45C]/20 mt-2">
+              {/* Cerrar Sesión / Iniciar Sesión - Centered */}
+              <div className="w-full flex justify-center items-center pt-4 border-t border-[#C8A45C]/20 mt-2 text-center">
                 {user ? (
                   <button
                     type="button"
@@ -138,7 +138,7 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
                       setIsOpen(false);
                       await onSignOut();
                     }}
-                    className="text-lg sm:text-xl font-serif tracking-wider text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_4px_rgba(200,164,92,0.3)] transition-all duration-200 cursor-pointer text-left pb-1"
+                    className="text-xl sm:text-2xl font-serif tracking-wider text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_6px_rgba(200,164,92,0.35)] transition-all duration-200 cursor-pointer text-center pb-1"
                     style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
                   >
                     Cerrar sesión
@@ -147,7 +147,7 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
                   <Link
                     href="/auth/login"
                     onClick={() => setIsOpen(false)}
-                    className="text-lg sm:text-xl font-serif tracking-wider text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_4px_rgba(200,164,92,0.3)] transition-all duration-200 pb-1"
+                    className="text-xl sm:text-2xl font-serif tracking-wider text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_6px_rgba(200,164,92,0.35)] transition-all duration-200 text-center pb-1"
                     style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
                   >
                     Cerrar sesión
@@ -157,7 +157,7 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
             </nav>
 
             {/* Bottom Subtle Brand Mark */}
-            <div className="pt-6 border-t border-[#C8A45C]/15 text-center">
+            <div className="w-full pt-6 border-t border-[#C8A45C]/15 text-center">
               <span
                 className="text-[10px] text-[#C8A45C]/40 tracking-[0.28em] font-semibold block"
                 style={{ fontFamily: "'DM Sans', sans-serif" }}
