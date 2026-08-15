@@ -141,6 +141,13 @@ export function ServiceFormModal({
   /* When selecting from catalog dropdown */
   function handleCatalogSelect(index: number) {
     setSelectedCatalogIndex(index);
+    if (index === -2) {
+      // "Otro / Servicio Personalizado" chosen
+      setName("");
+      setPriceSoles("");
+      setDurationMinutes("");
+      return;
+    }
     if (index < 0) {
       // Reset fields if "Seleccionar..." is chosen
       setName("");
@@ -216,7 +223,11 @@ export function ServiceFormModal({
     setError("");
 
     if (!name.trim()) {
-      setError("Selecciona un servicio del catálogo");
+      setError(
+        selectedCatalogIndex === -2
+          ? "Por favor, ingresa el nombre del servicio personalizado"
+          : "Selecciona un servicio del catálogo o elige 'Otro / Servicio Personalizado'"
+      );
       setSaving(false);
       return;
     }
@@ -351,14 +362,19 @@ export function ServiceFormModal({
           {/* Catalog Selector (for new services) OR Name input (for editing) */}
           {!isEditing ? (
             <div style={{ marginBottom: 16 }}>
-              <label className="label" htmlFor="svc-catalog">Seleccionar servicio del catálogo *</label>
+              <label className="label" htmlFor="svc-catalog">
+                Seleccionar servicio del catálogo *
+              </label>
               <select
                 id="svc-catalog"
                 className="select"
                 value={selectedCatalogIndex}
                 onChange={(e) => handleCatalogSelect(parseInt(e.target.value))}
                 style={{
-                  borderColor: selectedCatalogIndex >= 0 ? "var(--color-primary)" : undefined,
+                  borderColor:
+                    selectedCatalogIndex >= 0 || selectedCatalogIndex === -2
+                      ? "var(--color-primary)"
+                      : undefined,
                 }}
               >
                 <option value={-1}>— Seleccionar servicio —</option>
@@ -367,9 +383,10 @@ export function ServiceFormModal({
                     {entry.name} — {formatDuration(entry.duration_minutes)} — S/ {entry.price_soles.toFixed(2)}
                   </option>
                 ))}
+                <option value={-2}>➕ Otro / Servicio Personalizado</option>
               </select>
 
-              {/* Preview card when selected */}
+              {/* Preview card when selected from catalog */}
               {selectedCatalogIndex >= 0 && (
                 <div
                   style={{
@@ -394,6 +411,30 @@ export function ServiceFormModal({
                   </div>
                   <p style={{ fontWeight: 700, fontSize: "1.25rem", color: "var(--color-primary)" }}>
                     S/ {currentCatalog[selectedCatalogIndex].price_soles.toFixed(2)}
+                  </p>
+                </div>
+              )}
+
+              {/* Dynamic input field when 'Otro / Servicio Personalizado' is chosen */}
+              {selectedCatalogIndex === -2 && (
+                <div style={{ marginTop: 12, animation: "fadeIn 0.2s ease-out" }}>
+                  <label className="label" htmlFor="svc-custom-name">
+                    Nombre del servicio personalizado *
+                  </label>
+                  <input
+                    id="svc-custom-name"
+                    className="input"
+                    value={name}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    placeholder="Ej: Masaje Terapéutico con Piedras Calientes"
+                    required
+                    autoFocus
+                    style={{
+                      borderColor: name.trim() ? "var(--color-primary)" : undefined,
+                    }}
+                  />
+                  <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+                    Escribe el nombre del nuevo servicio para la categoría {type === "barberia" ? "Barbería" : "Spa"}.
                   </p>
                 </div>
               )}
@@ -656,7 +697,11 @@ export function ServiceFormModal({
             </button>
             <button
               type="submit"
-              disabled={saving || uploading || (!isEditing && selectedCatalogIndex < 0)}
+              disabled={
+                saving ||
+                uploading ||
+                (!isEditing && (selectedCatalogIndex === -1 || (selectedCatalogIndex === -2 && !name.trim())))
+              }
               className="btn btn-primary"
               style={{ flex: 1 }}
             >
