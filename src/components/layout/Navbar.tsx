@@ -76,18 +76,22 @@ export async function Navbar() {
         <NavLinks />
 
         {/* SECCIÓN DERECHA (Acciones, Carrito, Usuario & Menú) */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Lupa (Búsqueda interactiva) */}
-          <NavSearch />
+        <div className="flex items-center gap-1.5 sm:gap-2.5 lg:gap-3">
+          {/* Lupa (Búsqueda interactiva en desktop/tablet) */}
+          <div className="hidden md:block">
+            <NavSearch />
+          </div>
 
           {/* Separador vertical sutil */}
-          <div className="h-6 w-[1px] bg-[#C8A45C]/30 mx-1 hidden sm:block" />
+          <div className="h-6 w-[1px] bg-[#C8A45C]/30 mx-1 hidden md:block" />
 
-          {/* Botón de Carrito (Pill con borde dorado y badge circular) */}
-          <CartButton />
-
-          {/* Botón de Usuario (Pill con borde dorado, nombre y chevron) */}
+          {/* Botón de Carrito (Pill en desktop/tablet) */}
           <div className="hidden sm:block">
+            <CartButton />
+          </div>
+
+          {/* Botón de Usuario (Pill en desktop) */}
+          <div className="hidden lg:block">
             <NavUserButton
               user={!!user}
               profileName={profile?.first_name}
@@ -96,7 +100,7 @@ export async function Navbar() {
             />
           </div>
 
-          {/* Menú Hamburguesa con líneas doradas */}
+          {/* Menú Hamburguesa con líneas doradas (Móvil y Drawer lateral) */}
           <MobileMenu
             user={!!user}
             profileName={profile?.first_name}
