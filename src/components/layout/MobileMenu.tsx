@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 type MobileMenuProps = {
   user: boolean;
@@ -10,21 +11,25 @@ type MobileMenuProps = {
   onSignOut: () => Promise<void>;
 };
 
-export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileMenuProps) {
+const NAV_LINKS = [
+  { label: "Inicio", href: "/" },
+  { label: "Servicios", href: "/servicios" },
+  { label: "Vestuario", href: "/vestuario" },
+  { label: "Productos", href: "/tienda" },
+  { label: "Blog", href: "/blog" },
+  { label: "Ubicación", href: "/ubicacion" },
+];
+
+export function MobileMenu({
+  user,
+  profileName,
+  isInternal,
+  onSignOut,
+}: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
 
-  // Close menu on navigation or resizing above mobile width
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 768) {
-        setIsOpen(false);
-      }
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  // Prevent scroll when menu is open
+  // Prevent background scroll when drawer is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -36,203 +41,187 @@ export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileM
     };
   }, [isOpen]);
 
-  const navLinks = [
-    { label: "Inicio", href: "/" },
-    { label: "Servicios", href: "/servicios" },
-    { label: "Vestuario", href: "/vestuario" },
-    { label: "Productos", href: "/tienda" },
-    { label: "Blog", href: "/blog" },
-    { label: "Ubicación", href: "/ubicacion" },
-  ];
-
   return (
     <>
-      {/* Mobile Menu Trigger Button */}
+      {/* Mobile Hamburger Trigger - 3 Golden Lines */}
       <button
+        type="button"
         onClick={() => setIsOpen(true)}
-        className="mobile-menu-trigger"
-        aria-label="Abrir menú"
-        style={{ display: "flex" }}
+        className="p-1.5 sm:p-2 rounded-lg text-[#C8A45C] hover:text-[#EBDBB2] hover:bg-[#C8A45C]/10 transition-colors flex items-center justify-center cursor-pointer shrink-0"
+        title="Abrir Menú"
+        aria-label="Abrir Menú"
       >
         <svg
-          width="24"
-          height="24"
+          width="26"
+          height="26"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
+          stroke="#C8A45C"
+          strokeWidth="2.2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          className="text-[#C8A45C]"
         >
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="18" x2="21" y2="18" />
+          <line x1="3" y1="6" x2="21" y2="6" stroke="#C8A45C" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="3" y1="12" x2="21" y2="12" stroke="#C8A45C" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="3" y1="18" x2="21" y2="18" stroke="#C8A45C" strokeWidth="2.2" strokeLinecap="round" />
         </svg>
       </button>
 
-      {/* Mobile Drawer Overlay */}
-      <div
-        className={`mobile-menu-overlay ${isOpen ? "open" : ""}`}
-        onClick={() => setIsOpen(false)}
-      >
-        {/* Mobile Drawer */}
+      {/* Drawer Overlay */}
+      {isOpen && (
         <div
-          className="mobile-menu-drawer"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm transition-opacity duration-300 flex justify-end"
+          onClick={() => setIsOpen(false)}
         >
-          {/* Drawer Header */}
+          {/* Drawer Sidebar */}
           <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 24,
-              borderBottom: "1px solid var(--color-border)",
-              paddingBottom: 16,
-            }}
+            className="w-[320px] max-w-[85vw] h-full bg-[#0E0E0E] border-l border-[#C8A45C]/35 p-6 flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-y-auto animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <img
-                src="/LogoAcicalados.svg"
-                alt="Logo Acicalados"
-                style={{ height: 24, width: "auto" }}
-              />
-              <span
-                className="text-gold"
-                style={{
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  fontWeight: 800,
-                  fontSize: "1.125rem",
-                  letterSpacing: "0.08em",
-                }}
+            {/* Header with Logo */}
+            <div className="flex items-center justify-between pb-5 border-b border-[#C8A45C]/20 mb-6">
+              <Link
+                href="/"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2.5"
               >
-                ACICALADOS
-              </span>
+                <img
+                  src="/LogoAcicalados.svg"
+                  alt="Logo Acicalados"
+                  className="h-8 w-auto object-contain"
+                />
+                <div className="flex flex-col">
+                  <span className="font-serif font-bold text-sm text-[#C8A45C] tracking-[0.18em]">
+                    ACICALADOS
+                  </span>
+                  <span className="text-[8px] text-[#C8A45C]/75 tracking-[0.24em] font-semibold">
+                    DISEÑO &amp; CALIDAD
+                  </span>
+                </div>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-lg border border-[#C8A45C]/30 text-gray-400 hover:text-white hover:border-[#C8A45C] flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Cerrar Menú"
+              >
+                ✕
+              </button>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              style={{
-                background: "transparent",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md)",
-                color: "var(--color-text-muted)",
-                fontSize: "1.25rem",
-                cursor: "pointer",
-                padding: "4px 10px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              aria-label="Cerrar menú"
-            >
-              ✕
-            </button>
-          </div>
 
-          {/* Drawer Body - Navigation Links */}
-          <nav
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-              marginBottom: 24,
-            }}
-          >
-            {navLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                onClick={() => setIsOpen(false)}
-                style={{
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  fontSize: "1rem",
-                  fontWeight: 600,
-                  color: "var(--color-text)",
-                  padding: "12px 14px",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--color-border)",
-                  background: "rgba(30, 26, 19, 0.5)",
-                  transition: "all var(--transition-fast)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span>{link.label}</span>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", opacity: 0.8 }}>➔</span>
-              </Link>
-            ))}
-          </nav>
+            {/* Navigation Links */}
+            <nav className="flex flex-col gap-2 mb-6">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-2 mb-1">
+                Navegación
+              </p>
+              {NAV_LINKS.map((link) => {
+                const isActive =
+                  link.href === "/"
+                    ? pathname === "/"
+                    : pathname === link.href || pathname.startsWith(link.href + "/");
 
-          {/* Drawer Footer - Auth / Actions */}
-          <div
-            style={{
-              marginTop: "auto",
-              borderTop: "1px solid var(--color-border)",
-              paddingTop: 24,
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            {user ? (
-              <>
-                {isInternal && (
+                return (
                   <Link
-                    href="/dashboard"
+                    key={link.label}
+                    href={link.href}
                     onClick={() => setIsOpen(false)}
-                    className="btn btn-ghost"
-                    style={{ width: "100%", fontSize: "0.9375rem" }}
+                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 ${
+                      isActive
+                        ? "bg-[#C8A45C]/15 text-[#C8A45C] border border-[#C8A45C]/40 font-semibold"
+                        : "text-gray-300 hover:text-white hover:bg-white/5 border border-transparent"
+                    }`}
                   >
-                    Panel de Control
+                    <span>{link.label}</span>
+                    <span className="text-xs text-[#C8A45C]/60">➔</span>
                   </Link>
-                )}
-                <Link
-                  href="/mi-cuenta"
-                  onClick={() => setIsOpen(false)}
-                  className="btn btn-secondary"
-                  style={{ width: "100%", fontSize: "0.9375rem", textAlign: "center" }}
-                >
-                  <img
-                    src="/IconUser.svg"
-                    alt="User"
-                    style={{ width: "35px", height: "35px" }}
-                  />
-                  <span>{profileName || "Mi Cuenta"}</span>
-                </Link>
-                <button
-                  onClick={async () => {
-                    setIsOpen(false);
-                    await onSignOut();
-                  }}
-                  className="btn btn-ghost"
-                  style={{
-                    width: "100%",
-                    fontSize: "0.9375rem",
-                    color: "var(--color-error)",
-                  }}
-                >
-                  Cerrar Sesión
-                </button>
-              </>
-            ) : (
+                );
+              })}
+            </nav>
+
+            {/* Quick Action Button */}
+            <div className="mb-6">
               <Link
-                href="/auth/login"
+                href="/reservar"
                 onClick={() => setIsOpen(false)}
-                className="btn btn-secondary"
-                style={{
-                  width: "100%",
-                  fontSize: "0.9375rem",
-                  textAlign: "center",
-                  borderColor: "var(--color-primary-border)",
-                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#C8A45C] hover:bg-[#EBDBB2] text-black font-semibold text-sm transition-all shadow-[0_4px_15px_rgba(200,164,92,0.25)]"
               >
-                Iniciar Sesión
+                <span>📅</span>
+                <span>Reservar Turno</span>
               </Link>
-            )}
+            </div>
+
+            {/* User & Auth Footer */}
+            <div className="mt-auto pt-5 border-t border-[#C8A45C]/20 flex flex-col gap-3">
+              {user ? (
+                <>
+                  <div className="flex items-center gap-3 px-2 py-1">
+                    <div className="w-8 h-8 rounded-full bg-[#C8A45C]/20 border border-[#C8A45C]/40 flex items-center justify-center text-sm text-[#C8A45C] font-bold">
+                      {(profileName || "U")[0].toUpperCase()}
+                    </div>
+                    <div className="flex flex-col truncate">
+                      <span className="text-xs text-gray-400">Hola,</span>
+                      <span className="text-sm font-semibold text-[#C8A45C] truncate">
+                        {profileName || "Manuel Elias"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isInternal && (
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm text-gray-200 hover:text-white bg-zinc-900 border border-[#C8A45C]/20 hover:border-[#C8A45C]/50 transition-colors"
+                    >
+                      <span>👑</span>
+                      <span>Panel de Control</span>
+                    </Link>
+                  )}
+
+                  <Link
+                    href="/mi-cuenta"
+                    onClick={() => setIsOpen(false)}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm text-gray-200 hover:text-white bg-zinc-900 border border-[#C8A45C]/20 hover:border-[#C8A45C]/50 transition-colors"
+                  >
+                    <span>👤</span>
+                    <span>Mi Cuenta</span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsOpen(false);
+                      await onSignOut();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
+                  >
+                    <span>🚪</span>
+                    <span>Cerrar Sesión</span>
+                  </button>
+                </>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Link
+                    href="/auth/login"
+                    onClick={() => setIsOpen(false)}
+                    className="w-full text-center py-2.5 px-4 rounded-xl border border-[#C8A45C]/50 text-gray-200 hover:text-white hover:bg-[#C8A45C]/10 text-sm font-medium transition-colors"
+                  >
+                    Iniciar Sesión
+                  </Link>
+                  <Link
+                    href="/auth/register"
+                    onClick={() => setIsOpen(false)}
+                    className="w-full text-center py-2.5 px-4 rounded-xl bg-zinc-900 border border-[#C8A45C]/20 text-[#C8A45C] hover:text-[#EBDBB2] text-sm font-medium transition-colors"
+                  >
+                    Crear Cuenta
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

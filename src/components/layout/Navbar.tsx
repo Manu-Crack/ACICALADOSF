@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CartButton } from "@/components/cart/CartButton";
 import { MobileMenu } from "@/components/layout/MobileMenu";
+import { NavLinks } from "@/components/layout/NavLinks";
+import { NavSearch } from "@/components/layout/NavSearch";
+import { NavUserButton } from "@/components/layout/NavUserButton";
 
 export async function Navbar() {
   const supabase = await createClient();
@@ -32,92 +35,68 @@ export async function Navbar() {
   }
 
   return (
-    <header
-      className="glass"
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        padding: "0 24px",
-      }}
-    >
-      <nav
-        style={{
-          maxWidth: 1200,
-          margin: "0 auto",
-          height: 72,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        {/* Logo */}
-        <Link
-          href="/"
-          style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontWeight: 800,
-            fontSize: "1.25rem",
-            letterSpacing: "0.08em",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <img
-            src="/LogoAcicalados.svg"
-            alt="Logo Acicalados"
-            style={{ height: 28, width: "auto" }}
-          />
-          <span className="text-gold">ACICALADOS</span>
-        </Link>
+    <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-[#C8A45C]/35 shadow-[0_4px_25px_rgba(0,0,0,0.85)]">
+      <div className="max-w-[1440px] mx-auto h-[74px] sm:h-[78px] px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+        {/* SECCIÓN IZQUIERDA (Marca & Logo) */}
+        <div className="flex items-center">
+          <Link
+            href="/"
+            className="flex items-center group cursor-pointer"
+            aria-label="Acicalados - Inicio"
+          >
+            {/* Logo */}
+            <img
+              src="/LogoAcicalados.svg"
+              alt="Logo Acicalados"
+              className="h-10 sm:h-12 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+            />
 
-        {/* Nav Links - Desktop */}
-        <div className="nav-links-desktop">
-          <Link href="/">Inicio</Link>
-          <Link href="/servicios">Servicios</Link>
-          <Link href="/vestuario">Vestuario</Link>
-          <Link href="/tienda">Productos</Link>
-          <Link href="/blog">Blog</Link>
-          <Link href="/ubicacion">Ubicación</Link>
+            {/* Separador vertical sutil */}
+            <div className="h-8 w-[1px] bg-[#C8A45C]/35 mx-3 sm:mx-4.5" />
+
+            {/* Texto de la marca */}
+            <div className="flex flex-col justify-center select-none">
+              <span
+                className="font-serif font-bold text-base sm:text-lg lg:text-xl tracking-[0.2em] text-[#C8A45C] group-hover:text-[#EBDBB2] transition-colors leading-none"
+                style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+              >
+                ACICALADOS
+              </span>
+              <span
+                className="tracking-[0.28em] text-[9px] sm:text-[10px] text-[#C8A45C]/80 font-semibold leading-none mt-1"
+                style={{ fontFamily: "'DM Sans', sans-serif" }}
+              >
+                DISEÑO &amp; CALIDAD
+              </span>
+            </div>
+          </Link>
         </div>
 
-        {/* Actions / Auth / Mobile menu */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Desktop Auth Links */}
-          <div className="nav-auth-desktop">
-            {user ? (
-              <>
-                {isInternal && (
-                  <Link href="/dashboard" className="btn btn-ghost btn-sm">
-                    Panel
-                  </Link>
-                )}
-                <Link href="/mi-cuenta" className="btn btn-secondary btn-sm">
-                  {profile?.first_name || "Mi Cuenta"}
-                </Link>
-                <form
-                  action={handleSignOut}
-                  style={{ display: "inline" }}
-                >
-                  <button type="submit" className="btn btn-ghost btn-sm">
-                    Cerrar Sesión
-                  </button>
-                </form>
-              </>
-            ) : (
-              <Link href="/auth/login" className="btn btn-secondary btn-sm">
-                Iniciar Sesión
-              </Link>
-            )}
-          </div>
+        {/* SECCIÓN CENTRAL (Enlaces de Navegación) */}
+        <NavLinks />
 
-          {/* Cart Button (visible on mobile and desktop) */}
+        {/* SECCIÓN DERECHA (Acciones, Carrito, Usuario & Menú) */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Lupa (Búsqueda interactiva) */}
+          <NavSearch />
+
+          {/* Separador vertical sutil */}
+          <div className="h-6 w-[1px] bg-[#C8A45C]/30 mx-1 hidden sm:block" />
+
+          {/* Botón de Carrito (Pill con borde dorado y badge circular) */}
           <CartButton />
 
-          {/* Mobile Menu Trigger & Panel */}
+          {/* Botón de Usuario (Pill con borde dorado, nombre y chevron) */}
+          <div className="hidden sm:block">
+            <NavUserButton
+              user={!!user}
+              profileName={profile?.first_name}
+              isInternal={isInternal}
+              onSignOut={handleSignOut}
+            />
+          </div>
+
+          {/* Menú Hamburguesa con líneas doradas */}
           <MobileMenu
             user={!!user}
             profileName={profile?.first_name}
@@ -125,7 +104,7 @@ export async function Navbar() {
             onSignOut={handleSignOut}
           />
         </div>
-      </nav>
+      </div>
     </header>
   );
 }
