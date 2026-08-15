@@ -30,6 +30,7 @@ export default function ReservarPage() {
     notes: "",
   });
 
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [bookingResult, setBookingResult] = useState<{
@@ -138,6 +139,7 @@ export default function ReservarPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        setIsAuthenticated(true);
         const { data: profile } = await supabase
           .from("profiles")
           .select("first_name, last_name, phone, dni")
@@ -151,15 +153,20 @@ export default function ReservarPage() {
             fn = parts[0];
             ln = parts.slice(1).join(" ");
           }
+          const rawPhone = profile.phone ? profile.phone.replace(/\D/g, "") : "";
+          const cleanPhone = rawPhone.length > 9 ? rawPhone.slice(-9) : rawPhone;
+
           setContact((c) => ({
             ...c,
             firstName: fn || c.firstName,
             lastName: ln || c.lastName,
-            phone: profile.phone || c.phone,
+            phone: cleanPhone || c.phone,
             dni: profile.dni || c.dni,
             email: user.email || c.email,
           }));
         }
+      } else {
+        setIsAuthenticated(false);
       }
     }
     loadProfile();
@@ -179,12 +186,17 @@ export default function ReservarPage() {
 
   // Handle WhatsApp Reservation
   async function handleCreateBookingWhatsApp() {
-    if (!contact.firstName || !contact.lastName) {
+    if (!contact.firstName.trim() || !contact.lastName.trim()) {
       setError("Por favor, ingresa tu nombre y apellido completo.");
       return;
     }
-    if (!contact.phone && !contact.email) {
-      setError("Por favor, ingresa tu número de WhatsApp para contactarte.");
+    const cleanPhone = contact.phone.replace(/\D/g, "");
+    if (!cleanPhone) {
+      setError("Por favor, ingresa tu número de WhatsApp / Teléfono.");
+      return;
+    }
+    if (cleanPhone.length !== 9) {
+      setError("El número de WhatsApp / Teléfono debe contener exactamente 9 dígitos numéricos.");
       return;
     }
 
@@ -201,8 +213,8 @@ export default function ReservarPage() {
           start_time: startTime,
           client_first_name: contact.firstName.trim(),
           client_last_name: contact.lastName.trim(),
-          client_phone: contact.phone.trim(),
-          client_email: contact.email.trim(),
+          client_phone: cleanPhone,
+          client_email: contact.email.trim() || null,
           client_dni: contact.dni.trim() || null,
           notes: contact.notes.trim() || null,
         }),
@@ -834,12 +846,15 @@ export default function ReservarPage() {
                 <label className="label">WhatsApp / Teléfono *</label>
                 <input
                   type="tel"
+                  inputMode="numeric"
                   className="input"
                   value={contact.phone}
-                  onChange={(e) =>
-                    setContact({ ...contact, phone: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 9);
+                    setContact({ ...contact, phone: numericOnly });
+                  }}
                   placeholder="Ej. 997766828"
+                  maxLength={9}
                   required
                 />
               </div>
@@ -964,9 +979,9 @@ export default function ReservarPage() {
                 onClick={handleCreateBookingWhatsApp}
                 disabled={
                   loading ||
-                  !contact.firstName ||
-                  !contact.lastName ||
-                  (!contact.phone && !contact.email)
+                  !contact.firstName.trim() ||
+                  !contact.lastName.trim() ||
+                  contact.phone.replace(/\D/g, "").length !== 9
                 }
                 className="btn"
                 style={{
@@ -981,7 +996,10 @@ export default function ReservarPage() {
                   justifyContent: "center",
                   gap: 10,
                   boxShadow: "0 4px 14px rgba(37, 211, 102, 0.4)",
-                  cursor: loading ? "not-allowed" : "pointer",
+                  cursor:
+                    loading || contact.phone.replace(/\D/g, "").length !== 9
+                      ? "not-allowed"
+                      : "pointer",
                 }}
               >
                 <img
@@ -1123,9 +1141,11 @@ export default function ReservarPage() {
               >
                 ➕ Nueva Reserva
               </button>
-              <Link href="/mi-cuenta" className="btn btn-ghost">
-                👤 Ver Mis Reservas
-              </Link>
+              {isAuthenticated && (
+                <Link href="/mi-cuenta" className="btn btn-ghost">
+                  👤 Ver Mis Reservas
+                </Link>
+              )}
             </div>
           </div>
         )}
