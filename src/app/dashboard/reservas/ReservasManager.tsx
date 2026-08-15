@@ -585,41 +585,30 @@ export function ReservasManager() {
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px" }}>
-                        {b.comprobante_serie ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            <span
-                              className="badge badge-gold"
-                              style={{
-                                fontSize: "0.75rem",
-                                padding: "2px 8px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                                width: "fit-content",
-                              }}
-                            >
-                              🧾 {b.comprobante_tipo === "01" ? "Factura" : "Boleta"}{" "}
-                              {b.comprobante_serie}-{String(b.comprobante_numero || 1).padStart(6, "0")}
-                            </span>
-                            {b.pdf_url && (
-                              <a
-                                href={b.pdf_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  color: "var(--color-primary)",
-                                  textDecoration: "underline",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 2,
-                                }}
-                              >
-                                📄 Ver PDF
-                              </a>
-                            )}
-                          </div>
+                        {b.client_phone ? (
+                          <a
+                            href={`https://wa.me/51${b.client_phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu reserva ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="btn btn-sm"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "4px 10px",
+                              fontSize: "0.75rem",
+                              background: "#25D366",
+                              color: "#FFFFFF",
+                              border: "none",
+                              borderRadius: "var(--radius-sm)",
+                              fontWeight: 600,
+                              textDecoration: "none",
+                            }}
+                          >
+                            <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 14, height: 14 }} />
+                            <span>WhatsApp</span>
+                          </a>
                         ) : (
                           <span className="text-muted" style={{ fontSize: "0.8125rem" }}>
                             —
@@ -804,7 +793,7 @@ export function ReservasManager() {
                                 </div>
                               </div>
 
-                              {/* Facturación Electrónica Keyfácil */}
+                              {/* WhatsApp Contact */}
                               <div>
                                 <p
                                   style={{
@@ -816,50 +805,39 @@ export function ReservasManager() {
                                     marginBottom: 8,
                                   }}
                                 >
-                                  Facturación Electrónica
+                                  Contacto WhatsApp
                                 </p>
-                                {b.comprobante_serie ? (
+                                {b.client_phone ? (
                                   <div>
-                                    <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-primary)", marginBottom: 4 }}>
-                                      {b.comprobante_tipo === "01" ? "Factura Electrónica" : "Boleta de Venta"}
+                                    <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 6 }}>
+                                      Teléfono: <strong>{b.client_phone}</strong>
                                     </p>
-                                    <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>
-                                      Comprobante: <strong>{b.comprobante_serie}-{String(b.comprobante_numero || 1).padStart(6, "0")}</strong>
-                                    </p>
-                                    {b.billing_name && (
-                                      <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>
-                                        {b.comprobante_tipo === "01" ? "Razón Social: " : "Nombre: "}
-                                        <strong>{b.billing_name}</strong>
-                                      </p>
-                                    )}
-                                    {b.billing_doc_number && (
-                                      <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
-                                        {b.comprobante_tipo === "01" ? "RUC: " : "Doc: "}
-                                        {b.billing_doc_number}
-                                      </p>
-                                    )}
-                                    {b.pdf_url && (
-                                      <a
-                                        href={b.pdf_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="btn btn-secondary btn-sm"
-                                        style={{
-                                          marginTop: 6,
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: 6,
-                                          fontSize: "0.8125rem",
-                                          textDecoration: "none",
-                                        }}
-                                      >
-                                        📄 Ver Comprobante PDF
-                                      </a>
-                                    )}
+                                    <a
+                                      href={`https://wa.me/51${b.client_phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} programada para el ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="btn btn-sm"
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        padding: "6px 14px",
+                                        fontSize: "0.8125rem",
+                                        background: "#25D366",
+                                        color: "#FFFFFF",
+                                        border: "none",
+                                        borderRadius: "var(--radius-sm)",
+                                        fontWeight: 600,
+                                        textDecoration: "none",
+                                      }}
+                                    >
+                                      <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 16, height: 16 }} />
+                                      <span>Enviar WhatsApp</span>
+                                    </a>
                                   </div>
                                 ) : (
                                   <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                                    Sin comprobante emitido
+                                    Sin teléfono registrado
                                   </p>
                                 )}
                               </div>

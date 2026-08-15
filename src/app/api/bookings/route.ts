@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findAvailableEmployeeForBooking } from "@/lib/utils/employee-assignment";
+import { generateWhatsAppBookingUrl } from "@/lib/utils/whatsapp";
 
 /**
  * POST /api/bookings
- * Creates a new booking (draft → pending).
- * Recalculates prices from the DB, never trusts client amounts.
+ * Creates a new booking for Acicalados.
+ * Status: "pendiente" (Payment in local physically).
+ * Generates and returns a pre-filled WhatsApp confirmation URL.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -20,12 +22,7 @@ export async function POST(request: NextRequest) {
       client_phone,
       client_email,
       client_dni,
-      payment_mode = "advance", // "advance" (30%) or "full" (100%)
-      comprobante_tipo = "03", // "03": Boleta, "01": Factura
-      billing_doc_type,
-      billing_doc_number,
-      billing_name,
-      billing_address,
+      notes,
     } = body;
 
     // Validate required fields
@@ -37,37 +34,21 @@ export async function POST(request: NextRequest) {
       !client_last_name
     ) {
       return NextResponse.json(
-        { error: "Faltan campos obligatorios" },
+        { error: "Faltan campos obligatorios para la reserva" },
         { status: 422 }
       );
     }
 
     if (!client_phone && !client_email) {
       return NextResponse.json(
-        { error: "Se requiere al menos un medio de contacto (teléfono o correo)" },
+        { error: "Se requiere al menos un número de teléfono o correo de contacto" },
         { status: 422 }
       );
     }
 
-    // Factura validation
-    if (comprobante_tipo === "01") {
-      if (!billing_doc_number || billing_doc_number.length !== 11) {
-        return NextResponse.json(
-          { error: "Para factura se requiere un RUC válido de 11 dígitos" },
-          { status: 422 }
-        );
-      }
-      if (!billing_name) {
-        return NextResponse.json(
-          { error: "Para factura se requiere la Razón Social" },
-          { status: 422 }
-        );
-      }
-    }
-
     const admin = createAdminClient();
 
-    // 1. Fetch services from DB — recalculate everything
+    // 1. Fetch services from DB — recalculate prices
     const { data: services, error: svcError } = await admin
       .from("services")
       .select("id, name, price_cents, duration_minutes, type, is_active")
@@ -75,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     if (svcError || !services?.length) {
       return NextResponse.json(
-        { error: "Servicios no encontrados" },
+        { error: "Servicios seleccionados no encontrados" },
         { status: 422 }
       );
     }
@@ -84,12 +65,12 @@ export async function POST(request: NextRequest) {
     const inactive = services.filter((s) => !s.is_active);
     if (inactive.length > 0) {
       return NextResponse.json(
-        { error: "Uno o más servicios no están disponibles" },
+        { error: "Uno o más servicios seleccionados no están disponibles actualmente" },
         { status: 422 }
       );
     }
 
-    // Determine service type — allow mixing
+    // Determine service type
     const types = new Set(services.map((s) => s.type));
     const serviceType = types.size > 1 ? "mixto" : services[0].type;
 
@@ -97,22 +78,7 @@ export async function POST(request: NextRequest) {
     const totalPriceCents = services.reduce((sum, s) => sum + s.price_cents, 0);
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
 
-    // 3. Get advance percentage from business_config
-    const { data: config } = await admin
-      .from("business_config")
-      .select("advance_percentage")
-      .limit(1)
-      .single();
-
-    const configAdvance = config?.advance_percentage ?? 30;
-    const isFullPayment = payment_mode === "full";
-    const advancePercentage = isFullPayment ? 100 : configAdvance;
-    const advanceAmountCents = isFullPayment
-      ? totalPriceCents
-      : Math.ceil(totalPriceCents * (configAdvance / 100));
-    const balanceCents = totalPriceCents - advanceAmountCents;
-
-    // 4. Calculate end_time
+    // 3. Calculate end_time
     const [startHour, startMin] = start_time.split(":").map(Number);
     const totalStartMinutes = startHour * 60 + startMin;
     const totalEndMinutes = totalStartMinutes + totalDuration;
@@ -120,28 +86,13 @@ export async function POST(request: NextRequest) {
     const endMin = totalEndMinutes % 60;
     const endTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
 
-    // 5. Check availability (transactional via advisory lock)
-    const { data: conflicts } = await admin
-      .from("bookings")
-      .select("id")
-      .eq("booking_date", booking_date)
-      .eq("service_type", serviceType)
-      .in("status", ["pendiente", "confirmada"])
-      .or(`and(start_time.lt.${endTime},end_time.gt.${start_time})`);
-
-    // Basic capacity check
-    if (conflicts && conflicts.length > 0) {
-      // For now, simple check — will be enhanced with employee-level availability
-      // This prevents double-booking at the same time
-    }
-
-    // 6. Get authenticated user (optional for guest bookings)
+    // 4. Get authenticated user if logged in
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // 7. Algoritmo de asignación automática de empleado
+    // 5. Algoritmo de asignación automática de empleado
     const serviceIds = services.map((s: { id: string }) => s.id);
     const assignedEmployeeId = await findAvailableEmployeeForBooking({
       serviceIds,
@@ -151,9 +102,9 @@ export async function POST(request: NextRequest) {
       endTime: endTime,
     });
 
-    // 8. Lock the slot — create booking with temporary lock
-    const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
+    const clientFullName = `${client_first_name} ${client_last_name}`.trim();
 
+    // 6. Insert booking with status 'pendiente' (Pago en local)
     const { data: booking, error: bookingError } = await admin
       .from("bookings")
       .insert({
@@ -170,31 +121,27 @@ export async function POST(request: NextRequest) {
         end_time: endTime,
         total_duration_minutes: totalDuration,
         total_price_cents: totalPriceCents,
-        advance_percentage: advancePercentage,
-        advance_amount_cents: advanceAmountCents,
-        balance_cents: balanceCents,
+        advance_percentage: 0,
+        advance_amount_cents: 0,
+        balance_cents: totalPriceCents,
         status: "pendiente",
-        payment_status: "sin_pago",
-        comprobante_tipo: comprobante_tipo === "01" ? "01" : "03",
-        billing_doc_type: billing_doc_type || (comprobante_tipo === "01" ? "6" : "1"),
-        billing_doc_number: billing_doc_number || client_dni || null,
-        billing_name: billing_name || `${client_first_name} ${client_last_name}`,
-        billing_address: billing_address || null,
+        payment_status: "pendiente",
+        notes: notes || null,
         slot_locked_at: new Date().toISOString(),
-        slot_lock_expires_at: lockExpiresAt,
+        slot_lock_expires_at: null,
       })
-      .select("id, booking_code, advance_amount_cents, total_price_cents, comprobante_tipo")
+      .select("id, booking_code, total_price_cents, booking_date, start_time")
       .single();
 
-    if (bookingError) {
+    if (bookingError || !booking) {
       console.error("Booking creation error:", bookingError);
       return NextResponse.json(
-        { error: "Error al crear la reserva" },
+        { error: "Error al registrar la reserva en el sistema" },
         { status: 500 }
       );
     }
 
-    // 8. Insert booking_services
+    // 7. Insert booking_services
     const bookingServices = services.map((s) => ({
       booking_id: booking.id,
       service_id: s.id,
@@ -205,20 +152,36 @@ export async function POST(request: NextRequest) {
 
     await admin.from("booking_services").insert(bookingServices);
 
+    // 8. Generar URL de confirmación en WhatsApp
+    const serviceNames = services.map((s) => s.name);
+    const totalPriceSoles = (totalPriceCents / 100).toFixed(2);
+
+    const whatsappUrl = generateWhatsAppBookingUrl({
+      bookingCode: booking.booking_code,
+      clientName: clientFullName,
+      services: serviceNames,
+      bookingDate: booking_date,
+      startTime: start_time,
+      totalPriceSoles: totalPriceSoles,
+    });
+
     return NextResponse.json({
+      success: true,
       booking_id: booking.id,
       booking_code: booking.booking_code,
-      advance_amount_cents: booking.advance_amount_cents,
+      client_name: clientFullName,
+      booking_date: booking.booking_date,
+      start_time: booking.start_time,
       total_price_cents: booking.total_price_cents,
-      payment_amount_cents: booking.advance_amount_cents,
-      payment_mode: isFullPayment ? "full" : "advance",
-      comprobante_tipo: booking.comprobante_tipo,
-      currency: "PEN",
+      total_price_soles: totalPriceSoles,
+      services: serviceNames,
+      whatsapp_url: whatsappUrl,
+      message: "Reserva registrada exitosamente. Confírmala por WhatsApp.",
     });
   } catch (err) {
     console.error("Booking API error:", err);
     return NextResponse.json(
-      { error: "Error interno del servidor" },
+      { error: "Error interno al procesar la reserva" },
       { status: 500 }
     );
   }

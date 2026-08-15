@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useCart, CartService } from "@/components/cart/CartProvider";
 import { formatDuration } from "@/lib/utils/format";
+import { generateWhatsAppBookingUrl } from "@/lib/utils/whatsapp";
 
 type Service = CartService;
+type Step = "type" | "services" | "datetime" | "contact" | "success";
 
 export default function ReservarPage() {
   const { cart: sessionCart, clearCart: clearSessionCart } = useCart();
-
-  type Step = "type" | "services" | "datetime" | "contact" | "payment" | "success";
 
   const [stepHistory, setStepHistory] = useState<Step[]>(["type"]);
   const step = stepHistory[stepHistory.length - 1] || "type";
@@ -21,35 +21,27 @@ export default function ReservarPage() {
   const [cart, setCart] = useState<Service[]>([]);
   const [bookingDate, setBookingDate] = useState("");
   const [startTime, setStartTime] = useState("");
-  const [paymentMode, setPaymentMode] = useState<"advance" | "full">("advance");
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
     phone: "",
     email: "",
     dni: "",
+    notes: "",
   });
-  const [comprobanteTipo, setComprobanteTipo] = useState<"03" | "01">("03");
-  const [ruc, setRuc] = useState("");
-  const [razonSocial, setRazonSocial] = useState("");
-  const [direccionFiscal, setDireccionFiscal] = useState("");
-  const [comprobanteEmitido, setComprobanteEmitido] = useState<{
-    tipo: string;
-    serie?: string;
-    numero?: number;
-    pdf_url?: string;
-  } | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [bookingResult, setBookingResult] = useState<{
     booking_id: string;
     booking_code: string;
-    advance_amount_cents: number;
+    client_name: string;
+    booking_date: string;
+    start_time: string;
     total_price_cents: number;
-    payment_amount_cents: number;
-    payment_mode: string;
-    comprobante_tipo?: string;
+    total_price_soles: string;
+    services: string[];
+    whatsapp_url: string;
   } | null>(null);
 
   const supabase = createClient();
@@ -80,7 +72,6 @@ export default function ReservarPage() {
 
       let currentCart = [...sessionCart];
 
-      // If a specific serviceId is passed in URL and not yet in cart, fetch it
       if (serviceIdParam) {
         const existsInCart = currentCart.some((s) => s.id === serviceIdParam);
         if (!existsInCart) {
@@ -106,14 +97,12 @@ export default function ReservarPage() {
         }
       }
 
-      // Update cart state if we have services
       if (currentCart.length > 0) {
         setCart(currentCart);
         const primaryType = currentCart[0]?.type || typeParam;
         if (primaryType === "barberia" || primaryType === "spa") {
           setServiceType(primaryType);
         }
-        // Advance to datetime step with history stack initialized
         setStepHistory(["type", "services", "datetime"]);
       } else if (typeParam === "barberia" || typeParam === "spa") {
         setServiceType(typeParam);
@@ -125,7 +114,7 @@ export default function ReservarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load services — when a type is selected, filter by it; otherwise load all
+  // Load services
   useEffect(() => {
     async function loadServices() {
       let query = supabase
@@ -145,7 +134,9 @@ export default function ReservarPage() {
   // Prefill contact from profile
   useEffect(() => {
     async function loadProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
           .from("profiles")
@@ -155,7 +146,6 @@ export default function ReservarPage() {
         if (profile) {
           let fn = (profile.first_name || "").trim();
           let ln = (profile.last_name || "").trim();
-          // Si last_name está vacío pero first_name contiene apellido concatenado
           if (!ln && fn.includes(" ")) {
             const parts = fn.split(" ");
             fn = parts[0];
@@ -177,7 +167,7 @@ export default function ReservarPage() {
 
   const totalCents = cart.reduce((sum, s) => sum + s.price_cents, 0);
   const totalDuration = cart.reduce((sum, s) => sum + s.duration_minutes, 0);
-  const advanceCents = Math.ceil(totalCents * 0.3);
+  const totalPriceSoles = (totalCents / 100).toFixed(2);
 
   function toggleService(service: Service) {
     setCart((prev) =>
@@ -187,17 +177,15 @@ export default function ReservarPage() {
     );
   }
 
-  async function handleCreateBooking() {
-    // Validaciones fiscales
-    if (comprobanteTipo === "01") {
-      if (!ruc || ruc.trim().length !== 11) {
-        setError("Para emitir Factura es obligatorio ingresar un RUC de 11 dígitos.");
-        return;
-      }
-      if (!razonSocial || !razonSocial.trim()) {
-        setError("Para emitir Factura es obligatorio ingresar la Razón Social.");
-        return;
-      }
+  // Handle WhatsApp Reservation
+  async function handleCreateBookingWhatsApp() {
+    if (!contact.firstName || !contact.lastName) {
+      setError("Por favor, ingresa tu nombre y apellido completo.");
+      return;
+    }
+    if (!contact.phone && !contact.email) {
+      setError("Por favor, ingresa tu número de WhatsApp para contactarte.");
+      return;
     }
 
     setLoading(true);
@@ -211,170 +199,34 @@ export default function ReservarPage() {
           service_ids: cart.map((s) => s.id),
           booking_date: bookingDate,
           start_time: startTime,
-          client_first_name: contact.firstName,
-          client_last_name: contact.lastName,
-          client_phone: contact.phone,
-          client_email: contact.email,
-          client_dni: contact.dni,
-          payment_mode: paymentMode,
-          comprobante_tipo: comprobanteTipo,
-          billing_doc_type: comprobanteTipo === "01" ? "6" : "1",
-          billing_doc_number: comprobanteTipo === "01" ? ruc.trim() : (contact.dni.trim() || null),
-          billing_name: comprobanteTipo === "01" ? razonSocial.trim() : `${contact.firstName} ${contact.lastName}`.trim(),
-          billing_address: direccionFiscal.trim() || null,
+          client_first_name: contact.firstName.trim(),
+          client_last_name: contact.lastName.trim(),
+          client_phone: contact.phone.trim(),
+          client_email: contact.email.trim(),
+          client_dni: contact.dni.trim() || null,
+          notes: contact.notes.trim() || null,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Error al crear la reserva");
+        setError(data.error || "Error al registrar la reserva.");
         setLoading(false);
         return;
       }
 
       setBookingResult(data);
-      goToStep("payment");
       clearSessionCart();
+      goToStep("success");
+
+      // Abrir automáticamente WhatsApp en una nueva pestaña
+      if (data.whatsapp_url) {
+        window.open(data.whatsapp_url, "_blank");
+      }
     } catch {
-      setError("Error de conexión");
-    }
-    setLoading(false);
-  }
-
-  // Initialize Culqi when reaching payment step
-  const initCulqi = useCallback(() => {
-    if (!bookingResult) return;
-
-    const publicKey = process.env.NEXT_PUBLIC_CULQI_PUBLIC_KEY;
-    if (!publicKey || !(window as unknown as Record<string, unknown>).CulqiCheckout) return;
-
-    const CulqiCheckout = (window as unknown as Record<string, unknown>).CulqiCheckout as new (
-      key: string,
-      config: Record<string, unknown>
-    ) => Record<string, unknown>;
-
-    const amount = bookingResult.payment_amount_cents;
-    const config = {
-      settings: {
-        title: "Acicalados",
-        currency: "PEN",
-        amount,
-      },
-      client: { email: contact.email || "" },
-      options: {
-        lang: "es",
-        modal: true,
-        paymentMethods: { tarjeta: true, yape: true },
-        paymentMethodsSort: ["tarjeta", "yape"],
-      },
-      appearance: {
-        theme: "default",
-        hiddenCulqiLogo: false,
-        menuType: "sliderTop",
-        buttonCardPayText: `Pagar S/ ${(amount / 100).toFixed(2)}`,
-        defaultStyle: {
-          bannerColor: "#1C1912",
-          buttonBackground: "#C8A45C",
-          menuColor: "#C8A45C",
-          linksColor: "#C8A45C",
-          buttonTextColor: "#1C1912",
-          priceColor: "#C8A45C",
-        },
-      },
-    };
-
-    const culqi = new CulqiCheckout(publicKey, config);
-
-    const closeCulqiModal = () => {
-      try {
-        (culqi as { close?: () => void })?.close?.();
-      } catch {}
-      try {
-        const winCulqi = (window as unknown as { Culqi?: { close?: () => void } }).Culqi;
-        winCulqi?.close?.();
-      } catch {}
-      try {
-        const containers = document.querySelectorAll(
-          ".culqi_checkout, #culqi-container, iframe[src*='culqi'], [class*='culqi-modal'], [id*='culqi'], .culqi-backdrop"
-        );
-        containers.forEach((el) => {
-          const htmlEl = el as HTMLElement;
-          htmlEl.style.display = "none";
-          htmlEl.style.visibility = "hidden";
-        });
-      } catch {}
-    };
-
-    const handleCulqiCallback = async function () {
-      const token = (culqi as Record<string, unknown>).token as { id: string } | undefined;
-      if (token) {
-        // Cerrar inmediatamente el modal de Culqi para no bloquear la pantalla
-        closeCulqiModal();
-        setLoading(true);
-
-        try {
-          const res = await fetch("/api/culqi/charge", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token_id: token.id,
-              booking_id: bookingResult.booking_id,
-              client_email: contact.email,
-            }),
-          });
-
-          const data = await res.json();
-          closeCulqiModal();
-
-          if (res.ok) {
-            if (data.comprobante || data.pdf_url) {
-              setComprobanteEmitido({
-                tipo: data.comprobante_tipo || data.comprobante?.tipo || comprobanteTipo,
-                serie: data.comprobante_serie || data.comprobante?.serie,
-                numero: data.comprobante_numero || data.comprobante?.numero,
-                pdf_url: data.pdf_url || data.comprobante?.pdf_url,
-              });
-            }
-            goToStep("success");
-          } else {
-            setError(data.error || "Error al procesar el pago");
-          }
-        } catch {
-          closeCulqiModal();
-          setError("Error de conexión al procesar el pago");
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        closeCulqiModal();
-        const errObj = (culqi as Record<string, unknown>).error as { user_message?: string } | undefined;
-        setError(errObj?.user_message || "Error en el pago");
-      }
-    };
-
-    (culqi as Record<string, unknown>).culqi = handleCulqiCallback;
-    (window as unknown as Record<string, unknown>).culqi = handleCulqiCallback;
-    (window as unknown as Record<string, unknown>).__culqi = culqi;
-  }, [bookingResult, contact.email, comprobanteTipo, goToStep]);
-
-  useEffect(() => {
-    if (step === "payment") {
-      if (!document.getElementById("culqi-script")) {
-        const script = document.createElement("script");
-        script.id = "culqi-script";
-        script.src = "https://js.culqi.com/checkout-js";
-        script.onload = () => initCulqi();
-        document.body.appendChild(script);
-      } else {
-        initCulqi();
-      }
-    }
-  }, [step, initCulqi]);
-
-  function openCulqi() {
-    const culqi = (window as unknown as Record<string, unknown>).__culqi as { open: () => void } | undefined;
-    if (culqi) {
-      culqi.open();
+      setError("Error de conexión al registrar la reserva. Inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -384,7 +236,6 @@ export default function ReservarPage() {
     if (h < 19) timeSlots.push(`${String(h).padStart(2, "0")}:30`);
   }
 
-  // Min date = today (allow same-day bookings)
   const today = new Date();
   const minDate = today.toISOString().split("T")[0];
 
@@ -398,7 +249,7 @@ export default function ReservarPage() {
       }}
     >
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        {/* Navigation Bar — Volver (Izquierda) <---> Volver al Inicio (Derecha) */}
+        {/* Navigation Bar */}
         <div
           style={{
             display: "flex",
@@ -408,23 +259,25 @@ export default function ReservarPage() {
             gap: 16,
           }}
         >
-          {/* Lado Izquierdo: Botón Volver al paso anterior */}
-          <button
-            type="button"
-            onClick={handlePrevStep}
-            className="btn btn-ghost btn-sm"
-            style={{
-              padding: "6px 14px",
-              fontSize: "0.875rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            ← Volver
-          </button>
+          {step !== "success" ? (
+            <button
+              type="button"
+              onClick={handlePrevStep}
+              className="btn btn-ghost btn-sm"
+              style={{
+                padding: "6px 14px",
+                fontSize: "0.875rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              ← Volver
+            </button>
+          ) : (
+            <div />
+          )}
 
-          {/* Lado Derecho: Botón Volver al Inicio */}
           <Link
             href="/"
             className="btn btn-ghost btn-sm"
@@ -442,7 +295,15 @@ export default function ReservarPage() {
 
         {/* Header */}
         <div style={{ marginBottom: 36, textAlign: "center" }}>
-          <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Link
+            href="/"
+            style={{
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
             <img
               src="/LogoAcicalados.svg"
               alt="Logo Acicalados"
@@ -458,31 +319,33 @@ export default function ReservarPage() {
           <div className="divider-gold" style={{ margin: "12px auto 0" }} />
         </div>
 
-        {/* Progress */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 8,
-            marginBottom: 40,
-          }}
-        >
-          {["type", "services", "datetime", "contact", "payment"].map((s, i) => (
-            <div
-              key={s}
-              style={{
-                width: 40,
-                height: 4,
-                borderRadius: 2,
-                background:
-                  ["type", "services", "datetime", "contact", "payment"].indexOf(step) >= i
-                    ? "var(--color-primary)"
-                    : "var(--color-border)",
-                transition: "background var(--transition-normal)",
-              }}
-            />
-          ))}
-        </div>
+        {/* Progress Bar */}
+        {step !== "success" && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 8,
+              marginBottom: 40,
+            }}
+          >
+            {["type", "services", "datetime", "contact"].map((s, i) => (
+              <div
+                key={s}
+                style={{
+                  width: 44,
+                  height: 4,
+                  borderRadius: 2,
+                  background:
+                    ["type", "services", "datetime", "contact"].indexOf(step) >= i
+                      ? "var(--color-primary)"
+                      : "var(--color-border)",
+                  transition: "background var(--transition-normal)",
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         {error && (
           <div
@@ -503,13 +366,19 @@ export default function ReservarPage() {
         {/* Step 1: Choose type */}
         {step === "type" && (
           <div className="animate-fadeInUp">
-            <h2 className="heading-md" style={{ marginBottom: 24, textAlign: "center", color: "#FFFFFF" }}>
+            <h2
+              className="heading-md"
+              style={{ marginBottom: 24, textAlign: "center", color: "#FFFFFF" }}
+            >
               ¿Qué servicio necesitas?
             </h2>
             <div className="grid grid-2">
               <button
                 type="button"
-                onClick={() => { setServiceType("barberia"); goToStep("services"); }}
+                onClick={() => {
+                  setServiceType("barberia");
+                  goToStep("services");
+                }}
                 className="card card-gold"
                 style={{
                   cursor: "pointer",
@@ -521,16 +390,39 @@ export default function ReservarPage() {
                 }}
               >
                 <div style={{ marginBottom: 12 }}>
-                  <img src="/LogoBarberia.svg" alt="Barbería" style={{ width: 64, height: 64, display: "inline-block" }} />
+                  <img
+                    src="/LogoBarberia.svg"
+                    alt="Barbería"
+                    style={{ width: 64, height: 64, display: "inline-block" }}
+                  />
                 </div>
-                <h3 className="heading-sm" style={{ color: "var(--color-primary)", fontSize: "1.25rem", fontWeight: 700 }}>Barbería</h3>
-                <p style={{ fontSize: "0.875rem", marginTop: 8, color: "rgba(255, 255, 255, 0.85)" }}>
-                  Cortes, barba, tratamientos capilares
+                <h3
+                  className="heading-sm"
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: "1.25rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  Barbería
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.875rem",
+                    marginTop: 8,
+                    color: "rgba(255, 255, 255, 0.85)",
+                  }}
+                >
+                  Cortes, barba, perfilado y tratamientos capilares
                 </p>
               </button>
+
               <button
                 type="button"
-                onClick={() => { setServiceType("spa"); goToStep("services"); }}
+                onClick={() => {
+                  setServiceType("spa");
+                  goToStep("services");
+                }}
                 className="card card-gold"
                 style={{
                   cursor: "pointer",
@@ -542,17 +434,40 @@ export default function ReservarPage() {
                 }}
               >
                 <div style={{ marginBottom: 12 }}>
-                  <img src="/LogoSpa.svg" alt="Spa" style={{ width: 64, height: 64, display: "inline-block" }} />
+                  <img
+                    src="/LogoSpa.svg"
+                    alt="Spa"
+                    style={{ width: 64, height: 64, display: "inline-block" }}
+                  />
                 </div>
-                <h3 className="heading-sm" style={{ color: "var(--color-primary)", fontSize: "1.25rem", fontWeight: 700 }}>Spa</h3>
-                <p style={{ fontSize: "0.875rem", marginTop: 8, color: "rgba(255, 255, 255, 0.85)" }}>
-                  Masajes, faciales, manicure, pedicure
+                <h3
+                  className="heading-sm"
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: "1.25rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  Spa & Relax
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.875rem",
+                    marginTop: 8,
+                    color: "rgba(255, 255, 255, 0.85)",
+                  }}
+                >
+                  Masajes, faciales, manicure, pedicure y exfoliación
                 </p>
               </button>
             </div>
+
             <button
               type="button"
-              onClick={() => { setServiceType(null); goToStep("services"); }}
+              onClick={() => {
+                setServiceType(null);
+                goToStep("services");
+              }}
               className="card card-gold"
               style={{
                 cursor: "pointer",
@@ -566,11 +481,30 @@ export default function ReservarPage() {
               }}
             >
               <div style={{ marginBottom: 8 }}>
-                <img src="/LogoTodo.svg" alt="Todos los servicios" style={{ width: 48, height: 48, display: "inline-block" }} />
+                <img
+                  src="/LogoTodo.svg"
+                  alt="Todos los servicios"
+                  style={{ width: 48, height: 48, display: "inline-block" }}
+                />
               </div>
-              <h3 className="heading-sm" style={{ color: "var(--color-primary)", fontSize: "1.25rem", fontWeight: 700 }}>Todos los servicios</h3>
-              <p style={{ fontSize: "0.875rem", marginTop: 8, color: "rgba(255, 255, 255, 0.85)" }}>
-                Mezcla barbería y spa en una sola cita
+              <h3
+                className="heading-sm"
+                style={{
+                  color: "var(--color-primary)",
+                  fontSize: "1.25rem",
+                  fontWeight: 700,
+                }}
+              >
+                Ver todos los servicios
+              </h3>
+              <p
+                style={{
+                  fontSize: "0.875rem",
+                  marginTop: 8,
+                  color: "rgba(255, 255, 255, 0.85)",
+                }}
+              >
+                Combina barbería y spa en una sola cita
               </p>
             </button>
           </div>
@@ -579,7 +513,10 @@ export default function ReservarPage() {
         {/* Step 2: Select services */}
         {step === "services" && (
           <div className="animate-fadeInUp">
-            <h2 className="heading-md" style={{ marginBottom: 24, color: "#FFFFFF" }}>
+            <h2
+              className="heading-md"
+              style={{ marginBottom: 24, color: "#FFFFFF" }}
+            >
               Selecciona tus servicios
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -598,28 +535,44 @@ export default function ReservarPage() {
                       alignItems: "center",
                       borderColor: isSelected
                         ? "var(--color-primary)"
-                        : "var(--color-primary-border)",
+                        : "var(--color-border)",
                       background: isSelected
-                        ? "rgba(200,164,92,0.15)"
+                        ? "rgba(200,164,92,0.08)"
                         : "rgba(20, 18, 12, 0.9)",
                       textAlign: "left",
-                      color: "#FFFFFF",
-                      padding: "20px 24px",
-                      transition: "all var(--transition-normal)",
+                      padding: "16px 20px",
                     }}
                   >
                     <div style={{ flex: 1, paddingRight: 16 }}>
-                      <h4
+                      <div
                         style={{
-                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
                           marginBottom: 4,
-                          color: isSelected ? "var(--color-primary)" : "#FFFFFF",
-                          fontSize: "1.0625rem",
-                          letterSpacing: "0.01em",
                         }}
                       >
-                        {service.name}
-                      </h4>
+                        <h4
+                          style={{
+                            fontWeight: 700,
+                            color: isSelected
+                              ? "var(--color-primary)"
+                              : "#FFFFFF",
+                            fontSize: "1rem",
+                          }}
+                        >
+                          {service.name}
+                        </h4>
+                        <span
+                          className="badge"
+                          style={{
+                            fontSize: "0.6875rem",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {service.type}
+                        </span>
+                      </div>
                       {service.description && (
                         <p
                           style={{
@@ -659,15 +612,23 @@ export default function ReservarPage() {
                           width: 26,
                           height: 26,
                           borderRadius: "var(--radius-sm)",
-                          border: `2px solid ${isSelected ? "var(--color-primary)" : "var(--color-primary-border)"}`,
-                          background: isSelected ? "var(--color-primary)" : "transparent",
+                          border: `2px solid ${
+                            isSelected
+                              ? "var(--color-primary)"
+                              : "var(--color-primary-border)"
+                          }`,
+                          background: isSelected
+                            ? "var(--color-primary)"
+                            : "transparent",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           color: "#000000",
                           fontSize: "0.9375rem",
                           fontWeight: 800,
-                          boxShadow: isSelected ? "0 0 8px rgba(200, 164, 92, 0.4)" : "none",
+                          boxShadow: isSelected
+                            ? "0 0 8px rgba(200, 164, 92, 0.4)"
+                            : "none",
                         }}
                       >
                         {isSelected ? "✓" : ""}
@@ -680,68 +641,124 @@ export default function ReservarPage() {
 
             {cart.length > 0 && (
               <div
-                className="card card-gold"
-                style={{ marginTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                style={{
+                  marginTop: 24,
+                  padding: 16,
+                  background: "var(--color-bg-card)",
+                  borderRadius: "var(--radius-md)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
               >
                 <div>
-                  <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                    {cart.length} servicio(s) · {formatDuration(totalDuration)}
+                  <p style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
+                    {cart.length} {cart.length === 1 ? "servicio" : "servicios"}{" "}
+                    seleccionados
                   </p>
-                  <p style={{ fontWeight: 700, fontSize: "1.125rem", color: "var(--color-primary)" }}>
-                    Total: S/ {(totalCents / 100).toFixed(2)}
+                  <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                    Duración estimada: {formatDuration(totalDuration)}
                   </p>
                 </div>
-                <button onClick={() => goToStep("datetime")} className="btn btn-primary">
-                  Continuar
-                </button>
+                <div style={{ textAlign: "right" }}>
+                  <p
+                    style={{
+                      fontSize: "1.25rem",
+                      fontWeight: 800,
+                      color: "var(--color-primary)",
+                    }}
+                  >
+                    S/ {totalPriceSoles}
+                  </p>
+                </div>
               </div>
             )}
 
-            <button onClick={handlePrevStep} className="btn btn-ghost" style={{ marginTop: 12, width: "100%" }}>
-              ← Volver
-            </button>
+            <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+              <button
+                onClick={handlePrevStep}
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+              >
+                ← Volver
+              </button>
+              <button
+                onClick={() => goToStep("datetime")}
+                disabled={cart.length === 0}
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+              >
+                Continuar ({cart.length}) →
+              </button>
+            </div>
           </div>
         )}
 
         {/* Step 3: Date & Time */}
         {step === "datetime" && (
           <div className="animate-fadeInUp">
-            <h2 className="heading-md" style={{ marginBottom: 24 }}>
-              Elige fecha y hora
+            <h2
+              className="heading-md"
+              style={{ marginBottom: 24, color: "#FFFFFF" }}
+            >
+              Selecciona Fecha y Hora
             </h2>
-            <div style={{ marginBottom: 20 }}>
-              <label className="label">Fecha</label>
+
+            <div style={{ marginBottom: 24 }}>
+              <label className="label">Fecha de la cita *</label>
               <input
                 type="date"
-                className="input"
                 min={minDate}
                 value={bookingDate}
-                onChange={(e) => setBookingDate(e.target.value)}
+                onChange={(e) => {
+                  setBookingDate(e.target.value);
+                  setStartTime("");
+                }}
+                className="input"
+                required
               />
             </div>
-            <div style={{ marginBottom: 24 }}>
-              <label className="label">Hora de inicio</label>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, 1fr)",
-                  gap: 8,
-                }}
-              >
-                {timeSlots.map((time) => (
-                  <button
-                    key={time}
-                    onClick={() => setStartTime(time)}
-                    className={startTime === time ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-                  >
-                    {time}
-                  </button>
-                ))}
+
+            {bookingDate && (
+              <div style={{ marginBottom: 24 }}>
+                <label className="label">Horario de atención *</label>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {timeSlots.map((slot) => {
+                    const isSelected = startTime === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => setStartTime(slot)}
+                        className={`btn ${
+                          isSelected ? "btn-primary" : "btn-secondary"
+                        } btn-sm`}
+                        style={{
+                          padding: "8px 4px",
+                          fontSize: "0.875rem",
+                          fontWeight: isSelected ? 700 : 500,
+                        }}
+                      >
+                        {slot}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={handlePrevStep} className="btn btn-ghost" style={{ flex: 1 }}>
+              <button
+                onClick={handlePrevStep}
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+              >
                 ← Volver
               </button>
               <button
@@ -750,410 +767,348 @@ export default function ReservarPage() {
                 className="btn btn-primary"
                 style={{ flex: 1 }}
               >
-                Continuar
+                Continuar →
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 4: Contact Info & Billing */}
+        {/* Step 4: Contact & WhatsApp Reservation */}
         {step === "contact" && (
           <div className="animate-fadeInUp">
-            <h2 className="heading-md" style={{ marginBottom: 24 }}>
-              Datos de contacto y facturación
+            <h2
+              className="heading-md"
+              style={{ marginBottom: 24, color: "#FFFFFF" }}
+            >
+              Datos del Cliente
             </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+
+            <div
+              className="grid grid-2"
+              style={{ gap: 16, marginBottom: 16 }}
+            >
               <div>
                 <label className="label">Nombre *</label>
-                <input className="input" value={contact.firstName} onChange={(e) => setContact({ ...contact, firstName: e.target.value })} required />
+                <input
+                  className="input"
+                  value={contact.firstName}
+                  onChange={(e) =>
+                    setContact({ ...contact, firstName: e.target.value })
+                  }
+                  placeholder="Tu nombre"
+                  required
+                />
               </div>
               <div>
-                <label className="label">Apellido *</label>
-                <input className="input" value={contact.lastName} onChange={(e) => setContact({ ...contact, lastName: e.target.value })} required />
+                <label className="label">Apellidos *</label>
+                <input
+                  className="input"
+                  value={contact.lastName}
+                  onChange={(e) =>
+                    setContact({ ...contact, lastName: e.target.value })
+                  }
+                  placeholder="Tus apellidos"
+                  required
+                />
               </div>
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Celular *</label>
+
+            <div
+              className="grid grid-2"
+              style={{ gap: 16, marginBottom: 16 }}
+            >
+              <div>
+                <label className="label">WhatsApp / Teléfono *</label>
+                <input
+                  type="tel"
+                  className="input"
+                  value={contact.phone}
+                  onChange={(e) =>
+                    setContact({ ...contact, phone: e.target.value })
+                  }
+                  placeholder="Ej. 997766828"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">DNI (Opcional)</label>
+                <input
+                  className="input"
+                  value={contact.dni}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setContact({ ...contact, dni: val });
+                  }}
+                  placeholder="8 dígitos"
+                  maxLength={8}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label className="label">Correo Electrónico (Opcional)</label>
               <input
+                type="email"
                 className="input"
-                value={contact.phone}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, "");
-                  setContact({ ...contact, phone: val });
-                }}
-                placeholder="987654321"
-                maxLength={9}
+                value={contact.email}
+                onChange={(e) =>
+                  setContact({ ...contact, email: e.target.value })
+                }
+                placeholder="tu@correo.com"
               />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <label className="label">Correo electrónico</label>
-              <input className="input" type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} placeholder="tu@email.com" />
+
+            <div style={{ marginBottom: 24 }}>
+              <label className="label">Indicaciones especiales (Opcional)</label>
+              <textarea
+                className="input"
+                rows={2}
+                value={contact.notes}
+                onChange={(e) =>
+                  setContact({ ...contact, notes: e.target.value })
+                }
+                placeholder="¿Alguna preferencia de corte, alergia o detalle especial?"
+                style={{ resize: "vertical" }}
+              />
             </div>
 
-            {/* Selector de Comprobante de Pago (Boleta / Factura) */}
-            <div className="card card-gold" style={{ marginBottom: 24, padding: "20px" }}>
-              <label className="label" style={{ marginBottom: 12, fontSize: "0.9375rem", fontWeight: 700 }}>
-                🧾 Tipo de Comprobante Electrónico
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => setComprobanteTipo("03")}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "var(--radius-md)",
-                    border: `2px solid ${comprobanteTipo === "03" ? "var(--color-primary)" : "var(--color-border)"}`,
-                    background: comprobanteTipo === "03" ? "rgba(200,164,92,0.15)" : "rgba(20, 18, 12, 0.6)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    color: "#FFFFFF",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    transition: "all var(--transition-fast)",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      border: `2px solid ${comprobanteTipo === "03" ? "var(--color-primary)" : "var(--color-border)"}`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {comprobanteTipo === "03" && (
-                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--color-primary)" }} />
-                    )}
-                  </div>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: "0.875rem", color: comprobanteTipo === "03" ? "var(--color-primary)" : "#FFFFFF" }}>
-                      Boleta de Venta
-                    </p>
-                    <p className="text-muted" style={{ fontSize: "0.75rem" }}>
-                      Persona natural (DNI)
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setComprobanteTipo("01")}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "var(--radius-md)",
-                    border: `2px solid ${comprobanteTipo === "01" ? "var(--color-primary)" : "var(--color-border)"}`,
-                    background: comprobanteTipo === "01" ? "rgba(200,164,92,0.15)" : "rgba(20, 18, 12, 0.6)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    color: "#FFFFFF",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    transition: "all var(--transition-fast)",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      border: `2px solid ${comprobanteTipo === "01" ? "var(--color-primary)" : "var(--color-border)"}`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {comprobanteTipo === "01" && (
-                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--color-primary)" }} />
-                    )}
-                  </div>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: "0.875rem", color: comprobanteTipo === "01" ? "var(--color-primary)" : "#FFFFFF" }}>
-                      Factura
-                    </p>
-                    <p className="text-muted" style={{ fontSize: "0.75rem" }}>
-                      Empresa con RUC
-                    </p>
-                  </div>
-                </button>
-              </div>
-
-              {/* Campos condicionales según tipo de comprobante */}
-              {comprobanteTipo === "03" ? (
-                <div>
-                  <label className="label">DNI (Opcional)</label>
-                  <input
-                    className="input"
-                    value={contact.dni}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "");
-                      setContact({ ...contact, dni: val });
-                    }}
-                    placeholder="8 dígitos (opcional)"
-                    maxLength={8}
-                  />
-                  <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
-                    Se emitirá la Boleta de Venta a tu nombre tras confirmar el pago.
-                  </p>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div>
-                    <label className="label">RUC (11 dígitos) *</label>
-                    <input
-                      className="input"
-                      value={ruc}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
-                        setRuc(val);
-                      }}
-                      placeholder="Ej. 20601234567"
-                      maxLength={11}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Razón Social *</label>
-                    <input
-                      className="input"
-                      value={razonSocial}
-                      onChange={(e) => setRazonSocial(e.target.value)}
-                      placeholder="Ej. Mi Empresa S.A.C."
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Dirección Fiscal (Opcional)</label>
-                    <input
-                      className="input"
-                      value={direccionFiscal}
-                      onChange={(e) => setDireccionFiscal(e.target.value)}
-                      placeholder="Ej. Av. Principal 123, Iquitos"
-                    />
-                  </div>
-                  <p className="text-muted" style={{ fontSize: "0.75rem" }}>
-                    ℹ️ Se emitirá la Factura electrónica con estos datos fiscales.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Summary */}
+            {/* Summary Card */}
             <div className="card card-gold" style={{ marginBottom: 24 }}>
-              <h4 className="heading-sm" style={{ marginBottom: 12 }}>Resumen de tu reserva</h4>
+              <h4 className="heading-sm" style={{ marginBottom: 12 }}>
+                Resumen de tu reserva
+              </h4>
               {cart.map((s) => (
-                <div key={s.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: "0.875rem" }}>
+                <div
+                  key={s.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                    fontSize: "0.875rem",
+                  }}
+                >
                   <span>{s.name}</span>
-                  <span className="text-muted">S/ {(s.price_cents / 100).toFixed(2)}</span>
+                  <span className="text-muted">
+                    S/ {(s.price_cents / 100).toFixed(2)}
+                  </span>
                 </div>
               ))}
-              <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 12, paddingTop: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
-                  <span>Total</span>
-                  <span>S/ {(totalCents / 100).toFixed(2)}</span>
+              <div
+                style={{
+                  borderTop: "1px solid var(--color-border)",
+                  marginTop: 12,
+                  paddingTop: 12,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontWeight: 700,
+                    fontSize: "1.0625rem",
+                  }}
+                >
+                  <span>Total a pagar en local:</span>
+                  <span style={{ color: "var(--color-primary)" }}>
+                    S/ {totalPriceSoles}
+                  </span>
                 </div>
               </div>
-              <p className="text-muted" style={{ fontSize: "0.8125rem", marginTop: 12 }}>
-                📅 {bookingDate} · ⏰ {startTime} · ⏱️ {formatDuration(totalDuration)}
+              <p
+                className="text-muted"
+                style={{ fontSize: "0.8125rem", marginTop: 12 }}
+              >
+                📅 {bookingDate} · ⏰ {startTime} · ⏱️{" "}
+                {formatDuration(totalDuration)}
               </p>
-            </div>
-
-            {/* Payment Mode Selector */}
-            <div style={{ marginBottom: 24 }}>
-              <label className="label" style={{ marginBottom: 12 }}>Método de pago</label>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode("advance")}
-                  className="card"
-                  style={{
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    padding: "16px 20px",
-                    borderColor: paymentMode === "advance" ? "var(--color-primary)" : "var(--color-border)",
-                    background: paymentMode === "advance" ? "rgba(200,164,92,0.06)" : "var(--color-bg-card)",
-                    transition: "all var(--transition-fast)",
-                  }}
-                >
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    border: `2px solid ${paymentMode === "advance" ? "var(--color-primary)" : "var(--color-border)"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    {paymentMode === "advance" && (
-                      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-primary)" }} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, textAlign: "left" }}>
-                    <p style={{ fontWeight: 600, marginBottom: 2 }}>💰 Reservar con adelanto (30%)</p>
-                    <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                      Paga S/ {(advanceCents / 100).toFixed(2)} ahora, el resto al llegar
-                    </p>
-                  </div>
-                  <span style={{ fontWeight: 700, color: "var(--color-primary)", fontSize: "1.125rem" }}>
-                    S/ {(advanceCents / 100).toFixed(2)}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode("full")}
-                  className="card"
-                  style={{
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    padding: "16px 20px",
-                    borderColor: paymentMode === "full" ? "var(--color-primary)" : "var(--color-border)",
-                    background: paymentMode === "full" ? "rgba(200,164,92,0.06)" : "var(--color-bg-card)",
-                    transition: "all var(--transition-fast)",
-                  }}
-                >
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    border: `2px solid ${paymentMode === "full" ? "var(--color-primary)" : "var(--color-border)"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    {paymentMode === "full" && (
-                      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-primary)" }} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, textAlign: "left" }}>
-                    <p style={{ fontWeight: 600, marginBottom: 2 }}>✅ Pagar el total</p>
-                    <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                      Paga todo ahora y llega sin preocupaciones
-                    </p>
-                  </div>
-                  <span style={{ fontWeight: 700, color: "var(--color-primary)", fontSize: "1.125rem" }}>
-                    S/ {(totalCents / 100).toFixed(2)}
-                  </span>
-                </button>
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "8px 12px",
+                  background: "rgba(37, 211, 102, 0.08)",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1px solid rgba(37, 211, 102, 0.2)",
+                  fontSize: "0.8125rem",
+                  color: "rgba(255, 255, 255, 0.9)",
+                }}
+              >
+                📍 <strong>Pago presencial:</strong> Paga en efectivo, Yape o
+                tarjeta directamente en nuestro local al momento de tu cita.
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={handlePrevStep} className="btn btn-ghost" style={{ flex: 1 }}>
+              <button
+                onClick={handlePrevStep}
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+              >
                 ← Volver
               </button>
+
+              {/* Botón Principal WhatsApp */}
               <button
-                onClick={handleCreateBooking}
+                onClick={handleCreateBookingWhatsApp}
                 disabled={
                   loading ||
                   !contact.firstName ||
                   !contact.lastName ||
-                  (!contact.phone && !contact.email) ||
-                  (comprobanteTipo === "01" && (!ruc || ruc.length !== 11 || !razonSocial.trim()))
+                  (!contact.phone && !contact.email)
                 }
-                className="btn btn-primary"
-                style={{ flex: 1 }}
+                className="btn"
+                style={{
+                  flex: 2,
+                  background: "#25D366",
+                  color: "#FFFFFF",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "1rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                  boxShadow: "0 4px 14px rgba(37, 211, 102, 0.4)",
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
               >
-                {loading ? "Procesando..." : "Proceder al Pago"}
+                <img
+                  src="/icons/whatsApp.svg"
+                  alt="WhatsApp"
+                  style={{ width: 22, height: 22 }}
+                />
+                {loading ? "Registrando..." : "Reservar por WhatsApp"}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 5: Payment */}
-        {step === "payment" && bookingResult && (
-          <div className="animate-fadeInUp" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "3rem", marginBottom: 16 }}>💳</div>
-            <h2 className="heading-md" style={{ marginBottom: 12 }}>
-              {bookingResult.payment_mode === "full" ? "Pagar Total" : "Pagar Adelanto"}
-            </h2>
-            <p className="text-muted" style={{ marginBottom: 8 }}>
-              Código de reserva: <strong style={{ color: "var(--color-primary)" }}>{bookingResult.booking_code}</strong>
-            </p>
-            <p style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--color-primary)", marginBottom: 32 }}>
-              S/ {(bookingResult.payment_amount_cents / 100).toFixed(2)}
-            </p>
-            <button
-              onClick={openCulqi}
-              disabled={loading}
-              className="btn btn-primary btn-lg"
-              style={{ width: "100%" }}
-            >
-              {loading ? "⏳ Confirmando pago y emitiendo comprobante..." : "🔒 Pagar Ahora"}
-            </button>
-            <p className="text-muted" style={{ marginTop: 16, fontSize: "0.8125rem" }}>
-              {loading
-                ? "Por favor espera unos segundos mientras confirmamos tu cita y generamos tu comprobante..."
-                : "Tienes 15 minutos para completar el pago antes de que expire la reserva."}
-            </p>
-          </div>
-        )}
-
-        {/* Step 6: Success with Electronic Invoice Download */}
+        {/* Step 5: Success Confirmation Screen */}
         {step === "success" && (
           <div className="animate-fadeInUp" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "4rem", marginBottom: 16 }}>🎉</div>
-            <h2 className="heading-lg" style={{ marginBottom: 12 }}>
-              ¡Cita <span className="text-gold">Confirmada</span>!
+            <h2 className="heading-lg" style={{ marginBottom: 8 }}>
+              ¡Reserva <span className="text-gold">Registrada</span>!
             </h2>
-            <p className="text-muted" style={{ marginBottom: 8, fontSize: "1rem" }}>
-              {bookingResult?.payment_mode === "full"
-                ? "Tu cita está confirmada y pagada al 100%."
-                : "Tu cita está confirmada. Paga el resto al llegar."}
+            <p
+              className="text-muted"
+              style={{ marginBottom: 20, fontSize: "1rem" }}
+            >
+              Tu solicitud ha sido guardada. Confírmala enviando el mensaje por
+              WhatsApp para asegurar tu atención inmediata.
             </p>
-            {bookingResult && (
-              <p style={{ marginBottom: 24 }}>
-                Código: <strong className="text-gold" style={{ fontSize: "1.25rem" }}>{bookingResult.booking_code}</strong>
-              </p>
-            )}
 
-            {/* Botón Principal de Descarga de Comprobante PDF */}
-            {comprobanteEmitido?.pdf_url ? (
+            {bookingResult && (
               <div
+                className="card card-gold"
                 style={{
                   margin: "0 auto 28px",
                   padding: "20px 24px",
-                  background: "rgba(200, 164, 92, 0.08)",
-                  borderRadius: "var(--radius-lg)",
-                  border: "1px solid var(--color-primary-border)",
                   maxWidth: 480,
+                  textAlign: "left",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 14 }}>
-                  <span style={{ fontSize: "1.25rem" }}>🧾</span>
-                  <span style={{ fontWeight: 700, color: "var(--color-primary)", fontSize: "0.9375rem" }}>
-                    {comprobanteEmitido.tipo === "01" ? "Factura Electrónica" : "Boleta de Venta Electrónica"}
-                  </span>
-                  {comprobanteEmitido.serie && (
-                    <span className="badge badge-gold" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
-                      {comprobanteEmitido.serie}-{String(comprobanteEmitido.numero || 1).padStart(6, "0")}
-                    </span>
-                  )}
-                </div>
-                <a
-                  href={comprobanteEmitido.pdf_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-primary btn-lg"
+                <div
                   style={{
-                    width: "100%",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 10,
-                    textDecoration: "none",
-                    fontSize: "1rem",
-                    boxShadow: "0 4px 14px rgba(200, 164, 92, 0.3)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: 12,
+                    borderBottom: "1px solid var(--color-border)",
+                    paddingBottom: 10,
                   }}
                 >
-                  📄 Descargar {comprobanteEmitido.tipo === "01" ? "Factura" : "Boleta de Venta"} (PDF)
+                  <span className="text-muted" style={{ fontSize: "0.875rem" }}>
+                    Código de cita:
+                  </span>
+                  <strong
+                    className="text-gold"
+                    style={{ fontSize: "1.125rem", letterSpacing: "0.05em" }}
+                  >
+                    {bookingResult.booking_code}
+                  </strong>
+                </div>
+
+                <div style={{ fontSize: "0.875rem", marginBottom: 8 }}>
+                  <span className="text-muted">Cliente: </span>
+                  <strong>{bookingResult.client_name}</strong>
+                </div>
+
+                <div style={{ fontSize: "0.875rem", marginBottom: 8 }}>
+                  <span className="text-muted">Fecha y Hora: </span>
+                  <strong>
+                    {bookingResult.booking_date} a las {bookingResult.start_time}
+                  </strong>
+                </div>
+
+                <div style={{ fontSize: "0.875rem", marginBottom: 12 }}>
+                  <span className="text-muted">Servicios: </span>
+                  <strong>{bookingResult.services.join(", ")}</strong>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    paddingTop: 10,
+                    borderTop: "1px solid var(--color-border)",
+                    fontSize: "1rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  <span>Total a pagar en local:</span>
+                  <span style={{ color: "var(--color-primary)", fontSize: "1.125rem" }}>
+                    S/ {bookingResult.total_price_soles}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Botón WhatsApp de Acción Directa */}
+            {bookingResult?.whatsapp_url && (
+              <div style={{ marginBottom: 28 }}>
+                <a
+                  href={bookingResult.whatsapp_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-lg"
+                  style={{
+                    background: "#25D366",
+                    color: "#FFFFFF",
+                    fontWeight: 800,
+                    fontSize: "1.0625rem",
+                    padding: "16px 28px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 10,
+                    textDecoration: "none",
+                    boxShadow: "0 6px 20px rgba(37, 211, 102, 0.4)",
+                    borderRadius: "var(--radius-md)",
+                    transition: "transform var(--transition-fast)",
+                  }}
+                >
+                  <img
+                    src="/icons/whatsApp.svg"
+                    alt="WhatsApp"
+                    style={{ width: 26, height: 26 }}
+                  />
+                  <span>Confirmar Reserva por WhatsApp</span>
                 </a>
-                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 8 }}>
-                  Documento tributario oficial emitido a través de Keyfácil / SUNAT
+                <p
+                  className="text-muted"
+                  style={{ fontSize: "0.8125rem", marginTop: 10 }}
+                >
+                  Se abrirá WhatsApp con los detalles de tu cita listos para enviar.
                 </p>
               </div>
-            ) : null}
+            )}
 
-            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
               <Link href="/" className="btn btn-secondary">
                 Ir al Inicio
               </Link>

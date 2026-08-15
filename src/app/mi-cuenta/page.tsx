@@ -26,33 +26,39 @@ export default async function MiCuentaPage() {
 
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, service_type, total_duration_minutes, comprobante_tipo, comprobante_serie, comprobante_numero, pdf_url")
+    .select("id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, service_type, total_duration_minutes")
     .eq("user_id", user.id)
-    .in("status", ["confirmada", "completada"])
+    .in("status", ["pendiente", "confirmada", "completada"])
     .order("booking_date", { ascending: false })
     .limit(20);
 
   const statusLabels: Record<string, string> = {
+    pendiente: "Pendiente (WhatsApp)",
     confirmada: "Confirmada",
     completada: "Completada",
+    cancelada: "Cancelada",
   };
 
   const paymentLabels: Record<string, string> = {
-    sin_pago: "Sin pago",
+    pendiente: "Pago en local",
+    sin_pago: "Pago en local",
     parcial: "Parcial",
-    total: "Pagado",
+    total: "Pagado en local",
   };
 
   const statusMessages: Record<string, Record<string, string>> = {
+    pendiente: {
+      pendiente: "Tu cita está registrada — confírmala enviando el mensaje por WhatsApp",
+      sin_pago: "Tu cita está registrada — confírmala enviando el mensaje por WhatsApp",
+    },
     confirmada: {
+      pendiente: "Tu cita está confirmada — paga presencialmente al llegar",
       parcial: "Tu cita está confirmada — paga el resto al llegar",
+      total: "Tu cita está confirmada y pagada",
     },
     completada: {
       parcial: "Servicio completado — tienes un saldo pendiente",
-      total: "Servicio completado. ¡Gracias!",
-    },
-    expirada: {
-      sin_pago: "Tu reserva venció por falta de pago",
+      total: "Servicio completado. ¡Gracias por tu preferencia!",
     },
   };
 
@@ -95,7 +101,7 @@ export default async function MiCuentaPage() {
 
   return (
     <div style={{ minHeight: "100vh", padding: "100px 24px 60px" }}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ maxWidth: 800, margin: "0 auto" }}>
         {/* Header with back button */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -145,10 +151,9 @@ export default async function MiCuentaPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {bookings.map((b) => {
                 const message = statusMessages[b.status]?.[b.payment_status];
-                const comprobanteLabel = b.comprobante_tipo === "01" ? "Factura" : "Boleta";
-                const comprobanteCodigo = b.comprobante_serie
-                  ? `${comprobanteLabel} ${b.comprobante_serie}-${String(b.comprobante_numero || 1).padStart(6, "0")}`
-                  : null;
+                const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "51997766828";
+                const waMessage = `Hola Acicalados, deseo consultar sobre mi reserva ${b.booking_code} programada para el ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`;
+                const waUrl = `https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(waMessage)}`;
 
                 return (
                   <div
@@ -172,24 +177,9 @@ export default async function MiCuentaPage() {
                             style={{ height: 12, width: "auto" }}
                           />
                         </span>
-                        {comprobanteCodigo && (
-                          <span
-                            style={{
-                              fontSize: "0.75rem",
-                              fontWeight: 600,
-                              color: "var(--color-primary-light)",
-                              background: "rgba(200, 164, 92, 0.12)",
-                              border: "1px solid var(--color-primary-border)",
-                              borderRadius: "var(--radius-sm)",
-                              padding: "2px 8px",
-                            }}
-                          >
-                            🧾 {comprobanteCodigo}
-                          </span>
-                        )}
                       </div>
                       <span className={`badge ${b.status === "confirmada" ? "badge-success" : b.status === "completada" ? "badge-gold" : b.status === "cancelada" || b.status === "expirada" ? "badge-error" : "badge-warning"}`}>
-                        {statusLabels[b.status]}
+                        {statusLabels[b.status] || b.status}
                       </span>
                     </div>
 
@@ -199,27 +189,31 @@ export default async function MiCuentaPage() {
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
                       <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                        Pago: <strong style={{ color: "var(--color-text)" }}>{paymentLabels[b.payment_status]}</strong>
+                        Pago: <strong style={{ color: "var(--color-text)" }}>{paymentLabels[b.payment_status] || "Pago en local"}</strong>
                       </p>
 
-                      {b.pdf_url && (
-                        <a
-                          href={b.pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-secondary btn-sm"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: "4px 12px",
-                            fontSize: "0.8125rem",
-                            textDecoration: "none",
-                          }}
-                        >
-                          📄 Descargar PDF
-                        </a>
-                      )}
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "6px 14px",
+                          fontSize: "0.8125rem",
+                          background: "#25D366",
+                          color: "#FFFFFF",
+                          border: "none",
+                          textDecoration: "none",
+                          borderRadius: "var(--radius-sm)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 16, height: 16 }} />
+                        <span>Chat WhatsApp</span>
+                      </a>
                     </div>
 
                     {message && (
