@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -39,7 +40,7 @@ export default async function DashboardPage() {
   ];
 
   const statusLabels: Record<string, string> = {
-    pendiente: "Pendiente",
+    pendiente: "Pendiente (WhatsApp)",
     confirmada: "Confirmada",
     completada: "Completada",
   };
@@ -47,21 +48,26 @@ export default async function DashboardPage() {
   const statusColors: Record<string, string> = {
     pendiente: "badge-warning",
     confirmada: "badge-success",
-    completada: "badge-neutral",
+    completada: "badge-gold",
   };
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="heading-lg">Dashboard</h1>
-        <p className="text-muted" style={{ marginTop: 4 }}>
-          {new Date().toLocaleDateString("es-PE", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h1 className="heading-lg">Dashboard</h1>
+          <p className="text-muted" style={{ marginTop: 4 }}>
+            {new Date().toLocaleDateString("es-PE", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+        </div>
+        <Link href="/dashboard/reservas" className="btn btn-primary btn-sm">
+          📋 Gestionar Reservas WhatsApp →
+        </Link>
       </div>
 
       {/* Stats Grid */}

@@ -24,14 +24,7 @@ type Booking = {
   total_duration_minutes: number;
   confirmed_at: string | null;
   assigned_employee_id: string | null;
-  comprobante_tipo?: string | null;
-  comprobante_serie?: string | null;
-  comprobante_numero?: number | null;
-  pdf_url?: string | null;
-  billing_doc_type?: string | null;
-  billing_doc_number?: string | null;
-  billing_name?: string | null;
-  billing_address?: string | null;
+  created_at: string;
 };
 
 type Employee = {
@@ -41,7 +34,7 @@ type Employee = {
 };
 
 const statusLabels: Record<string, string> = {
-  pendiente: "Pendiente",
+  pendiente: "Pendiente (WhatsApp)",
   confirmada: "Confirmada",
   completada: "Completada",
   cancelada: "Cancelada",
@@ -57,13 +50,15 @@ const statusColors: Record<string, string> = {
 };
 
 const paymentLabels: Record<string, string> = {
-  sin_pago: "Sin pago",
+  sin_pago: "Pendiente de cobro",
+  pendiente: "Pendiente de cobro",
   parcial: "Parcial",
-  total: "Pagado",
+  total: "Pagado en local",
 };
 
 const paymentColors: Record<string, string> = {
   sin_pago: "badge-error",
+  pendiente: "badge-error",
   parcial: "badge-warning",
   total: "badge-success",
 };
@@ -72,7 +67,7 @@ export function ReservasManager() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<string>("confirmada");
+  const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterDate, setFilterDate] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -87,9 +82,9 @@ export function ReservasManager() {
     let query = supabase
       .from("bookings")
       .select(
-        "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, comprobante_tipo, comprobante_serie, comprobante_numero, pdf_url, billing_doc_type, billing_doc_number, billing_name, billing_address"
+        "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
       )
-      .in("status", ["confirmada", "completada", "cancelada"])
+      .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
       .order("booking_date", { ascending: false })
       .order("start_time", { ascending: true });
 
@@ -105,7 +100,7 @@ export function ReservasManager() {
       query = query.eq("service_type", filterType);
     }
 
-    const { data } = await query.limit(100);
+    const { data } = await query.limit(200);
     setBookings(data ?? []);
     setLoading(false);
   }, [supabase, filterStatus, filterDate, filterType]);
@@ -124,25 +119,33 @@ export function ReservasManager() {
     loadEmployees();
   }, [loadBookings, loadEmployees]);
 
-  async function updateBookingStatus(bookingId: string, newStatus: string) {
+  // Actualizar estado general mediante API administrativa
+  async function updateBooking(bookingId: string, payload: Record<string, unknown>) {
     setActionLoading(bookingId);
-    const updates: Record<string, unknown> = { status: newStatus };
-    if (newStatus === "completada") {
-      updates.completed_at = new Date().toISOString();
+    try {
+      const res = await fetch("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bookingId, ...payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo actualizar la reserva.");
+      } else {
+        await loadBookings();
+      }
+    } catch {
+      alert("Error de conexión al actualizar la reserva.");
+    } finally {
+      setActionLoading(null);
     }
-    if (newStatus === "cancelada") {
-      updates.cancelled_at = new Date().toISOString();
-    }
-
-    await supabase.from("bookings").update(updates).eq("id", bookingId);
-    await loadBookings();
-    setActionLoading(null);
   }
 
+  // Eliminar físicamente y de forma permanente una reserva
   async function deleteBookingPermanently(booking: Booking) {
     const confirmMessage =
       `⚠️ ¿Estás seguro de ELIMINAR PERMANENTEMENTE la reserva ${booking.booking_code} de ${booking.client_first_name} ${booking.client_last_name}?\n\n` +
-      `Esta acción eliminará definitivamente el registro de la base de datos y liberará las restricciones en servicios. ¡No se puede deshacer!`;
+      `Esta acción eliminará definitivamente el registro de la base de datos. ¡No se puede deshacer!`;
 
     if (!confirm(confirmMessage)) return;
 
@@ -173,111 +176,251 @@ export function ReservasManager() {
       b.client_last_name.toLowerCase().includes(term) ||
       (b.client_phone && b.client_phone.includes(term)) ||
       (b.client_email && b.client_email.toLowerCase().includes(term)) ||
-      (b.client_dni && b.client_dni.includes(term)) ||
-      (b.billing_name && b.billing_name.toLowerCase().includes(term)) ||
-      (b.billing_doc_number && b.billing_doc_number.includes(term)) ||
-      (b.comprobante_serie && `${b.comprobante_serie}-${b.comprobante_numero}`.toLowerCase().includes(term))
+      (b.client_dni && b.client_dni.includes(term))
     );
   });
 
-  const employeeMap = new Map(employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`]));
+  const employeeMap = new Map(
+    employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
+  );
 
-  // Stats
+  // Stats Calculations
+  const pendingCount = bookings.filter((b) => b.status === "pendiente").length;
   const confirmedCount = bookings.filter((b) => b.status === "confirmada").length;
   const completedCount = bookings.filter((b) => b.status === "completada").length;
 
-  const totalRevenue = bookings
-    .filter((b) => b.status === "confirmada" || b.status === "completada")
-    .reduce((sum, b) => sum + b.advance_amount_cents, 0);
+  const totalCollectedRevenue = bookings
+    .filter((b) => b.payment_status === "total" || b.status === "completada")
+    .reduce((sum, b) => sum + b.total_price_cents, 0);
+
+  const pendingRevenueToCollect = bookings
+    .filter(
+      (b) =>
+        (b.status === "pendiente" || b.status === "confirmada") &&
+        b.payment_status !== "total"
+    )
+    .reduce((sum, b) => sum + b.total_price_cents, 0);
 
   return (
     <div>
       {/* Stats Strip */}
-      <div className="grid grid-3" style={{ marginBottom: 28 }}>
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: 16,
+          marginBottom: 28,
+        }}
+      >
+        {/* Card 1: Pendientes WhatsApp */}
         <div
-          className="card"
-          style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px" }}
+          className="card card-gold"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "16px 18px",
+            border: "1px solid rgba(245, 158, 11, 0.4)",
+            background: "rgba(245, 158, 11, 0.05)",
+          }}
         >
           <div
             style={{
-              width: 42,
-              height: 42,
+              width: 44,
+              height: 44,
               borderRadius: "var(--radius-md)",
-              background: "rgba(106,153,78,0.12)",
+              background: "rgba(245, 158, 11, 0.15)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "1.125rem",
+              fontSize: "1.25rem",
+            }}
+          >
+            🟡
+          </div>
+          <div>
+            <p
+              style={{
+                fontSize: "1.375rem",
+                fontWeight: 800,
+                color: "#F59E0B",
+                lineHeight: 1,
+              }}
+            >
+              {pendingCount}
+            </p>
+            <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+              Pendientes (WhatsApp)
+            </p>
+          </div>
+        </div>
+
+        {/* Card 2: Confirmadas */}
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "16px 18px",
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "var(--radius-md)",
+              background: "rgba(106, 153, 78, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "1.25rem",
             }}
           >
             ✅
           </div>
           <div>
-            <p style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--color-success)", lineHeight: 1 }}>
+            <p
+              style={{
+                fontSize: "1.375rem",
+                fontWeight: 800,
+                color: "var(--color-success)",
+                lineHeight: 1,
+              }}
+            >
               {confirmedCount}
             </p>
-            <p className="text-muted" style={{ fontSize: "0.75rem" }}>
+            <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
               Confirmadas
             </p>
           </div>
         </div>
+
+        {/* Card 3: Completadas */}
         <div
           className="card"
-          style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "16px 18px",
+          }}
         >
           <div
             style={{
-              width: 42,
-              height: 42,
+              width: 44,
+              height: 44,
               borderRadius: "var(--radius-md)",
-              background: "rgba(200,164,92,0.12)",
+              background: "rgba(200, 164, 92, 0.15)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "1.125rem",
+              fontSize: "1.25rem",
             }}
           >
             🏁
           </div>
           <div>
-            <p style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--color-primary)", lineHeight: 1 }}>
+            <p
+              style={{
+                fontSize: "1.375rem",
+                fontWeight: 800,
+                color: "var(--color-primary)",
+                lineHeight: 1,
+              }}
+            >
               {completedCount}
             </p>
-            <p className="text-muted" style={{ fontSize: "0.75rem" }}>
+            <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
               Completadas
             </p>
           </div>
         </div>
+
+        {/* Card 4: Ingresos Cobrados */}
         <div
           className="card"
-          style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "16px 18px",
+          }}
         >
           <div
             style={{
-              width: 42,
-              height: 42,
+              width: 44,
+              height: 44,
               borderRadius: "var(--radius-md)",
-              background: "rgba(200,164,92,0.12)",
+              background: "rgba(37, 211, 102, 0.15)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "1.125rem",
+              fontSize: "1.25rem",
             }}
           >
             💰
           </div>
           <div>
-            <p style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--color-primary)", lineHeight: 1 }}>
-              S/ {(totalRevenue / 100).toFixed(2)}
+            <p
+              style={{
+                fontSize: "1.25rem",
+                fontWeight: 800,
+                color: "var(--color-primary)",
+                lineHeight: 1,
+              }}
+            >
+              S/ {(totalCollectedRevenue / 100).toFixed(2)}
             </p>
-            <p className="text-muted" style={{ fontSize: "0.75rem" }}>
-              Ingresos cobrados
+            <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+              Ingresos Cobrados
+            </p>
+          </div>
+        </div>
+
+        {/* Card 5: Por Cobrar en Local */}
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "16px 18px",
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "var(--radius-md)",
+              background: "rgba(239, 68, 68, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "1.25rem",
+            }}
+          >
+            ⏳
+          </div>
+          <div>
+            <p
+              style={{
+                fontSize: "1.25rem",
+                fontWeight: 800,
+                color: "#EF4444",
+                lineHeight: 1,
+              }}
+            >
+              S/ {(pendingRevenueToCollect / 100).toFixed(2)}
+            </p>
+            <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+              Por Cobrar en Local
             </p>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters Bar */}
       <div
         className="card"
         style={{
@@ -288,26 +431,27 @@ export function ReservasManager() {
           alignItems: "end",
         }}
       >
-        <div style={{ flex: "1 1 200px" }}>
+        <div style={{ flex: "1 1 220px" }}>
           <label className="label">Buscar</label>
           <input
             className="input"
-            placeholder="Código, nombre, teléfono, RUC, comprobante..."
+            placeholder="Código, nombre, teléfono, DNI..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div style={{ flex: "0 0 160px" }}>
+        <div style={{ flex: "0 0 180px" }}>
           <label className="label">Estado</label>
           <select
             className="select"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
-            <option value="">Todos</option>
-            <option value="confirmada">Confirmada</option>
-            <option value="completada">Completada</option>
-            <option value="cancelada">Cancelada</option>
+            <option value="">Todos los estados</option>
+            <option value="pendiente">🟡 Pendientes (WhatsApp)</option>
+            <option value="confirmada">🟢 Confirmadas</option>
+            <option value="completada">🏁 Completadas</option>
+            <option value="cancelada">❌ Canceladas</option>
           </select>
         </div>
         <div style={{ flex: "0 0 160px" }}>
@@ -334,7 +478,7 @@ export function ReservasManager() {
         </div>
         <button
           onClick={() => {
-            setFilterStatus("confirmada");
+            setFilterStatus("");
             setFilterDate("");
             setFilterType("");
             setSearchTerm("");
@@ -355,7 +499,9 @@ export function ReservasManager() {
         ) : filteredBookings.length === 0 ? (
           <div style={{ padding: 48, textAlign: "center" }}>
             <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>📋</div>
-            <p className="text-muted">No se encontraron reservas con los filtros aplicados.</p>
+            <p className="text-muted">
+              No se encontraron reservas con los filtros aplicados.
+            </p>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -469,7 +615,7 @@ export function ReservasManager() {
                       letterSpacing: "0.06em",
                     }}
                   >
-                    Comprobante
+                    WhatsApp
                   </th>
                   <th
                     style={{
@@ -505,13 +651,19 @@ export function ReservasManager() {
                     <tr
                       key={b.id}
                       style={{
-                        borderBottom: expandedId === b.id ? "none" : "1px solid var(--color-border)",
+                        borderBottom:
+                          expandedId === b.id
+                            ? "none"
+                            : "1px solid var(--color-border)",
                         cursor: "pointer",
                         transition: "background var(--transition-fast)",
                       }}
-                      onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}
+                      onClick={() =>
+                        setExpandedId(expandedId === b.id ? null : b.id)
+                      }
                       onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "rgba(200,164,92,0.04)")
+                        (e.currentTarget.style.background =
+                          "rgba(200,164,92,0.04)")
                       }
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.background = "transparent")
@@ -521,7 +673,7 @@ export function ReservasManager() {
                         <code
                           style={{
                             color: "var(--color-primary)",
-                            fontWeight: 600,
+                            fontWeight: 700,
                             fontSize: "0.875rem",
                           }}
                         >
@@ -534,16 +686,27 @@ export function ReservasManager() {
                             {b.client_first_name} {b.client_last_name}
                           </p>
                           {b.client_phone && (
-                            <p className="text-muted" style={{ fontSize: "0.75rem" }}>
+                            <p
+                              className="text-muted"
+                              style={{ fontSize: "0.75rem" }}
+                            >
                               📱 {b.client_phone}
                             </p>
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: "14px 16px", fontSize: "0.875rem" }}>
+                      <td
+                        style={{ padding: "14px 16px", fontSize: "0.875rem" }}
+                      >
                         {b.booking_date}
                       </td>
-                      <td style={{ padding: "14px 16px", fontWeight: 600, fontSize: "0.9375rem" }}>
+                      <td
+                        style={{
+                          padding: "14px 16px",
+                          fontWeight: 600,
+                          fontSize: "0.9375rem",
+                        }}
+                      >
                         {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
                       </td>
                       <td style={{ padding: "14px 16px" }}>
@@ -575,19 +738,32 @@ export function ReservasManager() {
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px" }}>
-                        <span className={`badge ${statusColors[b.status] || "badge-neutral"}`}>
+                        <span
+                          className={`badge ${
+                            statusColors[b.status] || "badge-neutral"
+                          }`}
+                        >
                           {statusLabels[b.status] || b.status}
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px" }}>
-                        <span className={`badge ${paymentColors[b.payment_status] || "badge-neutral"}`}>
+                        <span
+                          className={`badge ${
+                            paymentColors[b.payment_status] || "badge-neutral"
+                          }`}
+                        >
                           {paymentLabels[b.payment_status] || b.payment_status}
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px" }}>
                         {b.client_phone ? (
                           <a
-                            href={`https://wa.me/51${b.client_phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu reserva ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`)}`}
+                            href={`https://wa.me/51${b.client_phone.replace(
+                              /\D/g,
+                              ""
+                            )}?text=${encodeURIComponent(
+                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu reserva ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`
+                            )}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -606,11 +782,18 @@ export function ReservasManager() {
                               textDecoration: "none",
                             }}
                           >
-                            <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 14, height: 14 }} />
+                            <img
+                              src="/icons/whatsApp.svg"
+                              alt="WhatsApp"
+                              style={{ width: 14, height: 14 }}
+                            />
                             <span>WhatsApp</span>
                           </a>
                         ) : (
-                          <span className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                          <span
+                            className="text-muted"
+                            style={{ fontSize: "0.8125rem" }}
+                          >
                             —
                           </span>
                         )}
@@ -625,8 +808,85 @@ export function ReservasManager() {
                       >
                         S/ {(b.total_price_cents / 100).toFixed(2)}
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <td
+                        style={{
+                          padding: "14px 16px",
+                          textAlign: "center",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          {/* Quick Confirm button for WhatsApp Pending */}
+                          {b.status === "pendiente" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateBooking(b.id, { status: "confirmada" });
+                              }}
+                              disabled={actionLoading === b.id}
+                              className="btn btn-sm"
+                              style={{
+                                background: "var(--color-success)",
+                                color: "#000000",
+                                fontWeight: 700,
+                                padding: "4px 8px",
+                                fontSize: "0.75rem",
+                              }}
+                              title="Confirmar Cita"
+                            >
+                              ✅ Confirmar
+                            </button>
+                          )}
+
+                          {/* Quick Pay button if not total */}
+                          {b.payment_status !== "total" &&
+                            b.status !== "cancelada" && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateBooking(b.id, { mark_paid: true });
+                                }}
+                                disabled={actionLoading === b.id}
+                                className="btn btn-primary btn-sm"
+                                style={{
+                                  padding: "4px 8px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 700,
+                                }}
+                                title="Marcar como Cobrado en Local"
+                              >
+                                💰 Cobrar
+                              </button>
+                            )}
+
+                          {/* Quick Complete button if confirmed */}
+                          {b.status === "confirmada" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateBooking(b.id, { status: "completada" });
+                              }}
+                              disabled={actionLoading === b.id}
+                              className="btn btn-secondary btn-sm"
+                              style={{
+                                padding: "4px 8px",
+                                fontSize: "0.75rem",
+                              }}
+                              title="Marcar Cita Completada"
+                            >
+                              🏁
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={(e) => {
@@ -645,13 +905,17 @@ export function ReservasManager() {
                           >
                             🗑️
                           </button>
+
                           <span
                             style={{
                               color: "var(--color-text-muted)",
                               fontSize: "0.8125rem",
                               transition: "transform var(--transition-fast)",
                               display: "inline-block",
-                              transform: expandedId === b.id ? "rotate(180deg)" : "rotate(0deg)",
+                              transform:
+                                expandedId === b.id
+                                  ? "rotate(180deg)"
+                                  : "rotate(0deg)",
                             }}
                           >
                             ▼
@@ -681,7 +945,8 @@ export function ReservasManager() {
                             <div
                               style={{
                                 display: "grid",
-                                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                                gridTemplateColumns:
+                                  "repeat(auto-fit, minmax(220px, 1fr))",
                                 gap: 20,
                                 marginBottom: 20,
                               }}
@@ -700,21 +965,43 @@ export function ReservasManager() {
                                 >
                                   Datos del cliente
                                 </p>
-                                <p style={{ fontSize: "0.875rem", marginBottom: 4 }}>
-                                  <strong>{b.client_first_name} {b.client_last_name}</strong>
+                                <p
+                                  style={{
+                                    fontSize: "0.875rem",
+                                    marginBottom: 4,
+                                  }}
+                                >
+                                  <strong>
+                                    {b.client_first_name} {b.client_last_name}
+                                  </strong>
                                 </p>
                                 {b.client_email && (
-                                  <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>
+                                  <p
+                                    className="text-muted"
+                                    style={{
+                                      fontSize: "0.8125rem",
+                                      marginBottom: 2,
+                                    }}
+                                  >
                                     ✉️ {b.client_email}
                                   </p>
                                 )}
                                 {b.client_phone && (
-                                  <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>
+                                  <p
+                                    className="text-muted"
+                                    style={{
+                                      fontSize: "0.8125rem",
+                                      marginBottom: 2,
+                                    }}
+                                  >
                                     📱 {b.client_phone}
                                   </p>
                                 )}
                                 {b.client_dni && (
-                                  <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                                  <p
+                                    className="text-muted"
+                                    style={{ fontSize: "0.8125rem" }}
+                                  >
                                     🪪 DNI: {b.client_dni}
                                   </p>
                                 )}
@@ -734,22 +1021,70 @@ export function ReservasManager() {
                                 >
                                   Detalles de la cita
                                 </p>
-                                <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
+                                <p
+                                  className="text-muted"
+                                  style={{
+                                    fontSize: "0.8125rem",
+                                    marginBottom: 4,
+                                  }}
+                                >
                                   📅 {b.booking_date}
                                 </p>
-                                <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
-                                  ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)} ({formatDuration(b.total_duration_minutes)})
+                                <p
+                                  className="text-muted"
+                                  style={{
+                                    fontSize: "0.8125rem",
+                                    marginBottom: 4,
+                                  }}
+                                >
+                                  ⏰ {b.start_time?.slice(0, 5)} –{" "}
+                                  {b.end_time?.slice(0, 5)} (
+                                  {formatDuration(b.total_duration_minutes)})
                                 </p>
                                 {b.confirmed_at && (
-                                  <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
-                                    ✅ Confirmada: {new Date(b.confirmed_at).toLocaleString("es-PE")}
+                                  <p
+                                    className="text-muted"
+                                    style={{
+                                      fontSize: "0.8125rem",
+                                      marginBottom: 4,
+                                    }}
+                                  >
+                                    ✅ Confirmada:{" "}
+                                    {new Date(b.confirmed_at).toLocaleString(
+                                      "es-PE"
+                                    )}
                                   </p>
                                 )}
-                                {b.assigned_employee_id && (
-                                  <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                                    👤 Empleado: <strong>{employeeMap.get(b.assigned_employee_id) || "—"}</strong>
-                                  </p>
-                                )}
+                                <div style={{ marginTop: 8 }}>
+                                  <label
+                                    className="label"
+                                    style={{ fontSize: "0.75rem" }}
+                                  >
+                                    Asignar Empleado:
+                                  </label>
+                                  <select
+                                    className="select"
+                                    style={{
+                                      padding: "4px 8px",
+                                      fontSize: "0.8125rem",
+                                      maxWidth: 220,
+                                    }}
+                                    value={b.assigned_employee_id || ""}
+                                    onChange={(e) =>
+                                      updateBooking(b.id, {
+                                        assigned_employee_id:
+                                          e.target.value || null,
+                                      })
+                                    }
+                                  >
+                                    <option value="">Sin asignar</option>
+                                    {employees.map((emp) => (
+                                      <option key={emp.id} value={emp.id}>
+                                        {emp.first_name} {emp.last_name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
 
                               {/* Payment Info */}
@@ -766,14 +1101,25 @@ export function ReservasManager() {
                                 >
                                   Información de pago
                                 </p>
-                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: "0.8125rem" }}>
-                                  <span className="text-muted">Adelanto pagado:</span>
-                                  <span style={{ fontWeight: 600 }}>S/ {(b.advance_amount_cents / 100).toFixed(2)}</span>
-                                </div>
-                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: "0.8125rem" }}>
-                                  <span className="text-muted">Saldo pendiente:</span>
-                                  <span style={{ fontWeight: 600, color: b.balance_cents > 0 ? "var(--color-warning)" : "var(--color-success)" }}>
-                                    S/ {(b.balance_cents / 100).toFixed(2)}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    marginBottom: 4,
+                                    fontSize: "0.8125rem",
+                                  }}
+                                >
+                                  <span className="text-muted">
+                                    Estado de pago:
+                                  </span>
+                                  <span
+                                    className={`badge ${
+                                      paymentColors[b.payment_status] ||
+                                      "badge-neutral"
+                                    }`}
+                                  >
+                                    {paymentLabels[b.payment_status] ||
+                                      b.payment_status}
                                   </span>
                                 </div>
                                 <div
@@ -786,8 +1132,15 @@ export function ReservasManager() {
                                     fontSize: "0.9375rem",
                                   }}
                                 >
-                                  <span style={{ fontWeight: 700 }}>Total:</span>
-                                  <span style={{ fontWeight: 700, color: "var(--color-primary)" }}>
+                                  <span style={{ fontWeight: 700 }}>
+                                    Total del Servicio:
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontWeight: 800,
+                                      color: "var(--color-primary)",
+                                    }}
+                                  >
                                     S/ {(b.total_price_cents / 100).toFixed(2)}
                                   </span>
                                 </div>
@@ -809,11 +1162,22 @@ export function ReservasManager() {
                                 </p>
                                 {b.client_phone ? (
                                   <div>
-                                    <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 6 }}>
+                                    <p
+                                      className="text-muted"
+                                      style={{
+                                        fontSize: "0.8125rem",
+                                        marginBottom: 6,
+                                      }}
+                                    >
                                       Teléfono: <strong>{b.client_phone}</strong>
                                     </p>
                                     <a
-                                      href={`https://wa.me/51${b.client_phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} programada para el ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`)}`}
+                                      href={`https://wa.me/51${b.client_phone.replace(
+                                        /\D/g,
+                                        ""
+                                      )}?text=${encodeURIComponent(
+                                        `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} programada para el ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`
+                                      )}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="btn btn-sm"
@@ -831,19 +1195,26 @@ export function ReservasManager() {
                                         textDecoration: "none",
                                       }}
                                     >
-                                      <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 16, height: 16 }} />
-                                      <span>Enviar WhatsApp</span>
+                                      <img
+                                        src="/icons/whatsApp.svg"
+                                        alt="WhatsApp"
+                                        style={{ width: 16, height: 16 }}
+                                      />
+                                      <span>Abrir Chat WhatsApp</span>
                                     </a>
                                   </div>
                                 ) : (
-                                  <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                                  <p
+                                    className="text-muted"
+                                    style={{ fontSize: "0.8125rem" }}
+                                  >
                                     Sin teléfono registrado
                                   </p>
                                 )}
                               </div>
                             </div>
 
-                            {/* Actions */}
+                            {/* Action Buttons in Expanded Drawer */}
                             <div
                               style={{
                                 display: "flex",
@@ -851,36 +1222,116 @@ export function ReservasManager() {
                                 flexWrap: "wrap",
                                 paddingTop: 16,
                                 borderTop: "1px solid var(--color-border)",
+                                alignItems: "center",
                               }}
                             >
-                              {b.status === "confirmada" && (
-                                <>
+                              {/* Action 1: Confirm appointment */}
+                              {b.status === "pendiente" && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateBooking(b.id, { status: "confirmada" });
+                                  }}
+                                  disabled={actionLoading === b.id}
+                                  className="btn btn-sm"
+                                  style={{
+                                    background: "var(--color-success)",
+                                    color: "#000000",
+                                    fontWeight: 700,
+                                    padding: "8px 16px",
+                                  }}
+                                >
+                                  {actionLoading === b.id
+                                    ? "Actualizando..."
+                                    : "✅ Confirmar Cita"}
+                                </button>
+                              )}
+
+                              {/* Action 2: Mark as paid in cash/pos */}
+                              {b.payment_status !== "total" &&
+                                b.status !== "cancelada" && (
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      updateBookingStatus(b.id, "completada");
+                                      updateBooking(b.id, { mark_paid: true });
                                     }}
                                     disabled={actionLoading === b.id}
                                     className="btn btn-primary btn-sm"
+                                    style={{
+                                      padding: "8px 16px",
+                                      fontWeight: 700,
+                                    }}
                                   >
-                                    {actionLoading === b.id ? "Procesando..." : "🏁 Marcar Completada"}
+                                    {actionLoading === b.id
+                                      ? "Procesando..."
+                                      : `💰 Marcar como Pagado en Local (S/ ${(
+                                          b.total_price_cents / 100
+                                        ).toFixed(2)})`}
                                   </button>
+                                )}
+
+                              {/* Action 3: Complete appointment */}
+                              {b.status === "confirmada" && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateBooking(b.id, {
+                                      status: "completada",
+                                    });
+                                  }}
+                                  disabled={actionLoading === b.id}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: "8px 16px" }}
+                                >
+                                  {actionLoading === b.id
+                                    ? "Actualizando..."
+                                    : "🏁 Marcar Cita como Completada"}
+                                </button>
+                              )}
+
+                              {/* Action 4: Cancel appointment */}
+                              {b.status !== "cancelada" &&
+                                b.status !== "completada" && (
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (confirm("¿Estás seguro de cancelar esta reserva?")) {
-                                        updateBookingStatus(b.id, "cancelada");
+                                      if (
+                                        confirm(
+                                          "¿Estás seguro de cancelar esta reserva?"
+                                        )
+                                      ) {
+                                        updateBooking(b.id, {
+                                          status: "cancelada",
+                                        });
                                       }
                                     }}
                                     disabled={actionLoading === b.id}
                                     className="btn btn-danger btn-sm"
+                                    style={{ padding: "8px 16px" }}
                                   >
                                     ✕ Cancelar Reserva
                                   </button>
-                                </>
+                                )}
+
+                              {b.status === "completada" && (
+                                <span
+                                  className="badge badge-gold"
+                                  style={{
+                                    padding: "6px 12px",
+                                    fontSize: "0.8125rem",
+                                  }}
+                                >
+                                  ✨ Servicio Completado y Cobrado
+                                </span>
                               )}
 
+                              {/* Action 5: Delete Permanently */}
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   deleteBookingPermanently(b);
@@ -893,7 +1344,9 @@ export function ReservasManager() {
                                   marginLeft: "auto",
                                 }}
                               >
-                                {actionLoading === b.id ? "Eliminando..." : "🗑️ Eliminar Definitivamente"}
+                                {actionLoading === b.id
+                                  ? "Eliminando..."
+                                  : "🗑️ Eliminar Definitivamente"}
                               </button>
                             </div>
                           </div>
@@ -931,4 +1384,3 @@ export function ReservasManager() {
     </div>
   );
 }
-
