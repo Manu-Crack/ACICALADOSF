@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { formatDuration } from "@/lib/utils/format";
 
 type Service = {
   id: string;
   name: string;
   type: string;
+  price_cents: number;
+  duration_minutes: number;
 };
 
 type EmployeeBlock = {
@@ -29,12 +33,73 @@ type Employee = {
   employee_blocks?: EmployeeBlock[];
 };
 
+type BookingServiceItem = {
+  id: string;
+  service_id: string;
+  service_name: string;
+  service_price_cents: number;
+  duration_minutes: number;
+};
+
+type AssignedBooking = {
+  id: string;
+  booking_code: string;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  payment_status: string;
+  total_price_cents: number;
+  total_duration_minutes: number;
+  assigned_employee_id: string | null;
+  client_first_name: string;
+  client_last_name: string;
+  client_phone: string | null;
+  client_email: string | null;
+  booking_services: BookingServiceItem[];
+};
+
+const statusLabels: Record<string, string> = {
+  pendiente: "Pendiente (WhatsApp)",
+  confirmada: "Confirmada",
+  completada: "Completada",
+  cancelada: "Cancelada",
+  expirada: "Expirada",
+};
+
+const statusColors: Record<string, string> = {
+  pendiente: "badge-warning",
+  confirmada: "badge-success",
+  completada: "badge-gold",
+  cancelada: "badge-error",
+  expirada: "badge-neutral",
+};
+
+const paymentLabels: Record<string, string> = {
+  sin_pago: "Pendiente de cobro",
+  pendiente: "Pendiente de cobro",
+  parcial: "Parcial",
+  total: "Pagado en local",
+};
+
 export default function EmployeesManager() {
+  const [activeTab, setActiveTab] = useState<"employees" | "assignments">("employees");
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [assignedBookings, setAssignedBookings] = useState<AssignedBooking[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filters for Tab 1 (Employees list)
   const [filterType, setFilterType] = useState<"all" | "barberia" | "spa">("all");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Filters for Tab 2 (Assigned Services & Bookings)
+  const [selectedEmpFilter, setSelectedEmpFilter] = useState<string>("all");
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<string>("all");
+  const [assignmentDateFilter, setAssignmentDateFilter] = useState<string>("");
+  const [assignmentSearch, setAssignmentSearch] = useState<string>("");
+  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
 
   // Modal states
   const [showEmpModal, setShowEmpModal] = useState(false);
@@ -58,6 +123,8 @@ export default function EmployeesManager() {
   const [blockReason, setBlockReason] = useState("Permiso / Ausencia");
   const [savingAbsence, setSavingAbsence] = useState(false);
 
+  const supabase = createClient();
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,16 +141,87 @@ export default function EmployeesManager() {
         const svcData = await svcRes.json();
         setServices(svcData);
       }
+
+      // Load bookings with assigned services
+      const { data: bookingsData } = await supabase
+        .from("bookings")
+        .select(
+          `
+          id,
+          booking_code,
+          booking_date,
+          start_time,
+          end_time,
+          status,
+          payment_status,
+          total_price_cents,
+          total_duration_minutes,
+          assigned_employee_id,
+          client_first_name,
+          client_last_name,
+          client_phone,
+          client_email,
+          booking_services (
+            id,
+            service_id,
+            service_name,
+            service_price_cents,
+            duration_minutes
+          )
+        `
+        )
+        .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
+        .order("booking_date", { ascending: false })
+        .order("start_time", { ascending: true })
+        .limit(200);
+
+      setAssignedBookings((bookingsData as unknown as AssignedBooking[]) ?? []);
     } catch (err) {
-      console.error("Error cargando datos de empleados:", err);
+      console.error("Error cargando datos de empleados y servicios asignados:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Employee Map
+  const employeeMap = new Map(
+    employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
+  );
+
+  // Switch to assignments tab for a specific employee
+  function viewEmployeeAssignments(employeeId: string) {
+    setSelectedEmpFilter(employeeId);
+    setActiveTab("assignments");
+  }
+
+  // Reassign or update booking status from assignments tab
+  async function handleUpdateAssignedBooking(
+    bookingId: string,
+    payload: Record<string, unknown>
+  ) {
+    setUpdatingBookingId(bookingId);
+    try {
+      const res = await fetch("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bookingId, ...payload }),
+      });
+      if (res.ok) {
+        await loadData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "No se pudo actualizar la reserva");
+      }
+    } catch {
+      alert("Error de conexión al actualizar la asignación.");
+    } finally {
+      setUpdatingBookingId(null);
+    }
+  }
 
   // Abrir Modal Empleado (Crear / Editar)
   function handleOpenEmpModal(emp?: Employee) {
@@ -248,12 +386,70 @@ export default function EmployeesManager() {
     setSelectedSkills((prev) => Array.from(new Set([...prev, ...matchingServiceIds])));
   }
 
+  // Filtered employees for Tab 1
   const filteredEmployees = employees.filter((emp) => {
     if (filterType !== "all" && emp.type !== filterType) return false;
     if (!searchTerm) return true;
     const name = `${emp.first_name} ${emp.last_name}`.toLowerCase();
     return name.includes(searchTerm.toLowerCase());
   });
+
+  // Filtered bookings for Tab 2 (Assigned Services Module)
+  const filteredAssignedBookings = assignedBookings.filter((b) => {
+    if (selectedEmpFilter === "unassigned") {
+      if (b.assigned_employee_id !== null) return false;
+    } else if (selectedEmpFilter !== "all") {
+      if (b.assigned_employee_id !== selectedEmpFilter) return false;
+    }
+
+    if (assignmentStatusFilter !== "all" && b.status !== assignmentStatusFilter) {
+      return false;
+    }
+
+    if (assignmentDateFilter && b.booking_date !== assignmentDateFilter) {
+      return false;
+    }
+
+    if (assignmentSearch) {
+      const term = assignmentSearch.toLowerCase();
+      const code = b.booking_code.toLowerCase();
+      const client = `${b.client_first_name} ${b.client_last_name}`.toLowerCase();
+      const phone = (b.client_phone || "").toLowerCase();
+      const hasServiceMatch = b.booking_services?.some((s) =>
+        s.service_name.toLowerCase().includes(term)
+      );
+      return (
+        code.includes(term) ||
+        client.includes(term) ||
+        phone.includes(term) ||
+        hasServiceMatch
+      );
+    }
+
+    return true;
+  });
+
+  // Today string for calculations
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  // Stats for the selected employee in Tab 2
+  const selectedEmpBookings = assignedBookings.filter((b) => {
+    if (selectedEmpFilter === "all") return true;
+    if (selectedEmpFilter === "unassigned") return b.assigned_employee_id === null;
+    return b.assigned_employee_id === selectedEmpFilter;
+  });
+
+  const empTotalAssignments = selectedEmpBookings.length;
+  const empTodayAssignments = selectedEmpBookings.filter(
+    (b) => b.booking_date === todayStr && b.status !== "cancelada"
+  ).length;
+  const empCompletedAssignments = selectedEmpBookings.filter(
+    (b) => b.status === "completada"
+  ).length;
+
+  const empTotalRevenue = selectedEmpBookings
+    .filter((b) => b.status === "completada" || b.payment_status === "total")
+    .reduce((sum, b) => sum + b.total_price_cents, 0);
 
   const totalEmployees = employees.length;
   const spaCount = employees.filter((e) => e.type === "spa").length;
@@ -267,19 +463,20 @@ export default function EmployeesManager() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: 24,
+          marginBottom: 20,
           flexWrap: "wrap",
           gap: 16,
         }}
       >
         <div>
           <h1 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: 4 }}>
-            👥 Personal y Especialidades
+            👥 Personal y Asignación de Servicios
           </h1>
           <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            Gestión de trabajadores, asignación de servicios y control de ausencias.
+            Administra a tu equipo, revisa los servicios y citas asignadas a cada trabajador.
           </p>
         </div>
+
         <button
           onClick={() => handleOpenEmpModal()}
           className="btn btn-primary"
@@ -289,279 +486,1006 @@ export default function EmployeesManager() {
         </button>
       </div>
 
-      {/* Stats Bar */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        <div className="card" style={{ padding: 16, textAlign: "center" }}>
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Total Personal
-          </span>
-          <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--color-primary)" }}>
-            {totalEmployees}
-          </p>
-        </div>
-        <div className="card" style={{ padding: 16, textAlign: "center" }}>
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Especialistas Spa
-          </span>
-          <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#e879f9" }}>
-            {spaCount}
-          </p>
-        </div>
-        <div className="card" style={{ padding: 16, textAlign: "center" }}>
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Barberos
-          </span>
-          <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#38bdf8" }}>
-            {barberiaCount}
-          </p>
-        </div>
-      </div>
-
-      {/* Filters & Search */}
+      {/* Tabs Navigation Bar */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 16,
+          gap: 8,
+          borderBottom: "1px solid var(--color-border)",
           marginBottom: 24,
-          flexWrap: "wrap",
+          paddingBottom: 2,
         }}
       >
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["all", "spa", "barberia"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setFilterType(t)}
-              className={`btn btn-sm ${filterType === t ? "btn-primary" : "btn-ghost"}`}
-              style={{ textTransform: "capitalize" }}
-            >
-              {t === "all" ? "Todos" : t === "spa" ? "🌸 Spa" : "💈 Barbería"}
-            </button>
-          ))}
-        </div>
-
-        <input
-          type="text"
-          placeholder="🔍 Buscar por nombre..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="input"
-          style={{ width: 260 }}
-        />
-      </div>
-
-      {/* Employees Grid */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 60, color: "var(--color-text-muted)" }}>
-          Cargando personal...
-        </div>
-      ) : filteredEmployees.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: "center" }}>
-          <p style={{ color: "var(--color-text-muted)" }}>No se encontraron trabajadores.</p>
-        </div>
-      ) : (
-        <div
+        <button
+          type="button"
+          onClick={() => setActiveTab("employees")}
+          className={`btn ${activeTab === "employees" ? "btn-primary" : "btn-ghost"}`}
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-            gap: 20,
+            borderRadius: "var(--radius-md) var(--radius-md) 0 0",
+            padding: "10px 20px",
+            fontSize: "0.9375rem",
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {filteredEmployees.map((emp) => {
-            const skillServiceIds = new Set(emp.employee_skills?.map((s) => s.service_id));
-            const empServices = services.filter((s) => skillServiceIds.has(s.id));
-            const blocks = emp.employee_blocks || [];
+          <span>👥 Directorio & Habilidades</span>
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 12,
+              fontSize: "0.75rem",
+              background:
+                activeTab === "employees"
+                  ? "rgba(0,0,0,0.3)"
+                  : "rgba(255,255,255,0.1)",
+            }}
+          >
+            {employees.length}
+          </span>
+        </button>
 
-            return (
-              <div
-                key={emp.id}
-                className="card"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  padding: 20,
-                  borderLeft: `4px solid ${
-                    emp.type === "barberia" ? "#38bdf8" : "#e879f9"
-                  }`,
-                }}
-              >
-                <div>
-                  {/* Top row */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("assignments")}
+          className={`btn ${activeTab === "assignments" ? "btn-primary" : "btn-ghost"}`}
+          style={{
+            borderRadius: "var(--radius-md) var(--radius-md) 0 0",
+            padding: "10px 20px",
+            fontSize: "0.9375rem",
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span>📋 Citas y Servicios Asignados por Trabajador</span>
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 12,
+              fontSize: "0.75rem",
+              background:
+                activeTab === "assignments"
+                  ? "rgba(0,0,0,0.3)"
+                  : "rgba(255,255,255,0.1)",
+            }}
+          >
+            {assignedBookings.length}
+          </span>
+        </button>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 1: EMPLOYEES DIRECTORY & SKILLS */}
+      {/* ========================================================================= */}
+      {activeTab === "employees" && (
+        <div className="animate-fadeIn">
+          {/* Stats Bar */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 16,
+              marginBottom: 24,
+            }}
+          >
+            <div className="card" style={{ padding: 16, textAlign: "center" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                Total Personal
+              </span>
+              <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--color-primary)" }}>
+                {totalEmployees}
+              </p>
+            </div>
+            <div className="card" style={{ padding: 16, textAlign: "center" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                Especialistas Spa
+              </span>
+              <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#e879f9" }}>
+                {spaCount}
+              </p>
+            </div>
+            <div className="card" style={{ padding: 16, textAlign: "center" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                Barberos
+              </span>
+              <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#38bdf8" }}>
+                {barberiaCount}
+              </p>
+            </div>
+          </div>
+
+          {/* Filters & Search */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 16,
+              marginBottom: 24,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["all", "spa", "barberia"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setFilterType(t)}
+                  className={`btn btn-sm ${filterType === t ? "btn-primary" : "btn-ghost"}`}
+                  style={{ textTransform: "capitalize" }}
+                >
+                  {t === "all" ? "Todos" : t === "spa" ? "🌸 Spa" : "💈 Barbería"}
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="text"
+              placeholder="🔍 Buscar por nombre..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input"
+              style={{ width: 260 }}
+            />
+          </div>
+
+          {/* Employees Grid */}
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 60, color: "var(--color-text-muted)" }}>
+              Cargando personal...
+            </div>
+          ) : filteredEmployees.length === 0 ? (
+            <div className="card" style={{ padding: 40, textAlign: "center" }}>
+              <p style={{ color: "var(--color-text-muted)" }}>No se encontraron trabajadores.</p>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+                gap: 20,
+              }}
+            >
+              {filteredEmployees.map((emp) => {
+                const skillServiceIds = new Set(emp.employee_skills?.map((s) => s.service_id));
+                const empServices = services.filter((s) => skillServiceIds.has(s.id));
+                const blocks = emp.employee_blocks || [];
+                const assignedCount = assignedBookings.filter(
+                  (b) => b.assigned_employee_id === emp.id && b.status !== "cancelada"
+                ).length;
+
+                return (
                   <div
+                    key={emp.id}
+                    className="card card-gold"
                     style={{
                       display: "flex",
+                      flexDirection: "column",
                       justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      marginBottom: 12,
+                      padding: 20,
+                      borderLeft: `4px solid ${
+                        emp.type === "barberia" ? "#38bdf8" : "#e879f9"
+                      }`,
                     }}
                   >
                     <div>
-                      <h3 style={{ fontSize: "1.125rem", fontWeight: 700, marginBottom: 2 }}>
-                        {emp.first_name} {emp.last_name}
-                      </h3>
-                      <span
-                        className={`badge ${
-                          emp.type === "barberia" ? "badge-info" : "badge-secondary"
-                        }`}
-                        style={{ fontSize: "0.75rem" }}
+                      {/* Top row */}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          marginBottom: 12,
+                        }}
                       >
-                        {emp.type === "barberia" ? "💈 Barbería" : "🌸 Spa"}
-                      </span>
-                    </div>
-
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: 12,
-                        fontSize: "0.6875rem",
-                        fontWeight: 600,
-                        background: emp.is_active
-                          ? "rgba(34,197,94,0.1)"
-                          : "rgba(239,68,68,0.1)",
-                        color: emp.is_active ? "#22c55e" : "#ef4444",
-                      }}
-                    >
-                      {emp.is_active ? "Activo" : "Inactivo"}
-                    </span>
-                  </div>
-
-                  {/* Skills summary */}
-                  <div style={{ marginBottom: 16 }}>
-                    <p
-                      style={{
-                        fontSize: "0.6875rem",
-                        fontWeight: 700,
-                        color: "var(--color-text-muted)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        marginBottom: 6,
-                      }}
-                    >
-                      Especialidades ({empServices.length})
-                    </p>
-                    {emp.type === "barberia" ? (
-                      <span className="badge badge-outline" style={{ fontSize: "0.75rem" }}>
-                        ✂️ Todos los servicios de Barbería
-                      </span>
-                    ) : empServices.length === 0 ? (
-                      <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                        Sin servicios asignados
-                      </span>
-                    ) : (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxHeight: 90, overflowY: "auto" }}>
-                        {empServices.map((s) => (
+                        <div>
+                          <h3 style={{ fontSize: "1.125rem", fontWeight: 700, marginBottom: 2 }}>
+                            {emp.first_name} {emp.last_name}
+                          </h3>
                           <span
-                            key={s.id}
+                            className={`badge ${
+                              emp.type === "barberia" ? "badge-info" : "badge-secondary"
+                            }`}
+                            style={{ fontSize: "0.75rem" }}
+                          >
+                            {emp.type === "barberia" ? "💈 Barbería" : "🌸 Spa"}
+                          </span>
+                        </div>
+
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 12,
+                            fontSize: "0.6875rem",
+                            fontWeight: 600,
+                            background: emp.is_active
+                              ? "rgba(34,197,94,0.1)"
+                              : "rgba(239,68,68,0.1)",
+                            color: emp.is_active ? "#22c55e" : "#ef4444",
+                          }}
+                        >
+                          {emp.is_active ? "Activo" : "Inactivo"}
+                        </span>
+                      </div>
+
+                      {/* Skills summary */}
+                      <div style={{ marginBottom: 16 }}>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "var(--color-text-muted)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            marginBottom: 6,
+                          }}
+                        >
+                          Especialidades Habilitadas ({empServices.length})
+                        </p>
+                        {emp.type === "barberia" ? (
+                          <span className="badge badge-outline" style={{ fontSize: "0.75rem" }}>
+                            ✂️ Todos los servicios de Barbería
+                          </span>
+                        ) : empServices.length === 0 ? (
+                          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                            Sin servicios asignados
+                          </span>
+                        ) : (
+                          <div
                             style={{
-                              fontSize: "0.6875rem",
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                              background: "rgba(255,255,255,0.06)",
-                              border: "1px solid var(--color-border)",
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: 4,
+                              maxHeight: 90,
+                              overflowY: "auto",
                             }}
                           >
-                            {s.name}
-                          </span>
-                        ))}
+                            {empServices.map((s) => (
+                              <span
+                                key={s.id}
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  background: "rgba(255,255,255,0.06)",
+                                  border: "1px solid var(--color-border)",
+                                }}
+                              >
+                                {s.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Absences section */}
-                  {blocks.length > 0 && (
-                    <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px dashed var(--color-border)" }}>
+                      {/* Absences section */}
+                      {blocks.length > 0 && (
+                        <div
+                          style={{
+                            marginBottom: 16,
+                            paddingTop: 12,
+                            borderTop: "1px dashed var(--color-border)",
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontSize: "0.6875rem",
+                              fontWeight: 700,
+                              color: "var(--color-warning)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              marginBottom: 6,
+                            }}
+                          >
+                            ⚠️ Ausencias Registradas ({blocks.length})
+                          </p>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {blocks.map((b) => (
+                              <div
+                                key={b.id}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  fontSize: "0.75rem",
+                                  background: "rgba(234,179,8,0.08)",
+                                  padding: "4px 8px",
+                                  borderRadius: 4,
+                                }}
+                              >
+                                <span>
+                                  📅 {b.block_date} — {b.reason}
+                                </span>
+                                <button
+                                  onClick={() => handleDeleteAbsence(b.id)}
+                                  style={{
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    color: "#ef4444",
+                                    fontSize: "0.75rem",
+                                  }}
+                                  title="Eliminar permiso"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions & Link to assigned appointments */}
+                    <div style={{ paddingTop: 12, borderTop: "1px solid var(--color-border)", marginTop: 12 }}>
+                      <button
+                        type="button"
+                        onClick={() => viewEmployeeAssignments(emp.id)}
+                        className="btn btn-sm"
+                        style={{
+                          width: "100%",
+                          marginBottom: 8,
+                          background: "rgba(200,164,92,0.12)",
+                          color: "var(--color-primary)",
+                          border: "1px solid var(--color-primary-border)",
+                          fontWeight: 700,
+                          fontSize: "0.8125rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <span>📋 Ver Citas Asignadas</span>
+                        <span className="badge badge-gold" style={{ fontSize: "0.6875rem" }}>
+                          {assignedCount}
+                        </span>
+                      </button>
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => handleOpenEmpModal(emp)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ flex: 1 }}
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button
+                          onClick={() => handleOpenAbsenceModal(emp)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ flex: 1, color: "var(--color-warning)" }}
+                        >
+                          📅 Permiso
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEmp(emp)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: "#ef4444" }}
+                          title="Eliminar trabajador"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: ASSIGNED SERVICES & APPOINTMENTS PER WORKER */}
+      {/* ========================================================================= */}
+      {activeTab === "assignments" && (
+        <div className="animate-fadeIn">
+          {/* Quick Metrics for the selected Worker */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 16,
+              marginBottom: 24,
+            }}
+          >
+            <div
+              className="card card-gold"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "16px 18px",
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "var(--radius-md)",
+                  background: "rgba(200,164,92,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1.25rem",
+                }}
+              >
+                📌
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: "1.375rem",
+                    fontWeight: 800,
+                    color: "var(--color-primary)",
+                    lineHeight: 1,
+                  }}
+                >
+                  {empTotalAssignments}
+                </p>
+                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+                  Citas Asignadas
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="card"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "16px 18px",
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "var(--radius-md)",
+                  background: "rgba(56,189,248,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1.25rem",
+                }}
+              >
+                📅
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: "1.375rem",
+                    fontWeight: 800,
+                    color: "#38bdf8",
+                    lineHeight: 1,
+                  }}
+                >
+                  {empTodayAssignments}
+                </p>
+                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+                  Citas para Hoy
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="card"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "16px 18px",
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "var(--radius-md)",
+                  background: "rgba(34,197,94,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1.25rem",
+                }}
+              >
+                🏁
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: "1.375rem",
+                    fontWeight: 800,
+                    color: "var(--color-success)",
+                    lineHeight: 1,
+                  }}
+                >
+                  {empCompletedAssignments}
+                </p>
+                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+                  Completadas
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="card"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "16px 18px",
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "var(--radius-md)",
+                  background: "rgba(200,164,92,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1.25rem",
+                }}
+              >
+                💰
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: "1.25rem",
+                    fontWeight: 800,
+                    color: "var(--color-primary)",
+                    lineHeight: 1,
+                  }}
+                >
+                  S/ {(empTotalRevenue / 100).toFixed(2)}
+                </p>
+                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+                  Ingresos Generados
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtering controls */}
+          <div
+            className="card"
+            style={{
+              marginBottom: 24,
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "end",
+            }}
+          >
+            {/* Worker dropdown selector */}
+            <div style={{ flex: "1 1 240px" }}>
+              <label className="label">Filtrar por Trabajador</label>
+              <select
+                className="select"
+                value={selectedEmpFilter}
+                onChange={(e) => setSelectedEmpFilter(e.target.value)}
+                style={{ fontWeight: 600 }}
+              >
+                <option value="all">👥 Todos los Trabajadores ({assignedBookings.length})</option>
+                <option value="unassigned">⚠️ Citas Sin Asignar</option>
+                <optgroup label="Especialistas y Barberos">
+                  {employees.map((emp) => {
+                    const count = assignedBookings.filter(
+                      (b) => b.assigned_employee_id === emp.id && b.status !== "cancelada"
+                    ).length;
+                    return (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.type === "barberia" ? "💈" : "🌸"} {emp.first_name}{" "}
+                        {emp.last_name} ({count} citas)
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Status filter */}
+            <div style={{ flex: "0 0 180px" }}>
+              <label className="label">Estado</label>
+              <select
+                className="select"
+                value={assignmentStatusFilter}
+                onChange={(e) => setAssignmentStatusFilter(e.target.value)}
+              >
+                <option value="all">Todos los estados</option>
+                <option value="pendiente">🟡 Pendientes</option>
+                <option value="confirmada">🟢 Confirmadas</option>
+                <option value="completada">🏁 Completadas</option>
+                <option value="cancelada">❌ Canceladas</option>
+              </select>
+            </div>
+
+            {/* Date filter */}
+            <div style={{ flex: "0 0 160px" }}>
+              <label className="label">Fecha</label>
+              <input
+                type="date"
+                className="input"
+                value={assignmentDateFilter}
+                onChange={(e) => setAssignmentDateFilter(e.target.value)}
+              />
+            </div>
+
+            {/* Search */}
+            <div style={{ flex: "1 1 200px" }}>
+              <label className="label">Buscar Cita / Servicio</label>
+              <input
+                className="input"
+                placeholder="Código, cliente, servicio..."
+                value={assignmentSearch}
+                onChange={(e) => setAssignmentSearch(e.target.value)}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedEmpFilter("all");
+                setAssignmentStatusFilter("all");
+                setAssignmentDateFilter("");
+                setAssignmentSearch("");
+              }}
+              className="btn btn-ghost btn-sm"
+              style={{ marginBottom: 2 }}
+            >
+              Limpiar
+            </button>
+          </div>
+
+          {/* Assigned Bookings List */}
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 60, color: "var(--color-text-muted)" }}>
+              Cargando citas asignadas...
+            </div>
+          ) : filteredAssignedBookings.length === 0 ? (
+            <div className="card" style={{ padding: 48, textAlign: "center" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>📋</div>
+              <p style={{ color: "var(--color-text-muted)" }}>
+                No hay servicios ni citas asignadas con los filtros seleccionados.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {filteredAssignedBookings.map((b) => {
+                const assignedEmpName = b.assigned_employee_id
+                  ? employeeMap.get(b.assigned_employee_id) || "Desconocido"
+                  : "Sin asignar";
+
+                return (
+                  <div
+                    key={b.id}
+                    className="card card-gold"
+                    style={{
+                      padding: "18px 22px",
+                      borderLeft: `4px solid ${
+                        b.status === "confirmada"
+                          ? "var(--color-success)"
+                          : b.status === "completada"
+                          ? "var(--color-primary)"
+                          : b.status === "pendiente"
+                          ? "#f59e0b"
+                          : "#ef4444"
+                      }`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                        gap: 12,
+                        marginBottom: 12,
+                      }}
+                    >
+                      {/* Left: Code, Worker and Date/Time */}
+                      <div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            marginBottom: 6,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <code
+                            style={{
+                              color: "var(--color-primary)",
+                              fontWeight: 800,
+                              fontSize: "1rem",
+                              background: "rgba(200,164,92,0.1)",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            {b.booking_code}
+                          </code>
+
+                          <span
+                            style={{
+                              fontSize: "0.875rem",
+                              fontWeight: 700,
+                              color: b.assigned_employee_id
+                                ? "#FFFFFF"
+                                : "var(--color-warning)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            👤 Trabajador asignado:{" "}
+                            <strong style={{ color: "var(--color-primary)" }}>
+                              {assignedEmpName}
+                            </strong>
+                          </span>
+                        </div>
+
+                        <p
+                          className="text-muted"
+                          style={{ fontSize: "0.875rem", display: "flex", gap: 14, flexWrap: "wrap" }}
+                        >
+                          <span>📅 {b.booking_date}</span>
+                          <span>
+                            ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
+                          </span>
+                          <span>
+                            ⏱️ {formatDuration(b.total_duration_minutes || 30)}
+                          </span>
+                        </p>
+                      </div>
+
+                      {/* Right: Badges */}
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span className={`badge ${statusColors[b.status] || "badge-neutral"}`}>
+                          {statusLabels[b.status] || b.status}
+                        </span>
+                        <span
+                          className={`badge ${
+                            b.payment_status === "total"
+                              ? "badge-success"
+                              : "badge-error"
+                          }`}
+                        >
+                          {paymentLabels[b.payment_status] || b.payment_status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Services Assigned to this Appointment */}
+                    <div
+                      style={{
+                        background: "rgba(0,0,0,0.25)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "12px 16px",
+                        marginBottom: 14,
+                        border: "1px solid var(--color-border)",
+                      }}
+                    >
                       <p
                         style={{
                           fontSize: "0.6875rem",
                           fontWeight: 700,
-                          color: "var(--color-warning)",
+                          color: "var(--color-text-muted)",
                           textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          marginBottom: 6,
+                          letterSpacing: "0.06em",
+                          marginBottom: 8,
                         }}
                       >
-                        ⚠️ Ausencias Registradas ({blocks.length})
+                        ✂️ Servicios Asignados ({b.booking_services?.length || 0}):
                       </p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {blocks.map((b) => (
-                          <div
-                            key={b.id}
+
+                      {b.booking_services && b.booking_services.length > 0 ? (
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fill, minmax(240px, 1fr))",
+                            gap: 8,
+                          }}
+                        >
+                          {b.booking_services.map((svc) => (
+                            <div
+                              key={svc.id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "6px 12px",
+                                background: "rgba(255,255,255,0.04)",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid var(--color-border)",
+                                fontSize: "0.8125rem",
+                              }}
+                            >
+                              <div>
+                                <span style={{ fontWeight: 600, color: "#FFFFFF" }}>
+                                  {svc.service_name}
+                                </span>
+                                <span
+                                  className="text-muted"
+                                  style={{ fontSize: "0.75rem", marginLeft: 6 }}
+                                >
+                                  ({formatDuration(svc.duration_minutes)})
+                                </span>
+                              </div>
+                              <strong style={{ color: "var(--color-primary)" }}>
+                                S/ {(svc.service_price_cents / 100).toFixed(2)}
+                              </strong>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                          Sin servicios detallados
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Bottom Row: Client info, Reassign Employee selector and Actions */}
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 12,
+                        paddingTop: 8,
+                      }}
+                    >
+                      {/* Client Info & WhatsApp */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.875rem" }}>
+                          Cliente: <strong>{b.client_first_name} {b.client_last_name}</strong>
+                        </span>
+
+                        {b.client_phone && (
+                          <a
+                            href={`https://wa.me/51${b.client_phone.replace(
+                              /\D/g,
+                              ""
+                            )}?text=${encodeURIComponent(
+                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)} con ${assignedEmpName}.`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-sm"
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
+                              background: "#25D366",
+                              color: "#FFFFFF",
+                              border: "none",
+                              padding: "4px 10px",
                               fontSize: "0.75rem",
-                              background: "rgba(234,179,8,0.08)",
-                              padding: "4px 8px",
-                              borderRadius: 4,
+                              fontWeight: 600,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              textDecoration: "none",
                             }}
                           >
-                            <span>📅 {b.block_date} — {b.reason}</span>
-                            <button
-                              onClick={() => handleDeleteAbsence(b.id)}
-                              style={{
-                                border: "none",
-                                background: "none",
-                                cursor: "pointer",
-                                color: "#ef4444",
-                                fontSize: "0.75rem",
-                              }}
-                              title="Eliminar permiso"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                            <img
+                              src="/icons/whatsApp.svg"
+                              alt="WhatsApp"
+                              style={{ width: 14, height: 14 }}
+                            />
+                            <span>WhatsApp</span>
+                          </a>
+                        )}
+
+                        <span
+                          style={{
+                            fontSize: "0.9375rem",
+                            fontWeight: 800,
+                            color: "var(--color-primary)",
+                            marginLeft: 4,
+                          }}
+                        >
+                          Total: S/ {(b.total_price_cents / 100).toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* Reassign Worker Dropdown */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <label className="label" style={{ marginBottom: 0, fontSize: "0.75rem" }}>
+                          Reasignar:
+                        </label>
+                        <select
+                          className="select"
+                          style={{
+                            padding: "4px 8px",
+                            fontSize: "0.8125rem",
+                            minWidth: 180,
+                          }}
+                          value={b.assigned_employee_id || ""}
+                          disabled={updatingBookingId === b.id}
+                          onChange={(e) =>
+                            handleUpdateAssignedBooking(b.id, {
+                              assigned_employee_id: e.target.value || null,
+                            })
+                          }
+                        >
+                          <option value="">⚠️ Sin asignar</option>
+                          {employees.map((emp) => (
+                            <option key={emp.id} value={emp.id}>
+                              {emp.type === "barberia" ? "💈" : "🌸"} {emp.first_name}{" "}
+                              {emp.last_name}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Status Toggle buttons */}
+                        {b.status === "pendiente" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateAssignedBooking(b.id, { status: "confirmada" })
+                            }
+                            disabled={updatingBookingId === b.id}
+                            className="btn btn-sm"
+                            style={{
+                              background: "var(--color-success)",
+                              color: "#000000",
+                              fontWeight: 700,
+                              padding: "4px 10px",
+                              fontSize: "0.75rem",
+                            }}
+                          >
+                            ✅ Confirmar
+                          </button>
+                        )}
+
+                        {b.payment_status !== "total" && b.status !== "cancelada" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateAssignedBooking(b.id, { mark_paid: true })
+                            }
+                            disabled={updatingBookingId === b.id}
+                            className="btn btn-primary btn-sm"
+                            style={{
+                              padding: "4px 10px",
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                            }}
+                          >
+                            💰 Cobrar
+                          </button>
+                        )}
+
+                        {b.status === "confirmada" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateAssignedBooking(b.id, { status: "completada" })
+                            }
+                            disabled={updatingBookingId === b.id}
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              padding: "4px 10px",
+                              fontSize: "0.75rem",
+                            }}
+                          >
+                            🏁 Completar
+                          </button>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    paddingTop: 12,
-                    borderTop: "1px solid var(--color-border)",
-                    marginTop: 12,
-                  }}
-                >
-                  <button
-                    onClick={() => handleOpenEmpModal(emp)}
-                    className="btn btn-ghost btn-sm"
-                    style={{ flex: 1 }}
-                  >
-                    ✏️ Editar
-                  </button>
-                  <button
-                    onClick={() => handleOpenAbsenceModal(emp)}
-                    className="btn btn-ghost btn-sm"
-                    style={{ flex: 1, color: "var(--color-warning)" }}
-                  >
-                    📅 Permiso
-                  </button>
-                  <button
-                    onClick={() => handleDeleteEmp(emp)}
-                    className="btn btn-ghost btn-sm"
-                    style={{ color: "#ef4444" }}
-                    title="Eliminar trabajador"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
