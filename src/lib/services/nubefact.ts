@@ -44,6 +44,45 @@ export interface BookingForInvoice {
   billing_address?: string | null;
 }
 
+export interface NubefactItem {
+  unidad_de_medida: string; // "ZZ" para servicios
+  codigo: string;
+  descripcion: string;
+  cantidad: number;
+  valor_unitario: number;
+  precio_unitario: number; // Exactamente igual a valor_unitario en Amazonía
+  subtotal: number;
+  tipo_de_igv: number; // 8 = Exonerado - Operación Onerosa
+  igv: number | ""; // 0 o "" en exonerado
+  total: number;
+  anticipo_regularizacion: boolean;
+}
+
+export interface NubefactInvoicePayload {
+  operacion: "generar_comprobante";
+  tipo_de_comprobante: number; // 1 = Factura, 2 = Boleta
+  serie: string;
+  numero: string | number;
+  codigo_unico: string;
+  sunat_transaction: number;
+  cliente_tipo_de_documento: number; // 6 = RUC, 1 = DNI
+  cliente_numero_de_documento: string;
+  cliente_denominacion: string;
+  cliente_direccion?: string;
+  cliente_email?: string;
+  fecha_de_emision: string;
+  moneda: number; // 1 = Soles
+  servicios_region_selva: boolean; // true para VRAEM / Ley Amazonía
+  porcentaje_de_igv: "" | number; // Cadena vacía en Amazonía
+  total_gravada: "" | number; // Cadena vacía
+  total_inafecta: "" | number; // Cadena vacía
+  total_exonerada: number; // Monto total de la venta
+  total_igv: "" | number; // Cadena vacía
+  total: number; // Monto total de la venta
+  items: NubefactItem[];
+  observaciones?: string;
+}
+
 export interface NubefactEmitResult {
   success: boolean;
   comprobante?: {
@@ -73,6 +112,7 @@ function getFormattedDate(dateStr?: string): string {
 
 /**
  * Emite un comprobante electrónico (Boleta o Factura) a través de la API de Nubefact
+ * configurado específicamente para la región VRAEM (Ley de la Amazonía - Exonerado IGV).
  */
 export async function emitirComprobanteNubefact(
   booking: BookingForInvoice,
@@ -99,7 +139,7 @@ export async function emitirComprobanteNubefact(
     let docType = 1; // 1: DNI por defecto
     let docNumber = "00000000";
     let denominacion = `${booking.client_first_name} ${booking.client_last_name}`.trim();
-    let direccion = booking.billing_address || "Iquitos, Loreto, Perú";
+    let direccion = booking.billing_address || "VRAEM, Loreto, Perú";
 
     if (isFactura) {
       docType = 6; // RUC
@@ -134,19 +174,7 @@ export async function emitirComprobanteNubefact(
       booking.advance_percentage === 100 ||
       paidAmountCents === booking.total_price_cents;
 
-    let items: Array<{
-      unidad_de_medida: string;
-      codigo: string;
-      descripcion: string;
-      cantidad: number;
-      valor_unitario: number;
-      precio_unitario: number;
-      subtotal: number;
-      tipo_de_igv: number;
-      igv: number;
-      total: number;
-      anticipo_regularizacion: boolean;
-    }> = [];
+    let items: NubefactItem[] = [];
 
     if (services.length > 0) {
       let accumulatedTotal = 0;
@@ -172,15 +200,15 @@ export async function emitirComprobanteNubefact(
           : `Adelanto (${booking.advance_percentage || 30}%): ${s.service_name}`;
 
         return {
-          unidad_de_medida: "ZZ", // ZZ = Servicios
+          unidad_de_medida: "ZZ", // "ZZ" exclusivo para servicios
           codigo: `SRV-${index + 1}`,
           descripcion: description,
           cantidad: 1,
           valor_unitario: itemTotal,
-          precio_unitario: itemTotal,
+          precio_unitario: itemTotal, // En Amazonía: precio_unitario == valor_unitario (sin IGV)
           subtotal: itemTotal,
-          tipo_de_igv: 8, // 8 = Exonerado - Operación Onerosa (Amazonía)
-          igv: 0,
+          tipo_de_igv: 8, // 8 = Exonerado - Operación Onerosa (Amazonía / VRAEM)
+          igv: 0, // 0 en ítems exonerados
           total: itemTotal,
           anticipo_regularizacion: false,
         };
@@ -203,12 +231,12 @@ export async function emitirComprobanteNubefact(
       ];
     }
 
-    // 3. Construcción del Payload para Nubefact API
-    const payload = {
+    // 3. Construcción del Payload para Nubefact API (Región VRAEM / Ley de la Amazonía)
+    const payload: NubefactInvoicePayload = {
       operacion: "generar_comprobante",
       tipo_de_comprobante: tipoDeComprobante,
       serie: serie,
-      numero: "", // Correlativo automático generado por Nubefact
+      numero: "", // Correlativo automático dinámico generado por Nubefact
       codigo_unico: booking.booking_code, // Código único de trazabilidad
       sunat_transaction: 1, // Venta interna
       cliente_tipo_de_documento: docType,
@@ -218,13 +246,14 @@ export async function emitirComprobanteNubefact(
       cliente_email: email,
       fecha_de_emision: fechaEmision,
       moneda: 1, // 1 = Soles
-      porcentaje_de_igv: 18.0,
 
-      // Régimen Amazonía (Exonerado de IGV)
+      // Cabecera para Ley de la Amazonía / VRAEM
+      servicios_region_selva: true,
+      porcentaje_de_igv: "",
+      total_gravada: "",
+      total_inafecta: "",
       total_exonerada: paidTotalSoles,
-      total_gravada: 0,
-      total_inafecta: 0,
-      total_igv: 0,
+      total_igv: "",
       total: paidTotalSoles,
 
       items: items,
@@ -232,7 +261,7 @@ export async function emitirComprobanteNubefact(
     };
 
     console.log(
-      `[Nubefact] Emitiendo ${isFactura ? "Factura" : "Boleta"} para reserva ${booking.booking_code} (Monto: S/ ${paidTotalSoles})...`
+      `[Nubefact VRAEM] Emitiendo ${isFactura ? "Factura" : "Boleta"} para reserva ${booking.booking_code} (Monto: S/ ${paidTotalSoles})...`
     );
 
     // 4. Petición HTTP POST obligatoria a Nubefact
