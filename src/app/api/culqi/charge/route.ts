@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { emitirComprobanteKeyfacil } from "@/lib/services/keyfacil";
+import { emitirComprobanteNubefact } from "@/lib/services/nubefact";
 
 /**
  * POST /api/culqi/charge
@@ -26,140 +26,154 @@ export async function POST(request: NextRequest) {
       .from("bookings")
       .select("*")
       .eq("id", booking_id)
-      .eq("status", "pendiente")
       .single();
 
     if (bookingError || !booking) {
       return NextResponse.json(
-        { error: "Reserva no encontrada o en estado incorrecto" },
+        { error: "Reserva no encontrada" },
         { status: 404 }
       );
     }
 
-    // Check lock hasn't expired
-    if (
-      booking.slot_lock_expires_at &&
-      new Date(booking.slot_lock_expires_at) < new Date()
-    ) {
-      // Expire the booking
-      await admin
-        .from("bookings")
-        .update({
-          status: "expirada",
-          expired_at: new Date().toISOString(),
-        })
-        .eq("id", booking_id);
-
+    // Check booking is in a payable state
+    if (booking.status !== "pendiente" && booking.status !== "borrador") {
       return NextResponse.json(
-        { error: "La reserva ha expirado. Por favor, crea una nueva." },
-        { status: 410 }
+        { error: `La reserva está en estado '${booking.status}' y no puede ser pagada` },
+        { status: 400 }
       );
     }
 
-    // 2. Create charge in Culqi
+    // Check slot lock has not expired
+    if (booking.slot_lock_expires_at) {
+      const lockExpiry = new Date(booking.slot_lock_expires_at).getTime();
+      if (Date.now() > lockExpiry) {
+        // Mark as expired
+        await admin
+          .from("bookings")
+          .update({ status: "expirada" })
+          .eq("id", booking_id);
+
+        return NextResponse.json(
+          { error: "El tiempo para completar el pago ha expirado. Por favor, selecciona otro horario." },
+          { status: 410 }
+        );
+      }
+    }
+
+    // 2. Determine charge amount (advance or full) in cents
+    const chargeAmountCents =
+      booking.advance_amount_cents || booking.total_price_cents;
+
+    if (!chargeAmountCents || chargeAmountCents <= 0) {
+      return NextResponse.json(
+        { error: "El monto a cobrar debe ser mayor a 0" },
+        { status: 400 }
+      );
+    }
+
+    // 3. Create charge with Culqi API
     const culqiSecretKey = process.env.CULQI_SECRET_KEY;
     if (!culqiSecretKey) {
-      console.error("CULQI_SECRET_KEY not configured");
       return NextResponse.json(
-        { error: "Error de configuración del servidor" },
+        { error: "Configuración de pago no disponible" },
         { status: 500 }
       );
     }
 
-    const startTime = Date.now();
+    // Build anti-fraud details
+    const antifraudCity = "Iquitos";
+    const clientName = `${booking.client_first_name} ${booking.client_last_name}`.trim();
+    const docType = booking.billing_doc_type || (booking.client_dni ? "1" : "-");
+    const docNumber = booking.billing_doc_number || booking.client_dni || "";
 
-    const chargeResponse = await fetch("https://api.culqi.com/v2/charges", {
+    const culqiPayload = {
+      amount: chargeAmountCents,
+      currency_code: "PEN",
+      email: client_email || booking.client_email || "cliente@acicalados.pe",
+      source_id: token_id,
+      description: `Adelanto reserva ${booking.booking_code}`,
+      antifraud_details: {
+        first_name: booking.client_first_name || "Cliente",
+        last_name: booking.client_last_name || "Acicalados",
+        phone: booking.client_phone || "999999999",
+        address: booking.billing_address || "Av. Principal 123",
+        address_city: antifraudCity,
+        country_code: "PE",
+      },
+      metadata: {
+        booking_id: booking.id,
+        booking_code: booking.booking_code,
+        comprobante_tipo: booking.comprobante_tipo || "03",
+        tipo_doc: docType,
+        num_doc: docNumber,
+        cliente_nombre: booking.billing_name || clientName,
+      },
+    };
+
+    const culqiRes = await fetch("https://api.culqi.com/v2/charges", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${culqiSecretKey}`,
       },
-      body: JSON.stringify({
-        amount: booking.advance_amount_cents,
-        currency_code: "PEN",
-        email: client_email || booking.client_email || "cliente@acicalados.pe",
-        source_id: token_id,
-        description: `Adelanto reserva ${booking.booking_code}`,
-        antifraud_details: {
-          first_name: booking.client_first_name,
-          last_name: booking.client_last_name,
-          phone_number: booking.client_phone || "999999999",
-          address: booking.billing_address || "Av. Principal 123",
-          address_city: "Iquitos",
-          country_code: "PE",
-        },
-        metadata: {
-          booking_id: booking.id,
-          booking_code: booking.booking_code,
-          comprobante_tipo: booking.comprobante_tipo || "03",
-          tipo_doc: booking.billing_doc_type || "1",
-          num_doc: booking.billing_doc_number || booking.client_dni || "",
-          cliente_nombre:
-            booking.billing_name ||
-            `${booking.client_first_name} ${booking.client_last_name}`,
-          cliente_direccion: booking.billing_address || "",
-        },
-      }),
+      body: JSON.stringify(culqiPayload),
     });
 
-    const processingTime = Date.now() - startTime;
-    const chargeData = await chargeResponse.json();
+    const chargeData = await culqiRes.json();
 
-    // 3. Log the charge attempt
+    // Log the charge attempt
     await admin.from("payment_logs").insert({
       booking_id: booking.id,
       event_type: "charge_attempt",
-      culqi_event_id: chargeData.id || null,
-      amount_cents: booking.advance_amount_cents,
+      amount_cents: chargeAmountCents,
       payload: chargeData,
-      processing_result: chargeResponse.ok ? "success" : "failed",
-      processing_time_ms: processingTime,
+      processing_result: culqiRes.ok ? "success" : "failed",
     });
 
-    if (!chargeResponse.ok) {
-      console.error("Culqi charge failed:", chargeData);
+    if (!culqiRes.ok) {
+      // Charge failed
+      const userMessage =
+        chargeData.user_message ||
+        chargeData.merchant_message ||
+        "El pago fue rechazado. Verifica los datos de tu tarjeta.";
+
       return NextResponse.json(
-        {
-          error:
-            chargeData.user_message ||
-            chargeData.merchant_message ||
-            "Error al procesar el pago",
-        },
-        { status: 400 }
+        { error: userMessage, culqi_error: chargeData },
+        { status: 402 }
       );
     }
 
-    // 4. Obtener servicios para la emisión del comprobante Keyfácil
+    // 4. Obtener servicios para la emisión del comprobante Nubefact
     const { data: bookingServices } = await admin
       .from("booking_services")
       .select("service_name, service_price_cents, duration_minutes")
       .eq("booking_id", booking.id);
 
-    // 5. Emitir comprobante electrónico en Keyfácil (estrictamente después del éxito del cobro)
+    // 5. Emitir comprobante electrónico en Nubefact (estrictamente después del éxito del cobro)
     const isFullPay = booking.advance_percentage === 100;
-    const keyfacilResult = await emitirComprobanteKeyfacil(
+    const nubefactResult = await emitirComprobanteNubefact(
       booking,
       bookingServices || [],
       chargeData.id
     );
 
-    // Registrar log de facturación Keyfácil
+    // Registrar log de facturación Nubefact
     await admin.from("payment_logs").insert({
       booking_id: booking.id,
-      event_type: "keyfacil_invoice",
+      event_type: "nubefact_invoice",
       amount_cents: booking.advance_amount_cents || booking.total_price_cents,
       payload: {
         booking_code: booking.booking_code,
         comprobante_tipo: booking.comprobante_tipo,
-        result: keyfacilResult,
+        result: nubefactResult,
       },
-      processing_result: keyfacilResult.success ? "success" : "warning",
+      processing_result: nubefactResult.success ? "success" : "warning",
     });
 
     let comprobanteInfo = null;
 
-    if (keyfacilResult.success && keyfacilResult.comprobante) {
-      comprobanteInfo = keyfacilResult.comprobante;
+    if (nubefactResult.success && nubefactResult.comprobante) {
+      comprobanteInfo = nubefactResult.comprobante;
 
       await admin
         .from("bookings")
@@ -169,16 +183,16 @@ export async function POST(request: NextRequest) {
           culqi_charge_id: chargeData.id,
           confirmed_at: new Date().toISOString(),
           slot_lock_expires_at: null, // Permanent lock
-          comprobante_tipo: keyfacilResult.comprobante.tipo,
-          comprobante_serie: keyfacilResult.comprobante.serie,
-          comprobante_numero: keyfacilResult.comprobante.numero,
-          pdf_url: keyfacilResult.comprobante.pdf_url || null,
+          comprobante_tipo: nubefactResult.comprobante.tipo,
+          comprobante_serie: nubefactResult.comprobante.serie,
+          comprobante_numero: nubefactResult.comprobante.numero,
+          pdf_url: nubefactResult.comprobante.pdf_url || null,
         })
         .eq("id", booking_id);
     } else {
       console.warn(
-        "[Keyfácil] Advertencia: El pago fue exitoso pero hubo un detalle en la emisión:",
-        keyfacilResult.error
+        "[Nubefact] Advertencia: El pago fue exitoso pero hubo un detalle en la emisión:",
+        nubefactResult.error
       );
 
       // Confirmar reserva en BD
@@ -197,17 +211,20 @@ export async function POST(request: NextRequest) {
     // 6. Auto-assign employee
     await assignEmployee(admin, booking);
 
-    return NextResponse.json({
-      success: true,
-      charge_id: chargeData.id,
-      booking_code: booking.booking_code,
-      comprobante: comprobanteInfo,
-      pdf_url: comprobanteInfo?.pdf_url || null,
-      comprobante_tipo: comprobanteInfo?.tipo || booking.comprobante_tipo || "03",
-      comprobante_serie: comprobanteInfo?.serie || null,
-      comprobante_numero: comprobanteInfo?.numero || null,
-      message: "Pago procesado correctamente. Tu cita está confirmada.",
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        charge_id: chargeData.id,
+        booking_code: booking.booking_code,
+        comprobante: comprobanteInfo,
+        pdf_url: comprobanteInfo?.pdf_url || null,
+        comprobante_tipo: comprobanteInfo?.tipo || booking.comprobante_tipo || "03",
+        comprobante_serie: comprobanteInfo?.serie || null,
+        comprobante_numero: comprobanteInfo?.numero || null,
+        message: "Pago procesado y comprobante generado correctamente. Tu cita está confirmada.",
+      },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("Culqi charge error:", err);
     return NextResponse.json(

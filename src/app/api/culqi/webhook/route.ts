@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { emitirComprobanteKeyfacil } from "@/lib/services/keyfacil";
+import { emitirComprobanteNubefact } from "@/lib/services/nubefact";
 
 /**
  * POST /api/culqi/webhook
@@ -60,26 +60,26 @@ export async function POST(request: NextRequest) {
             slot_lock_expires_at: null,
           };
 
-          // Si aún no se ha emitido el comprobante, emitir con Keyfácil
+          // Si aún no se ha emitido el comprobante, emitir con Nubefact
           if (!booking.pdf_url) {
             const { data: bookingServices } = await admin
               .from("booking_services")
               .select("service_name, service_price_cents, duration_minutes")
               .eq("booking_id", bookingId);
 
-            const keyfacilResult = await emitirComprobanteKeyfacil(
+            const nubefactResult = await emitirComprobanteNubefact(
               booking,
               bookingServices || [],
               chargeData.id
             );
 
-            if (keyfacilResult.success && keyfacilResult.comprobante) {
+            if (nubefactResult.success && nubefactResult.comprobante) {
               updateData = {
                 ...updateData,
-                comprobante_tipo: keyfacilResult.comprobante.tipo,
-                comprobante_serie: keyfacilResult.comprobante.serie,
-                comprobante_numero: keyfacilResult.comprobante.numero,
-                pdf_url: keyfacilResult.comprobante.pdf_url || null,
+                comprobante_tipo: nubefactResult.comprobante.tipo,
+                comprobante_serie: nubefactResult.comprobante.serie,
+                comprobante_numero: nubefactResult.comprobante.numero,
+                pdf_url: nubefactResult.comprobante.pdf_url || null,
               };
             }
           }
