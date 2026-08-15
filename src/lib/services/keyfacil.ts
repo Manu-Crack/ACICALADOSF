@@ -78,21 +78,17 @@ export async function emitirComprobanteKeyfacil(
   try {
     const isFactura = booking.comprobante_tipo === "01";
     const tipoComprobante = isFactura ? "01" : "03";
-    const serie = isFactura ? "FFF1" : "BBB1";
+    const serie = isFactura ? "F001" : "B001";
 
     // 1. Determinar datos del cliente
     let docType = "-";
-    let docNumber = "00000000";
+    let docNumber = "-";
     let denominacion = `${booking.client_first_name} ${booking.client_last_name}`.trim();
-    let direccion = booking.billing_address || "Amazonas, Perú";
 
     if (isFactura) {
       docType = "6"; // RUC
       docNumber = (booking.billing_doc_number || "").trim();
       denominacion = (booking.billing_name || denominacion).trim();
-      if (booking.billing_address) {
-        direccion = booking.billing_address.trim();
-      }
     } else {
       const dni = (booking.billing_doc_number || booking.client_dni || "").trim();
       if (dni && dni.length === 8) {
@@ -104,18 +100,23 @@ export async function emitirComprobanteKeyfacil(
       }
     }
 
-    const email = booking.client_email || "";
+    const email = booking.client_email ? booking.client_email.trim() : undefined;
     const fechaEmision = new Date().toISOString().split("T")[0];
 
     // 2. Construcción de ítems
-    // Monto pagado efectivamente (adelanto o total)
     const paidAmountCents = booking.advance_amount_cents || booking.total_price_cents;
     const paidTotalSoles = Number((paidAmountCents / 100).toFixed(2));
     const isFullPayment =
       booking.advance_percentage === 100 ||
       paidAmountCents === booking.total_price_cents;
 
-    let items: Array<Record<string, unknown>> = [];
+    let items: Array<{
+      codigo: string;
+      descripcion: string;
+      cantidad: number;
+      precio_unitario: number;
+      tipo_igv: string;
+    }> = [];
 
     if (services.length > 0) {
       let accumulatedTotal = 0;
@@ -127,7 +128,6 @@ export async function emitirComprobanteKeyfacil(
         if (isFullPayment) {
           itemTotal = Number((s.service_price_cents / 100).toFixed(2));
         } else {
-          // Proporcional al monto pagado
           const ratio = s.service_price_cents / (booking.total_price_cents || 1);
           if (isLast) {
             itemTotal = Number((paidTotalSoles - accumulatedTotal).toFixed(2));
@@ -142,88 +142,45 @@ export async function emitirComprobanteKeyfacil(
           : `Adelanto (${booking.advance_percentage || 30}%): ${s.service_name}`;
 
         return {
-          unidad_de_medida: "ZZ",
-          unidad_medida: "ZZ",
           codigo: `SRV-${index + 1}`,
           descripcion: description,
           cantidad: 1,
-          valor_unitario: itemTotal,
           precio_unitario: itemTotal,
-          subtotal: itemTotal,
-          total: itemTotal,
-          tipo_de_igv: "20", // Exonerado - Amazonía (Catálogo 07)
-          tipo_igv: "20",
-          igv: 0,
-          total_impuestos: 0,
+          tipo_igv: "20", // Exonerado - Amazonía (Catálogo 07)
         };
       });
     } else {
-      // Fallback genérico si no hay desglose de servicios
       items = [
         {
-          unidad_de_medida: "ZZ",
-          unidad_medida: "ZZ",
           codigo: "SRV-01",
           descripcion: `Servicio de Barbería / Spa - Reserva ${booking.booking_code}`,
           cantidad: 1,
-          valor_unitario: paidTotalSoles,
           precio_unitario: paidTotalSoles,
-          subtotal: paidTotalSoles,
-          total: paidTotalSoles,
-          tipo_de_igv: "20",
           tipo_igv: "20",
-          igv: 0,
-          total_impuestos: 0,
         },
       ];
     }
 
-    // 3. Payload para Keyfácil
-    const payload = {
-      tipo_operacion: "0101", // Venta interna onerosa
-      tipo_de_comprobante: tipoComprobante,
-      tipo_comprobante: tipoComprobante,
+    // 3. Payload exacto para Keyfácil API
+    const payload: Record<string, unknown> = {
+      tipo: tipoComprobante,
+      tipo_operacion: "0101",
       serie: serie,
-      fecha_de_emision: fechaEmision,
       fecha_emision: fechaEmision,
       moneda: "PEN",
-      tipo_de_cambio: 1,
-
-      // Datos de cliente
-      cliente_tipo_de_documento: docType,
-      cliente_tipo_documento: docType,
-      cliente_numero_de_documento: docNumber,
-      cliente_numero_documento: docNumber,
-      cliente_denominacion: denominacion,
+      cliente_tipo: docType,
+      cliente_numero: docNumber,
       cliente_nombre: denominacion,
-      cliente_direccion: direccion,
-      cliente_email: email,
-
-      // Totales
-      total_exonerada: paidTotalSoles,
-      total_exonerado: paidTotalSoles,
-      total_gravada: 0,
-      total_gravado: 0,
-      total_inafecta: 0,
-      total_inafecto: 0,
-      total_igv: 0,
-      total_impuestos: 0,
-      total: paidTotalSoles,
-
-      // Items
       items: items,
-
-      // Metadatos adicionales para trazabilidad
-      observaciones: `Reserva: ${booking.booking_code}${chargeId ? ` | Culqi Charge: ${chargeId}` : ""}`,
-      metadata: {
-        booking_id: booking.id,
-        booking_code: booking.booking_code,
-        culqi_charge_id: chargeId || null,
-      },
     };
 
+    if (email) {
+      payload.cliente_email = email;
+    }
+
     console.log(
-      `[Keyfácil] Emitiendo ${isFactura ? "Factura" : "Boleta"} para reserva ${booking.booking_code}...`
+      `[Keyfácil] Enviando ${isFactura ? "Factura" : "Boleta"} para reserva ${booking.booking_code}:`,
+      JSON.stringify(payload)
     );
 
     const response = await fetch(apiUrl, {
@@ -231,7 +188,6 @@ export async function emitirComprobanteKeyfacil(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
-        token: token,
       },
       body: JSON.stringify(payload),
     });

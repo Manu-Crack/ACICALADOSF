@@ -143,6 +143,19 @@ export async function POST(request: NextRequest) {
       chargeData.id
     );
 
+    // Registrar log de facturación Keyfácil
+    await admin.from("payment_logs").insert({
+      booking_id: booking.id,
+      event_type: "keyfacil_invoice",
+      amount_cents: booking.advance_amount_cents || booking.total_price_cents,
+      payload: {
+        booking_code: booking.booking_code,
+        comprobante_tipo: booking.comprobante_tipo,
+        result: keyfacilResult,
+      },
+      processing_result: keyfacilResult.success ? "success" : "warning",
+    });
+
     let comprobanteInfo = null;
 
     if (keyfacilResult.success && keyfacilResult.comprobante) {
