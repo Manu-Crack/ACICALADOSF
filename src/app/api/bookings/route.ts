@@ -21,6 +21,11 @@ export async function POST(request: NextRequest) {
       client_email,
       client_dni,
       payment_mode = "advance", // "advance" (30%) or "full" (100%)
+      comprobante_tipo = "03", // "03": Boleta, "01": Factura
+      billing_doc_type,
+      billing_doc_number,
+      billing_name,
+      billing_address,
     } = body;
 
     // Validate required fields
@@ -42,6 +47,22 @@ export async function POST(request: NextRequest) {
         { error: "Se requiere al menos un medio de contacto (teléfono o correo)" },
         { status: 422 }
       );
+    }
+
+    // Factura validation
+    if (comprobante_tipo === "01") {
+      if (!billing_doc_number || billing_doc_number.length !== 11) {
+        return NextResponse.json(
+          { error: "Para factura se requiere un RUC válido de 11 dígitos" },
+          { status: 422 }
+        );
+      }
+      if (!billing_name) {
+        return NextResponse.json(
+          { error: "Para factura se requiere la Razón Social" },
+          { status: 422 }
+        );
+      }
     }
 
     const admin = createAdminClient();
@@ -154,10 +175,15 @@ export async function POST(request: NextRequest) {
         balance_cents: balanceCents,
         status: "pendiente",
         payment_status: "sin_pago",
+        comprobante_tipo: comprobante_tipo === "01" ? "01" : "03",
+        billing_doc_type: billing_doc_type || (comprobante_tipo === "01" ? "6" : "1"),
+        billing_doc_number: billing_doc_number || client_dni || null,
+        billing_name: billing_name || `${client_first_name} ${client_last_name}`,
+        billing_address: billing_address || null,
         slot_locked_at: new Date().toISOString(),
         slot_lock_expires_at: lockExpiresAt,
       })
-      .select("id, booking_code, advance_amount_cents, total_price_cents")
+      .select("id, booking_code, advance_amount_cents, total_price_cents, comprobante_tipo")
       .single();
 
     if (bookingError) {
@@ -186,6 +212,7 @@ export async function POST(request: NextRequest) {
       total_price_cents: booking.total_price_cents,
       payment_amount_cents: booking.advance_amount_cents,
       payment_mode: isFullPayment ? "full" : "advance",
+      comprobante_tipo: booking.comprobante_tipo,
       currency: "PEN",
     });
   } catch (err) {

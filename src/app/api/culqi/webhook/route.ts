@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { emitirComprobanteKeyfacil } from "@/lib/services/keyfacil";
 
 /**
  * POST /api/culqi/webhook
@@ -42,26 +43,70 @@ export async function POST(request: NextRequest) {
       chargeData.outcome?.type === "venta_exitosa"
     ) {
       if (bookingId) {
-        // Update booking status
-        const { error } = await admin
+        // Fetch booking to check status and invoice status
+        const { data: booking } = await admin
           .from("bookings")
-          .update({
+          .select("*")
+          .eq("id", bookingId)
+          .single();
+
+        if (booking) {
+          const isFullPay = booking.advance_percentage === 100;
+          let updateData: Record<string, unknown> = {
             status: "confirmada",
-            payment_status: "parcial",
+            payment_status: isFullPay ? "total" : "parcial",
             culqi_charge_id: chargeData.id || null,
             confirmed_at: new Date().toISOString(),
             slot_lock_expires_at: null,
-          })
-          .eq("id", bookingId)
-          .in("status", ["pendiente", "borrador"]);
+          };
 
-        processingResult = error ? `error: ${error.message}` : "confirmed";
+          // Si aún no se ha emitido el comprobante, emitir con Keyfácil
+          if (!booking.pdf_url) {
+            const { data: bookingServices } = await admin
+              .from("booking_services")
+              .select("service_name, service_price_cents, duration_minutes")
+              .eq("booking_id", bookingId);
+
+            const keyfacilResult = await emitirComprobanteKeyfacil(
+              booking,
+              bookingServices || [],
+              chargeData.id
+            );
+
+            if (keyfacilResult.success && keyfacilResult.comprobante) {
+              updateData = {
+                ...updateData,
+                comprobante_tipo: keyfacilResult.comprobante.tipo,
+                comprobante_serie: keyfacilResult.comprobante.serie,
+                comprobante_numero: keyfacilResult.comprobante.numero,
+                pdf_url: keyfacilResult.comprobante.pdf_url || null,
+              };
+            }
+          }
+
+          const { error } = await admin
+            .from("bookings")
+            .update(updateData)
+            .eq("id", bookingId);
+
+          processingResult = error ? `error: ${error.message}` : "confirmed_and_invoiced";
+        }
       }
     } else if (
       eventType === "charge.creation.failed" ||
       chargeData.outcome?.type === "venta_rechazada"
     ) {
       processingResult = "charge_failed";
+      if (bookingId) {
+        await admin
+          .from("bookings")
+          .update({
+            status: "cancelada",
+            cancelled_at: new Date().toISOString(),
+          })
+          .eq("id", bookingId)
+          .in("status", ["pendiente", "borrador"]);
+      }
     }
 
     // 4. Log the webhook

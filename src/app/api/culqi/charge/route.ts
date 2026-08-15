@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { emitirComprobanteKeyfacil } from "@/lib/services/keyfacil";
 
 /**
  * POST /api/culqi/charge
@@ -83,13 +84,20 @@ export async function POST(request: NextRequest) {
           first_name: booking.client_first_name,
           last_name: booking.client_last_name,
           phone_number: booking.client_phone || "999999999",
-          address: "Av. Principal 123",
-          address_city: "Lima",
+          address: booking.billing_address || "Av. Principal 123",
+          address_city: "Iquitos",
           country_code: "PE",
         },
         metadata: {
           booking_id: booking.id,
           booking_code: booking.booking_code,
+          comprobante_tipo: booking.comprobante_tipo || "03",
+          tipo_doc: booking.billing_doc_type || "1",
+          num_doc: booking.billing_doc_number || booking.client_dni || "",
+          cliente_nombre:
+            booking.billing_name ||
+            `${booking.client_first_name} ${booking.client_last_name}`,
+          cliente_direccion: booking.billing_address || "",
         },
       }),
     });
@@ -121,26 +129,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Update booking to confirmed
-    const isFullPay = booking.advance_percentage === 100;
-    await admin
-      .from("bookings")
-      .update({
-        status: "confirmada",
-        payment_status: isFullPay ? "total" : "parcial",
-        culqi_charge_id: chargeData.id,
-        confirmed_at: new Date().toISOString(),
-        slot_lock_expires_at: null, // Permanent lock
-      })
-      .eq("id", booking_id);
+    // 4. Obtener servicios para la emisión del comprobante Keyfácil
+    const { data: bookingServices } = await admin
+      .from("booking_services")
+      .select("service_name, service_price_cents, duration_minutes")
+      .eq("booking_id", booking.id);
 
-    // 5. Auto-assign employee
+    // 5. Emitir comprobante electrónico en Keyfácil (estrictamente después del éxito del cobro)
+    const isFullPay = booking.advance_percentage === 100;
+    const keyfacilResult = await emitirComprobanteKeyfacil(
+      booking,
+      bookingServices || [],
+      chargeData.id
+    );
+
+    let comprobanteInfo = null;
+
+    if (keyfacilResult.success && keyfacilResult.comprobante) {
+      comprobanteInfo = keyfacilResult.comprobante;
+
+      await admin
+        .from("bookings")
+        .update({
+          status: "confirmada",
+          payment_status: isFullPay ? "total" : "parcial",
+          culqi_charge_id: chargeData.id,
+          confirmed_at: new Date().toISOString(),
+          slot_lock_expires_at: null, // Permanent lock
+          comprobante_tipo: keyfacilResult.comprobante.tipo,
+          comprobante_serie: keyfacilResult.comprobante.serie,
+          comprobante_numero: keyfacilResult.comprobante.numero,
+          pdf_url: keyfacilResult.comprobante.pdf_url || null,
+        })
+        .eq("id", booking_id);
+    } else {
+      console.warn(
+        "[Keyfácil] Advertencia: El pago fue exitoso pero hubo un detalle en la emisión:",
+        keyfacilResult.error
+      );
+
+      // Confirmar reserva en BD
+      await admin
+        .from("bookings")
+        .update({
+          status: "confirmada",
+          payment_status: isFullPay ? "total" : "parcial",
+          culqi_charge_id: chargeData.id,
+          confirmed_at: new Date().toISOString(),
+          slot_lock_expires_at: null,
+        })
+        .eq("id", booking_id);
+    }
+
+    // 6. Auto-assign employee
     await assignEmployee(admin, booking);
 
     return NextResponse.json({
       success: true,
       charge_id: chargeData.id,
       booking_code: booking.booking_code,
+      comprobante: comprobanteInfo,
+      pdf_url: comprobanteInfo?.pdf_url || null,
+      comprobante_tipo: comprobanteInfo?.tipo || booking.comprobante_tipo || "03",
+      comprobante_serie: comprobanteInfo?.serie || null,
+      comprobante_numero: comprobanteInfo?.numero || null,
       message: "Pago procesado correctamente. Tu cita está confirmada.",
     });
   } catch (err) {

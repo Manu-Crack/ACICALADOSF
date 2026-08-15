@@ -24,6 +24,14 @@ type Booking = {
   total_duration_minutes: number;
   confirmed_at: string | null;
   assigned_employee_id: string | null;
+  comprobante_tipo?: string | null;
+  comprobante_serie?: string | null;
+  comprobante_numero?: number | null;
+  pdf_url?: string | null;
+  billing_doc_type?: string | null;
+  billing_doc_number?: string | null;
+  billing_name?: string | null;
+  billing_address?: string | null;
 };
 
 type Employee = {
@@ -79,7 +87,7 @@ export function ReservasManager() {
     let query = supabase
       .from("bookings")
       .select(
-        "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id"
+        "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, comprobante_tipo, comprobante_serie, comprobante_numero, pdf_url, billing_doc_type, billing_doc_number, billing_name, billing_address"
       )
       .in("status", ["confirmada", "completada", "cancelada"])
       .order("booking_date", { ascending: false })
@@ -165,7 +173,10 @@ export function ReservasManager() {
       b.client_last_name.toLowerCase().includes(term) ||
       (b.client_phone && b.client_phone.includes(term)) ||
       (b.client_email && b.client_email.toLowerCase().includes(term)) ||
-      (b.client_dni && b.client_dni.includes(term))
+      (b.client_dni && b.client_dni.includes(term)) ||
+      (b.billing_name && b.billing_name.toLowerCase().includes(term)) ||
+      (b.billing_doc_number && b.billing_doc_number.includes(term)) ||
+      (b.comprobante_serie && `${b.comprobante_serie}-${b.comprobante_numero}`.toLowerCase().includes(term))
     );
   });
 
@@ -281,7 +292,7 @@ export function ReservasManager() {
           <label className="label">Buscar</label>
           <input
             className="input"
-            placeholder="Código, nombre, teléfono, email..."
+            placeholder="Código, nombre, teléfono, RUC, comprobante..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -458,6 +469,19 @@ export function ReservasManager() {
                       letterSpacing: "0.06em",
                     }}
                   >
+                    Comprobante
+                  </th>
+                  <th
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      color: "var(--color-text-muted)",
+                      textAlign: "left",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
                     Total
                   </th>
                   <th
@@ -560,6 +584,48 @@ export function ReservasManager() {
                           {paymentLabels[b.payment_status] || b.payment_status}
                         </span>
                       </td>
+                      <td style={{ padding: "14px 16px" }}>
+                        {b.comprobante_serie ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            <span
+                              className="badge badge-gold"
+                              style={{
+                                fontSize: "0.75rem",
+                                padding: "2px 8px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                width: "fit-content",
+                              }}
+                            >
+                              🧾 {b.comprobante_tipo === "01" ? "Factura" : "Boleta"}{" "}
+                              {b.comprobante_serie}-{String(b.comprobante_numero || 1).padStart(6, "0")}
+                            </span>
+                            {b.pdf_url && (
+                              <a
+                                href={b.pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "var(--color-primary)",
+                                  textDecoration: "underline",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 2,
+                                }}
+                              >
+                                📄 Ver PDF
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                            —
+                          </span>
+                        )}
+                      </td>
                       <td
                         style={{
                           padding: "14px 16px",
@@ -609,7 +675,7 @@ export function ReservasManager() {
                     {expandedId === b.id && (
                       <tr key={`${b.id}-detail`}>
                         <td
-                          colSpan={9}
+                          colSpan={10}
                           style={{
                             padding: 0,
                             borderBottom: "1px solid var(--color-border)",
@@ -626,7 +692,7 @@ export function ReservasManager() {
                             <div
                               style={{
                                 display: "grid",
-                                gridTemplateColumns: "1fr 1fr 1fr",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                                 gap: 20,
                                 marginBottom: 20,
                               }}
@@ -737,6 +803,66 @@ export function ReservasManager() {
                                   </span>
                                 </div>
                               </div>
+
+                              {/* Facturación Electrónica Keyfácil */}
+                              <div>
+                                <p
+                                  style={{
+                                    fontSize: "0.6875rem",
+                                    fontWeight: 700,
+                                    color: "var(--color-text-muted)",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  Facturación Electrónica
+                                </p>
+                                {b.comprobante_serie ? (
+                                  <div>
+                                    <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-primary)", marginBottom: 4 }}>
+                                      {b.comprobante_tipo === "01" ? "Factura Electrónica" : "Boleta de Venta"}
+                                    </p>
+                                    <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>
+                                      Comprobante: <strong>{b.comprobante_serie}-{String(b.comprobante_numero || 1).padStart(6, "0")}</strong>
+                                    </p>
+                                    {b.billing_name && (
+                                      <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>
+                                        {b.comprobante_tipo === "01" ? "Razón Social: " : "Nombre: "}
+                                        <strong>{b.billing_name}</strong>
+                                      </p>
+                                    )}
+                                    {b.billing_doc_number && (
+                                      <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
+                                        {b.comprobante_tipo === "01" ? "RUC: " : "Doc: "}
+                                        {b.billing_doc_number}
+                                      </p>
+                                    )}
+                                    {b.pdf_url && (
+                                      <a
+                                        href={b.pdf_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn btn-secondary btn-sm"
+                                        style={{
+                                          marginTop: 6,
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 6,
+                                          fontSize: "0.8125rem",
+                                          textDecoration: "none",
+                                        }}
+                                      >
+                                        📄 Ver Comprobante PDF
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
+                                    Sin comprobante emitido
+                                  </p>
+                                )}
+                              </div>
                             </div>
 
                             {/* Actions */}
@@ -827,3 +953,4 @@ export function ReservasManager() {
     </div>
   );
 }
+

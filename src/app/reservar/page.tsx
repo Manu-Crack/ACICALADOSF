@@ -29,6 +29,17 @@ export default function ReservarPage() {
     email: "",
     dni: "",
   });
+  const [comprobanteTipo, setComprobanteTipo] = useState<"03" | "01">("03");
+  const [ruc, setRuc] = useState("");
+  const [razonSocial, setRazonSocial] = useState("");
+  const [direccionFiscal, setDireccionFiscal] = useState("");
+  const [comprobanteEmitido, setComprobanteEmitido] = useState<{
+    tipo: string;
+    serie?: string;
+    numero?: number;
+    pdf_url?: string;
+  } | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [bookingResult, setBookingResult] = useState<{
@@ -38,6 +49,7 @@ export default function ReservarPage() {
     total_price_cents: number;
     payment_amount_cents: number;
     payment_mode: string;
+    comprobante_tipo?: string;
   } | null>(null);
 
   const supabase = createClient();
@@ -176,6 +188,18 @@ export default function ReservarPage() {
   }
 
   async function handleCreateBooking() {
+    // Validaciones fiscales
+    if (comprobanteTipo === "01") {
+      if (!ruc || ruc.trim().length !== 11) {
+        setError("Para emitir Factura es obligatorio ingresar un RUC de 11 dígitos.");
+        return;
+      }
+      if (!razonSocial || !razonSocial.trim()) {
+        setError("Para emitir Factura es obligatorio ingresar la Razón Social.");
+        return;
+      }
+    }
+
     setLoading(true);
     setError("");
 
@@ -193,6 +217,11 @@ export default function ReservarPage() {
           client_email: contact.email,
           client_dni: contact.dni,
           payment_mode: paymentMode,
+          comprobante_tipo: comprobanteTipo,
+          billing_doc_type: comprobanteTipo === "01" ? "6" : "1",
+          billing_doc_number: comprobanteTipo === "01" ? ruc.trim() : (contact.dni.trim() || null),
+          billing_name: comprobanteTipo === "01" ? razonSocial.trim() : `${contact.firstName} ${contact.lastName}`.trim(),
+          billing_address: direccionFiscal.trim() || null,
         }),
       });
 
@@ -225,7 +254,6 @@ export default function ReservarPage() {
     ) => Record<string, unknown>;
 
     const amount = bookingResult.payment_amount_cents;
-    const isFull = bookingResult.payment_mode === "full";
     const config = {
       settings: {
         title: "Acicalados",
@@ -275,6 +303,14 @@ export default function ReservarPage() {
 
           const data = await res.json();
           if (res.ok) {
+            if (data.comprobante || data.pdf_url) {
+              setComprobanteEmitido({
+                tipo: data.comprobante_tipo || data.comprobante?.tipo || comprobanteTipo,
+                serie: data.comprobante_serie || data.comprobante?.serie,
+                numero: data.comprobante_numero || data.comprobante?.numero,
+                pdf_url: data.pdf_url || data.comprobante?.pdf_url,
+              });
+            }
             goToStep("success");
           } else {
             setError(data.error || "Error al procesar el pago");
@@ -289,7 +325,7 @@ export default function ReservarPage() {
     };
 
     (window as unknown as Record<string, unknown>).__culqi = culqi;
-  }, [bookingResult, contact.email, goToStep]);
+  }, [bookingResult, contact.email, comprobanteTipo, goToStep]);
 
   useEffect(() => {
     if (step === "payment") {
@@ -690,11 +726,11 @@ export default function ReservarPage() {
           </div>
         )}
 
-        {/* Step 4: Contact Info */}
+        {/* Step 4: Contact Info & Billing */}
         {step === "contact" && (
           <div className="animate-fadeInUp">
             <h2 className="heading-md" style={{ marginBottom: 24 }}>
-              Datos de contacto
+              Datos de contacto y facturación
             </h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div>
@@ -719,13 +755,160 @@ export default function ReservarPage() {
                 maxLength={9}
               />
             </div>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 20 }}>
               <label className="label">Correo electrónico</label>
               <input className="input" type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} placeholder="tu@email.com" />
             </div>
-            <div style={{ marginBottom: 24 }}>
-              <label className="label">DNI</label>
-              <input className="input" value={contact.dni} onChange={(e) => setContact({ ...contact, dni: e.target.value })} placeholder="12345678" maxLength={8} />
+
+            {/* Selector de Comprobante de Pago (Boleta / Factura) */}
+            <div className="card card-gold" style={{ marginBottom: 24, padding: "20px" }}>
+              <label className="label" style={{ marginBottom: 12, fontSize: "0.9375rem", fontWeight: 700 }}>
+                🧾 Tipo de Comprobante Electrónico
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setComprobanteTipo("03")}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: "var(--radius-md)",
+                    border: `2px solid ${comprobanteTipo === "03" ? "var(--color-primary)" : "var(--color-border)"}`,
+                    background: comprobanteTipo === "03" ? "rgba(200,164,92,0.15)" : "rgba(20, 18, 12, 0.6)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "#FFFFFF",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    transition: "all var(--transition-fast)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      border: `2px solid ${comprobanteTipo === "03" ? "var(--color-primary)" : "var(--color-border)"}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {comprobanteTipo === "03" && (
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--color-primary)" }} />
+                    )}
+                  </div>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: "0.875rem", color: comprobanteTipo === "03" ? "var(--color-primary)" : "#FFFFFF" }}>
+                      Boleta de Venta
+                    </p>
+                    <p className="text-muted" style={{ fontSize: "0.75rem" }}>
+                      Persona natural (DNI)
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setComprobanteTipo("01")}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: "var(--radius-md)",
+                    border: `2px solid ${comprobanteTipo === "01" ? "var(--color-primary)" : "var(--color-border)"}`,
+                    background: comprobanteTipo === "01" ? "rgba(200,164,92,0.15)" : "rgba(20, 18, 12, 0.6)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "#FFFFFF",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    transition: "all var(--transition-fast)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      border: `2px solid ${comprobanteTipo === "01" ? "var(--color-primary)" : "var(--color-border)"}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {comprobanteTipo === "01" && (
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--color-primary)" }} />
+                    )}
+                  </div>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: "0.875rem", color: comprobanteTipo === "01" ? "var(--color-primary)" : "#FFFFFF" }}>
+                      Factura
+                    </p>
+                    <p className="text-muted" style={{ fontSize: "0.75rem" }}>
+                      Empresa con RUC
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Campos condicionales según tipo de comprobante */}
+              {comprobanteTipo === "03" ? (
+                <div>
+                  <label className="label">DNI (Opcional)</label>
+                  <input
+                    className="input"
+                    value={contact.dni}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "");
+                      setContact({ ...contact, dni: val });
+                    }}
+                    placeholder="8 dígitos (opcional)"
+                    maxLength={8}
+                  />
+                  <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
+                    Se emitirá la Boleta de Venta a tu nombre tras confirmar el pago.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <label className="label">RUC (11 dígitos) *</label>
+                    <input
+                      className="input"
+                      value={ruc}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        setRuc(val);
+                      }}
+                      placeholder="Ej. 20601234567"
+                      maxLength={11}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Razón Social *</label>
+                    <input
+                      className="input"
+                      value={razonSocial}
+                      onChange={(e) => setRazonSocial(e.target.value)}
+                      placeholder="Ej. Mi Empresa S.A.C."
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Dirección Fiscal (Opcional)</label>
+                    <input
+                      className="input"
+                      value={direccionFiscal}
+                      onChange={(e) => setDireccionFiscal(e.target.value)}
+                      placeholder="Ej. Av. Principal 123, Iquitos"
+                    />
+                  </div>
+                  <p className="text-muted" style={{ fontSize: "0.75rem" }}>
+                    ℹ️ Se emitirá la Factura electrónica con estos datos fiscales.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Summary */}
@@ -830,7 +1013,13 @@ export default function ReservarPage() {
               </button>
               <button
                 onClick={handleCreateBooking}
-                disabled={loading || !contact.firstName || !contact.lastName || (!contact.phone && !contact.email)}
+                disabled={
+                  loading ||
+                  !contact.firstName ||
+                  !contact.lastName ||
+                  (!contact.phone && !contact.email) ||
+                  (comprobanteTipo === "01" && (!ruc || ruc.length !== 11 || !razonSocial.trim()))
+                }
                 className="btn btn-primary"
                 style={{ flex: 1 }}
               >
@@ -862,7 +1051,7 @@ export default function ReservarPage() {
           </div>
         )}
 
-        {/* Step 6: Success */}
+        {/* Step 6: Success with Electronic Invoice Download */}
         {step === "success" && (
           <div className="animate-fadeInUp" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "4rem", marginBottom: 16 }}>🎉</div>
@@ -875,10 +1064,58 @@ export default function ReservarPage() {
                 : "Tu cita está confirmada. Paga el resto al llegar."}
             </p>
             {bookingResult && (
-              <p style={{ marginBottom: 32 }}>
+              <p style={{ marginBottom: 24 }}>
                 Código: <strong className="text-gold" style={{ fontSize: "1.25rem" }}>{bookingResult.booking_code}</strong>
               </p>
             )}
+
+            {/* Botón Principal de Descarga de Comprobante PDF */}
+            {comprobanteEmitido?.pdf_url ? (
+              <div
+                style={{
+                  margin: "0 auto 28px",
+                  padding: "20px 24px",
+                  background: "rgba(200, 164, 92, 0.08)",
+                  borderRadius: "var(--radius-lg)",
+                  border: "1px solid var(--color-primary-border)",
+                  maxWidth: 480,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 14 }}>
+                  <span style={{ fontSize: "1.25rem" }}>🧾</span>
+                  <span style={{ fontWeight: 700, color: "var(--color-primary)", fontSize: "0.9375rem" }}>
+                    {comprobanteEmitido.tipo === "01" ? "Factura Electrónica" : "Boleta de Venta Electrónica"}
+                  </span>
+                  {comprobanteEmitido.serie && (
+                    <span className="badge badge-gold" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
+                      {comprobanteEmitido.serie}-{String(comprobanteEmitido.numero || 1).padStart(6, "0")}
+                    </span>
+                  )}
+                </div>
+                <a
+                  href={comprobanteEmitido.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-primary btn-lg"
+                  style={{
+                    width: "100%",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    textDecoration: "none",
+                    fontSize: "1rem",
+                    boxShadow: "0 4px 14px rgba(200, 164, 92, 0.3)",
+                  }}
+                >
+                  📄 Descargar {comprobanteEmitido.tipo === "01" ? "Factura" : "Boleta de Venta"} (PDF)
+                </a>
+                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 8 }}>
+                  Documento tributario oficial emitido a través de Keyfácil / SUNAT
+                </p>
+              </div>
+            ) : null}
+
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <Link href="/" className="btn btn-secondary">
                 Ir al Inicio
