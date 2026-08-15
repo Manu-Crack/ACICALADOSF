@@ -285,10 +285,32 @@ export default function ReservarPage() {
 
     const culqi = new CulqiCheckout(publicKey, config);
 
-    (culqi as Record<string, unknown>).culqi = async function () {
+    const closeCulqiModal = () => {
+      try {
+        (culqi as { close?: () => void })?.close?.();
+      } catch {}
+      try {
+        const winCulqi = (window as unknown as { Culqi?: { close?: () => void } }).Culqi;
+        winCulqi?.close?.();
+      } catch {}
+      try {
+        const containers = document.querySelectorAll(
+          ".culqi_checkout, #culqi-container, iframe[src*='culqi'], [class*='culqi-modal'], [id*='culqi'], .culqi-backdrop"
+        );
+        containers.forEach((el) => {
+          const htmlEl = el as HTMLElement;
+          htmlEl.style.display = "none";
+          htmlEl.style.visibility = "hidden";
+        });
+      } catch {}
+    };
+
+    const handleCulqiCallback = async function () {
       const token = (culqi as Record<string, unknown>).token as { id: string } | undefined;
       if (token) {
-        (culqi as { close: () => void }).close();
+        // Cerrar inmediatamente el modal de Culqi para no bloquear la pantalla
+        closeCulqiModal();
+        setLoading(true);
 
         try {
           const res = await fetch("/api/culqi/charge", {
@@ -302,6 +324,8 @@ export default function ReservarPage() {
           });
 
           const data = await res.json();
+          closeCulqiModal();
+
           if (res.ok) {
             if (data.comprobante || data.pdf_url) {
               setComprobanteEmitido({
@@ -316,14 +340,20 @@ export default function ReservarPage() {
             setError(data.error || "Error al procesar el pago");
           }
         } catch {
+          closeCulqiModal();
           setError("Error de conexión al procesar el pago");
+        } finally {
+          setLoading(false);
         }
       } else {
+        closeCulqiModal();
         const errObj = (culqi as Record<string, unknown>).error as { user_message?: string } | undefined;
         setError(errObj?.user_message || "Error en el pago");
       }
     };
 
+    (culqi as Record<string, unknown>).culqi = handleCulqiCallback;
+    (window as unknown as Record<string, unknown>).culqi = handleCulqiCallback;
     (window as unknown as Record<string, unknown>).__culqi = culqi;
   }, [bookingResult, contact.email, comprobanteTipo, goToStep]);
 
@@ -1042,11 +1072,18 @@ export default function ReservarPage() {
             <p style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--color-primary)", marginBottom: 32 }}>
               S/ {(bookingResult.payment_amount_cents / 100).toFixed(2)}
             </p>
-            <button onClick={openCulqi} className="btn btn-primary btn-lg" style={{ width: "100%" }}>
-              🔒 Pagar Ahora
+            <button
+              onClick={openCulqi}
+              disabled={loading}
+              className="btn btn-primary btn-lg"
+              style={{ width: "100%" }}
+            >
+              {loading ? "⏳ Confirmando pago y emitiendo comprobante..." : "🔒 Pagar Ahora"}
             </button>
             <p className="text-muted" style={{ marginTop: 16, fontSize: "0.8125rem" }}>
-              Tienes 15 minutos para completar el pago antes de que expire la reserva.
+              {loading
+                ? "Por favor espera unos segundos mientras confirmamos tu cita y generamos tu comprobante..."
+                : "Tienes 15 minutos para completar el pago antes de que expire la reserva."}
             </p>
           </div>
         )}
