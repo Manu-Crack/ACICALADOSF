@@ -9,7 +9,7 @@ export function CartButton() {
     <button
       type="button"
       onClick={openCart}
-      className="group flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-lg border border-[#C8A45C]/60 hover:border-[#C8A45C] bg-black/40 hover:bg-[#C8A45C]/10 text-gray-200 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-[0_0_12px_rgba(200,164,92,0.15)] cursor-pointer shrink-0"
+      className="group inline-flex items-center justify-center h-9 sm:h-[38px] pl-3.5 pr-2.5 py-1.5 rounded-full border border-[#C8A45C]/60 hover:border-[#C8A45C] bg-black/60 hover:bg-[#C8A45C]/15 text-gray-200 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-[0_0_12px_rgba(200,164,92,0.2)] cursor-pointer shrink-0 gap-2.5"
       title="Abrir Carrito de Compras"
       aria-label="Abrir Carrito"
     >
@@ -28,10 +28,10 @@ export function CartButton() {
         />
       </svg>
 
-      <span className="tracking-wide">Carrito</span>
+      <span className="tracking-wide select-none leading-none">Carrito</span>
 
       {/* Circular Gold Badge with Black Text */}
-      <span className="w-5 h-5 rounded-full bg-[#C8A45C] text-black font-extrabold text-xs flex items-center justify-center shadow-inner shrink-0">
+      <span className="w-5 h-5 min-w-[20px] rounded-full bg-[#C8A45C] text-black font-extrabold text-xs flex items-center justify-center shrink-0 shadow-inner leading-none ml-0.5">
         {cartCount > 0 ? cartCount : 2}
       </span>
     </button>

@@ -35,12 +35,12 @@ export function NavUserButton({
   const displayName = profileName || (user ? "Manuel Elias" : "Iniciar Sesión");
 
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
+    <div className="relative inline-flex items-center" ref={menuRef}>
       {/* User Button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="group flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-[#C8A45C]/60 hover:border-[#C8A45C] bg-black/40 hover:bg-[#C8A45C]/10 text-gray-200 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-[0_0_12px_rgba(200,164,92,0.15)] cursor-pointer"
+        className="group inline-flex items-center justify-center h-9 sm:h-[38px] pl-3.5 pr-3 py-1.5 rounded-full border border-[#C8A45C]/60 hover:border-[#C8A45C] bg-black/60 hover:bg-[#C8A45C]/15 text-gray-200 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-[0_0_12px_rgba(200,164,92,0.2)] cursor-pointer shrink-0 gap-2"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -59,7 +59,9 @@ export function NavUserButton({
           />
         </svg>
 
-        <span className="max-w-[130px] truncate">{displayName}</span>
+        <span className="max-w-[130px] truncate leading-none select-none">
+          {displayName}
+        </span>
 
         {/* Chevron Down */}
         <svg
@@ -77,7 +79,7 @@ export function NavUserButton({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-[#111111] border border-[#C8A45C]/35 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] py-2 z-50 animate-fadeIn backdrop-blur-md">
+        <div className="absolute right-0 top-full mt-2 w-56 bg-[#111111] border border-[#C8A45C]/35 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] py-2 z-50 animate-fadeIn backdrop-blur-md">
           {user ? (
             <>
               <div className="px-4 py-2.5 border-b border-[#C8A45C]/20 mb-1">
