@@ -217,7 +217,10 @@ export default function ReservarPage() {
 
       setBookingResult(data);
       clearSessionCart();
-      goToStep("success");
+      setCart([]);
+      setBookingDate("");
+      setStartTime("");
+      setStepHistory(["success"]);
 
       // Abrir automáticamente WhatsApp en una nueva pestaña
       if (data.whatsapp_url) {
@@ -228,6 +231,16 @@ export default function ReservarPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleNewBooking() {
+    setCart([]);
+    clearSessionCart();
+    setBookingDate("");
+    setStartTime("");
+    setBookingResult(null);
+    setServiceType(null);
+    setStepHistory(["type"]);
   }
 
   const timeSlots: string[] = [];
@@ -1062,44 +1075,35 @@ export default function ReservarPage() {
               </div>
             )}
 
-            {/* Botón WhatsApp de Acción Directa */}
-            {bookingResult?.whatsapp_url && (
-              <div style={{ marginBottom: 28 }}>
-                <a
-                  href={bookingResult.whatsapp_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-lg"
-                  style={{
-                    background: "#25D366",
-                    color: "#FFFFFF",
-                    fontWeight: 800,
-                    fontSize: "1.0625rem",
-                    padding: "16px 28px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 10,
-                    textDecoration: "none",
-                    boxShadow: "0 6px 20px rgba(37, 211, 102, 0.4)",
-                    borderRadius: "var(--radius-md)",
-                    transition: "transform var(--transition-fast)",
-                  }}
-                >
-                  <img
-                    src="/icons/whatsApp.svg"
-                    alt="WhatsApp"
-                    style={{ width: 26, height: 26 }}
-                  />
-                  <span>Confirmar Reserva por WhatsApp</span>
-                </a>
-                <p
-                  className="text-muted"
-                  style={{ fontSize: "0.8125rem", marginTop: 10 }}
-                >
-                  Se abrirá WhatsApp con los detalles de tu cita listos para enviar.
-                </p>
-              </div>
-            )}
+            {/* Mensaje de confirmación informativa */}
+            <div
+              style={{
+                margin: "0 auto 28px",
+                padding: "16px 20px",
+                background: "rgba(37, 211, 102, 0.08)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid rgba(37, 211, 102, 0.25)",
+                maxWidth: 480,
+                textAlign: "center",
+              }}
+            >
+              <p
+                style={{
+                  fontWeight: 700,
+                  color: "#25D366",
+                  fontSize: "0.9375rem",
+                  marginBottom: 6,
+                }}
+              >
+                ✅ Solicitud registrada y enviada a WhatsApp
+              </p>
+              <p
+                className="text-muted"
+                style={{ fontSize: "0.8125rem", lineHeight: 1.5 }}
+              >
+                Tu cita está en espera en nuestro panel. Quedará confirmada en el momento que se corrobore el pago en nuestro local.
+              </p>
+            </div>
 
             <div
               style={{
@@ -1110,10 +1114,17 @@ export default function ReservarPage() {
               }}
             >
               <Link href="/" className="btn btn-secondary">
-                Ir al Inicio
+                🏠 Ir al Inicio
               </Link>
-              <Link href="/mi-cuenta" className="btn btn-primary">
-                Ver Mis Reservas
+              <button
+                type="button"
+                onClick={handleNewBooking}
+                className="btn btn-primary"
+              >
+                ➕ Nueva Reserva
+              </button>
+              <Link href="/mi-cuenta" className="btn btn-ghost">
+                👤 Ver Mis Reservas
               </Link>
             </div>
           </div>
