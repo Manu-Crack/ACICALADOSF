@@ -34,7 +34,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>
+      <body className="relative min-h-screen bg-black">
+        {/* Global Fixed Background (fondo1.webp - Visible en todos los módulos y fijo al hacer scroll) */}
+        <div className="global-fixed-bg" aria-hidden="true">
+          <img
+            src="/fondo1.webp"
+            alt=""
+            className="global-fixed-bg-img"
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
+          />
+          {/* Suave viñeta ligera para mantener nitidez y luz natural */}
+          <div className="global-fixed-bg-overlay" />
+        </div>
+
         <CartProvider>{children}</CartProvider>
       </body>
     </html>

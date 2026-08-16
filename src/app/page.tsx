@@ -28,24 +28,6 @@ export default async function HomePage() {
       <main>
         {/* Hero Section */}
         <section id="inicio" className="hero-section">
-          {/* Background Image Container with Textures, Glows & Contrast Overlays */}
-          <div className="hero-bg-wrapper">
-            <img
-              src="/fondo1.webp"
-              alt="Fondo Acicalados Spa & Barber Shop"
-              className="hero-bg-image"
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-            />
-            {/* Top gradient for Navbar seamless blending */}
-            <div className="hero-bg-overlay-top" />
-            {/* Radial vignette for optimal content legibility */}
-            <div className="hero-bg-overlay-radial" />
-            {/* Bottom smooth gradient transition into Benefits section */}
-            <div className="hero-bg-overlay-bottom" />
-          </div>
-
           <div className="container" style={{ position: "relative", zIndex: 2 }}>
             <div className="hero-grid">
               <div className="hero-content">
@@ -305,7 +287,7 @@ export default async function HomePage() {
 
         {/* FAQ */}
         {faqItems && faqItems.length > 0 && (
-          <section className="section" style={{ background: "var(--color-bg-card)" }}>
+          <section className="section" style={{ background: "transparent" }}>
             <div className="container" style={{ maxWidth: 720 }}>
               <div style={{ textAlign: "center", marginBottom: 48 }}>
                 <span className="badge badge-gold">FAQ</span>
@@ -325,7 +307,9 @@ export default async function HomePage() {
                   <details
                     key={faq.id}
                     style={{
-                      background: "var(--color-bg)",
+                      background: "rgba(18, 15, 10, 0.72)",
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
                       border: "1px solid var(--color-border)",
                       borderRadius: "var(--radius-md)",
                       overflow: "hidden",

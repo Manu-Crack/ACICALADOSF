@@ -160,7 +160,9 @@ export default async function MiCuentaPage() {
                     key={b.id}
                     style={{
                       padding: "18px 20px",
-                      background: "var(--color-bg)",
+                      background: "rgba(18, 15, 10, 0.65)",
+                      backdropFilter: "blur(10px)",
+                      WebkitBackdropFilter: "blur(10px)",
                       borderRadius: "var(--radius-md)",
                       border: "1px solid var(--color-border)",
                     }}

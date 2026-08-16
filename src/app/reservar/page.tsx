@@ -285,8 +285,7 @@ export default function ReservarPage() {
       style={{
         minHeight: "100vh",
         padding: "100px 24px 60px",
-        background:
-          "radial-gradient(ellipse at 50% 10%, rgba(200,164,92,0.06) 0%, var(--color-bg) 60%)",
+        background: "transparent",
       }}
     >
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
