@@ -52,15 +52,28 @@ export async function GET(request: NextRequest) {
 
     const maxConcurrent = employeeCount || 1;
 
-    // Generate all possible time slots (8:00 - 19:00, 30-min increments)
+    // Determine business hours based on day of week:
+    // Lunes a Sábado: 9:00 - 21:00
+    // Domingo: 10:00 - 20:00
+    const [year, month, day] = date.split("-").map(Number);
+    const dateObj = new Date(year, month - 1, day);
+    const isSunday = dateObj.getDay() === 0;
+
+    const startHour = isSunday ? 10 : 9;
+    const endHour = isSunday ? 20 : 21;
+    const maxEndMinutes = endHour * 60;
+
+    // Generate all possible time slots
     const availableSlots: string[] = [];
-    for (let hour = 8; hour <= 19; hour++) {
+    for (let hour = startHour; hour <= endHour; hour++) {
       for (const min of [0, 30]) {
+        if (hour === endHour && min > 0) continue;
+
         const slotStart = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
         const endMinutes = hour * 60 + min + totalDuration;
         
-        // Don't go past 20:00
-        if (endMinutes > 20 * 60) continue;
+        // Don't start a slot that goes past closing time
+        if (endMinutes > maxEndMinutes + 30) continue;
 
         const slotEnd = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 

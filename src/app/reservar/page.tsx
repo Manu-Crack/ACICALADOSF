@@ -255,10 +255,26 @@ export default function ReservarPage() {
     setStepHistory(["type"]);
   }
 
+  // Generate time slots according to selected day of week:
+  // Lunes a Sábado: 9:00 am a 9:00 pm (09:00 - 21:00)
+  // Domingo: 10:00 am a 8:00 pm (10:00 - 20:00)
+  let isSunday = false;
   const timeSlots: string[] = [];
-  for (let h = 8; h <= 19; h++) {
-    timeSlots.push(`${String(h).padStart(2, "0")}:00`);
-    if (h < 19) timeSlots.push(`${String(h).padStart(2, "0")}:30`);
+
+  if (bookingDate) {
+    const [y, m, d] = bookingDate.split("-").map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    isSunday = dateObj.getDay() === 0;
+
+    const startHour = isSunday ? 10 : 9;
+    const endHour = isSunday ? 20 : 21;
+
+    for (let h = startHour; h <= endHour; h++) {
+      timeSlots.push(`${String(h).padStart(2, "0")}:00`);
+      if (h < endHour) {
+        timeSlots.push(`${String(h).padStart(2, "0")}:30`);
+      }
+    }
   }
 
   const today = new Date();
@@ -746,7 +762,31 @@ export default function ReservarPage() {
 
             {bookingDate && (
               <div style={{ marginBottom: 24 }}>
-                <label className="label">Horario de atención *</label>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                    flexWrap: "wrap",
+                    gap: 4,
+                  }}
+                >
+                  <label className="label" style={{ marginBottom: 0 }}>
+                    Horario de atención *
+                  </label>
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-primary)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isSunday
+                      ? "Domingo (10:00 am – 8:00 pm)"
+                      : "Lunes a Sábado (9:00 am – 9:00 pm)"}
+                  </span>
+                </div>
                 <div
                   style={{
                     display: "grid",
