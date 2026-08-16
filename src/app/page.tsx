@@ -28,17 +28,25 @@ export default async function HomePage() {
       <main>
         {/* Hero Section */}
         <section id="inicio" className="hero-section">
-          {/* Background gradient */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "radial-gradient(ellipse at 50% 30%, rgba(200,164,92,0.06) 0%, transparent 60%)",
-              pointerEvents: "none",
-            }}
-          />
-          <div className="container" style={{ position: "relative" }}>
+          {/* Background Image Container with Textures, Glows & Contrast Overlays */}
+          <div className="hero-bg-wrapper">
+            <img
+              src="/fondo1.webp"
+              alt="Fondo Acicalados Spa & Barber Shop"
+              className="hero-bg-image"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+            {/* Top gradient for Navbar seamless blending */}
+            <div className="hero-bg-overlay-top" />
+            {/* Radial vignette for optimal content legibility */}
+            <div className="hero-bg-overlay-radial" />
+            {/* Bottom smooth gradient transition into Benefits section */}
+            <div className="hero-bg-overlay-bottom" />
+          </div>
+
+          <div className="container" style={{ position: "relative", zIndex: 2 }}>
             <div className="hero-grid">
               <div className="hero-content">
                 <span
