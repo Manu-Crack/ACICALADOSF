@@ -38,7 +38,7 @@ export async function Navbar() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-[#C8A45C]/35 shadow-[0_4px_25px_rgba(0,0,0,0.85)]">
       <div className="max-w-[1440px] mx-auto h-[74px] sm:h-[78px] px-4 sm:px-6 lg:px-8 flex justify-between items-center">
         {/* SECCIÓN IZQUIERDA (Marca & Logo) */}
-        <div className="flex items-center">
+        <div className="flex items-center pl-1 sm:pl-3 md:pl-6 lg:pl-10 xl:pl-14">
           <Link
             href="/"
             className="flex items-center group cursor-pointer"

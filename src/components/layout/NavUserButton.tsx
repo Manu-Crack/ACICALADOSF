@@ -40,7 +40,7 @@ export function NavUserButton({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="group inline-flex items-center justify-center h-9 sm:h-[38px] pl-3.5 pr-3 py-1.5 rounded-full border border-[#C8A45C]/60 hover:border-[#C8A45C] bg-black/60 hover:bg-[#C8A45C]/15 text-gray-200 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-[0_0_12px_rgba(200,164,92,0.2)] cursor-pointer shrink-0 gap-2"
+        className="group inline-flex items-center justify-center h-9 sm:h-[38px] px-3 py-1.5 rounded-full hover:bg-[#C8A45C]/15 text-gray-200 hover:text-[#C8A45C] transition-all duration-200 text-sm font-medium cursor-pointer shrink-0 gap-2"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
