@@ -8,7 +8,7 @@ const IMAGES = [
     alt: "Barbería Acicalados",
   },
   {
-    src: "/SpaMujer.svg",
+    src: "/fondo2.webp",
     alt: "Spa Acicalados",
   },
 ];
