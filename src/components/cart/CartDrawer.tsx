@@ -199,9 +199,15 @@ export function CartDrawer() {
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                       <span
                         className="badge badge-gold"
-                        style={{ fontSize: "0.625rem", padding: "2px 6px" }}
+                        style={{ fontSize: "0.625rem", padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
-                        {item.type === "barberia" ? "💈 Barbería" : "🌸 Spa"}
+                        {item.type === "barberia" ? (
+                          "💈 Barbería"
+                        ) : (
+                          <>
+                            <img src="/LogoSpa.svg" alt="Spa" style={{ width: 12, height: 12, display: "inline-block" }} /> Spa
+                          </>
+                        )}
                       </span>
                     </div>
                     <h4

@@ -614,9 +614,17 @@ export default function EmployeesManager() {
                   key={t}
                   onClick={() => setFilterType(t)}
                   className={`btn btn-sm ${filterType === t ? "btn-primary" : "btn-ghost"}`}
-                  style={{ textTransform: "capitalize" }}
+                  style={{ textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
-                  {t === "all" ? "Todos" : t === "spa" ? "🌸 Spa" : "💈 Barbería"}
+                  {t === "all" ? (
+                    "Todos"
+                  ) : t === "spa" ? (
+                    <>
+                      <img src="/LogoSpa.svg" alt="Spa" style={{ width: 14, height: 14, display: "inline-block" }} /> Spa
+                    </>
+                  ) : (
+                    "💈 Barbería"
+                  )}
                 </button>
               ))}
             </div>
@@ -688,9 +696,15 @@ export default function EmployeesManager() {
                             className={`badge ${
                               emp.type === "barberia" ? "badge-info" : "badge-secondary"
                             }`}
-                            style={{ fontSize: "0.75rem" }}
+                            style={{ fontSize: "0.75rem", display: "inline-flex", alignItems: "center", gap: 4 }}
                           >
-                            {emp.type === "barberia" ? "💈 Barbería" : "🌸 Spa"}
+                            {emp.type === "barberia" ? (
+                              "💈 Barbería"
+                            ) : (
+                              <>
+                                <img src="/LogoSpa.svg" alt="Spa" style={{ width: 12, height: 12, display: "inline-block" }} /> Spa
+                              </>
+                            )}
                           </span>
                         </div>
 
@@ -1081,7 +1095,7 @@ export default function EmployeesManager() {
                     ).length;
                     return (
                       <option key={emp.id} value={emp.id}>
-                        {emp.type === "barberia" ? "💈" : "🌸"} {emp.first_name}{" "}
+                        {emp.type === "barberia" ? "💈" : "Spa:"} {emp.first_name}{" "}
                         {emp.last_name} ({count} citas)
                       </option>
                     );
@@ -1420,7 +1434,7 @@ export default function EmployeesManager() {
                           <option value="">⚠️ Sin asignar</option>
                           {employees.map((emp) => (
                             <option key={emp.id} value={emp.id}>
-                              {emp.type === "barberia" ? "💈" : "🌸"} {emp.first_name}{" "}
+                              {emp.type === "barberia" ? "💈" : "Spa:"} {emp.first_name}{" "}
                               {emp.last_name}
                             </option>
                           ))}
@@ -1554,8 +1568,8 @@ export default function EmployeesManager() {
                     onChange={(e) => setType(e.target.value as "barberia" | "spa")}
                     className="input"
                   >
-                    <option value="spa">🌸 Spa</option>
-                    <option value="barberia">💈 Barbería</option>
+                    <option value="spa">Spa</option>
+                    <option value="barberia">Barbería</option>
                   </select>
                 </div>
                 <div>
