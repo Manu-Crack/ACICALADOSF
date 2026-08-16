@@ -1439,9 +1439,12 @@ export default function EmployeesManager() {
                               fontWeight: 700,
                               padding: "4px 10px",
                               fontSize: "0.75rem",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
                             }}
                           >
-                            ✅ Confirmar
+                            <img src="/Activo.svg" alt="Confirmar" style={{ width: 14, height: 14 }} /> Confirmar
                           </button>
                         )}
 

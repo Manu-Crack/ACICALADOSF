@@ -277,7 +277,7 @@ export function ReservasManager() {
               fontSize: "1.25rem",
             }}
           >
-            ✅
+            <img src="/Activo.svg" alt="Confirmadas" style={{ width: 24, height: 24 }} />
           </div>
           <div>
             <p
@@ -838,10 +838,13 @@ export function ReservasManager() {
                                 fontWeight: 700,
                                 padding: "4px 8px",
                                 fontSize: "0.75rem",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
                               }}
                               title="Confirmar Cita"
                             >
-                              ✅ Confirmar
+                              <img src="/Activo.svg" alt="Confirmar" style={{ width: 14, height: 14 }} /> Confirmar
                             </button>
                           )}
 
@@ -1047,9 +1050,12 @@ export function ReservasManager() {
                                     style={{
                                       fontSize: "0.8125rem",
                                       marginBottom: 4,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 4,
                                     }}
                                   >
-                                    ✅ Confirmada:{" "}
+                                    <img src="/Activo.svg" alt="Confirmada" style={{ width: 14, height: 14 }} /> Confirmada:{" "}
                                     {new Date(b.confirmed_at).toLocaleString(
                                       "es-PE"
                                     )}
@@ -1240,11 +1246,18 @@ export function ReservasManager() {
                                     color: "#000000",
                                     fontWeight: 700,
                                     padding: "8px 16px",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
                                   }}
                                 >
-                                  {actionLoading === b.id
-                                    ? "Actualizando..."
-                                    : "✅ Confirmar Cita"}
+                                  {actionLoading === b.id ? (
+                                    "Actualizando..."
+                                  ) : (
+                                    <>
+                                      <img src="/Activo.svg" alt="Confirmar" style={{ width: 16, height: 16 }} /> Confirmar Cita
+                                    </>
+                                  )}
                                 </button>
                               )}
 

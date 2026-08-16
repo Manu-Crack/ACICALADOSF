@@ -238,9 +238,15 @@ export function ServicesManager() {
                 <button
                   onClick={() => handleToggle(service, "is_active")}
                   className={`btn btn-sm ${service.is_active ? "btn-primary" : "btn-ghost"}`}
-                  style={{ fontSize: "0.75rem", flex: 1 }}
+                  style={{ fontSize: "0.75rem", flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}
                 >
-                  {service.is_active ? "✅ Activo" : "⏸️ Inactivo"}
+                  {service.is_active ? (
+                    <>
+                      <img src="/Activo.svg" alt="Activo" style={{ width: 14, height: 14, display: "inline-block" }} /> Activo
+                    </>
+                  ) : (
+                    "⏸️ Inactivo"
+                  )}
                 </button>
                 <button
                   onClick={() => handleToggle(service, "is_public")}

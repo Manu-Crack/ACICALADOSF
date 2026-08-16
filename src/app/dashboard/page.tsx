@@ -32,9 +32,9 @@ export default async function DashboardPage() {
     .gte("booking_date", weekStart.toISOString().split("T")[0])
     .in("status", ["confirmada", "completada"]);
 
-  const stats = [
+  const stats: { label: string; value: number; icon: React.ReactNode; color: string }[] = [
     { label: "Citas Hoy", value: todayCount ?? 0, icon: "📅", color: "var(--color-primary)" },
-    { label: "Confirmadas", value: confirmedCount, icon: "✅", color: "var(--color-success)" },
+    { label: "Confirmadas", value: confirmedCount, icon: <img src="/Activo.svg" alt="Confirmadas" style={{ width: 22, height: 22 }} />, color: "var(--color-success)" },
     { label: "Completadas", value: completedCount, icon: "🏁", color: "var(--color-info)" },
     { label: "Esta Semana", value: weekCount ?? 0, icon: "📊", color: "var(--color-warning)" },
   ];

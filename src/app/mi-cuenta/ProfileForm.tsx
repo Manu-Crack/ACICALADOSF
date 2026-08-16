@@ -71,8 +71,8 @@ export function ProfileForm({
             ✏️ Editar datos
           </button>
           {saved && (
-            <span style={{ color: "var(--color-success)", fontSize: "0.875rem", fontWeight: 500 }}>
-              ✅ Datos guardados correctamente
+            <span style={{ color: "var(--color-success)", fontSize: "0.875rem", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <img src="/Activo.svg" alt="Activo" style={{ width: 16, height: 16, display: "inline-block" }} /> Datos guardados correctamente
             </span>
           )}
         </div>

@@ -434,9 +434,15 @@ export function WardrobeManager() {
                   <button
                     onClick={() => handleToggleActive(item)}
                     className={`btn btn-sm ${item.is_active ? "btn-primary" : "btn-ghost"}`}
-                    style={{ fontSize: "0.75rem" }}
+                    style={{ fontSize: "0.75rem", display: "inline-flex", alignItems: "center", gap: 5 }}
                   >
-                    {item.is_active ? "✅ Activo" : "⏸️ Oculto"}
+                    {item.is_active ? (
+                      <>
+                        <img src="/Activo.svg" alt="Activo" style={{ width: 14, height: 14, display: "inline-block" }} /> Activo
+                      </>
+                    ) : (
+                      "⏸️ Oculto"
+                    )}
                   </button>
                 </div>
 

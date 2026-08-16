@@ -1150,9 +1150,13 @@ export default function ReservarPage() {
                   color: "#25D366",
                   fontSize: "0.9375rem",
                   marginBottom: 6,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
                 }}
               >
-                ✅ Solicitud registrada y enviada a WhatsApp
+                <img src="/Activo.svg" alt="Activo" style={{ width: 18, height: 18, display: "inline-block" }} /> Solicitud registrada y enviada a WhatsApp
               </p>
               <p
                 className="text-muted"

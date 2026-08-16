@@ -633,7 +633,7 @@ export function WardrobeFormModal({
                 </>
               ) : (
                 <>
-                  <span>✅</span>
+                  <img src="/Activo.svg" alt="Activo" style={{ width: 16, height: 16, display: "inline-block" }} />
                   <span>Publicar Vestuario</span>
                 </>
               )}

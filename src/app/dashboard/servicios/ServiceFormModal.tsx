@@ -705,11 +705,16 @@ export function ServiceFormModal({
               className="btn btn-primary"
               style={{ flex: 1 }}
             >
-              {saving
-                ? "Guardando..."
-                : isEditing
-                  ? "💾 Guardar Cambios"
-                  : "✅ Crear Servicio"}
+              {saving ? (
+                "Guardando..."
+              ) : isEditing ? (
+                "💾 Guardar Cambios"
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <img src="/Activo.svg" alt="Activo" style={{ width: 16, height: 16, display: "inline-block" }} />
+                  Crear Servicio
+                </span>
+              )}
             </button>
           </div>
         </form>
