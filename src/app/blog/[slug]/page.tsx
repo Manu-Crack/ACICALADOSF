@@ -1,54 +1,77 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 
+export const dynamic = "force-dynamic";
+
 interface BlogDetailPageProps {
   params: Promise<{
     slug: string;
-  }>;
-}
-
-export async function generateMetadata({ params }: BlogDetailPageProps) {
-  const { slug } = await params;
-  const supabase = await createClient();
-
-  const { data: post } = await supabase
-    .from("blog_posts")
-    .select("title, excerpt, cover_image")
-    .eq("slug", slug)
-    .single();
-
-  if (!post) {
-    return {
-      title: "Artículo no encontrado — Acicalados",
-    };
-  }
-
-  return {
-    title: `${post.title} — Blog Acicalados`,
-    description: post.excerpt || "Artículo editorial de Acicalados Spa & Barber Shop.",
-    openGraph: {
-      title: post.title,
-      description: post.excerpt || "Artículo de Acicalados Spa & Barber Shop",
-      images: post.cover_image ? [{ url: post.cover_image }] : [],
-    },
+  }> | {
+    slug: string;
   };
 }
 
-export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
-  const { slug } = await params;
-  const supabase = await createClient();
+export async function generateMetadata({ params }: BlogDetailPageProps) {
+  try {
+    const resolvedParams = await Promise.resolve(params);
+    const rawSlug = resolvedParams?.slug;
+    if (!rawSlug) return { title: "Artículo — Acicalados" };
 
-  // Fetch current post
-  const { data: post } = await supabase
+    const slug = decodeURIComponent(rawSlug);
+    const supabase = createAdminClient();
+
+    const { data: post } = await supabase
+      .from("blog_posts")
+      .select("title, excerpt, cover_image")
+      .eq("slug", slug)
+      .eq("is_published", true)
+      .maybeSingle();
+
+    if (!post) {
+      return {
+        title: "Artículo no encontrado — Acicalados",
+      };
+    }
+
+    return {
+      title: `${post.title} — Blog Acicalados`,
+      description: post.excerpt || "Artículo editorial de Acicalados Spa & Barber Shop.",
+      openGraph: {
+        title: post.title,
+        description: post.excerpt || "Artículo de Acicalados Spa & Barber Shop",
+        images: post.cover_image ? [{ url: post.cover_image }] : [],
+      },
+    };
+  } catch (error) {
+    console.error("Error generating metadata for blog detail:", error);
+    return {
+      title: "Blog — Acicalados",
+    };
+  }
+}
+
+export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
+  const resolvedParams = await Promise.resolve(params);
+  const rawSlug = resolvedParams?.slug;
+  if (!rawSlug) {
+    notFound();
+  }
+
+  const slug = decodeURIComponent(rawSlug);
+  const supabase = createAdminClient();
+
+  // Fetch current post safely with maybeSingle
+  const { data: post, error } = await supabase
     .from("blog_posts")
     .select("*")
     .eq("slug", slug)
-    .single();
+    .eq("is_published", true)
+    .maybeSingle();
 
-  if (!post || !post.is_published) {
+  if (error || !post) {
     notFound();
   }
 
