@@ -1029,9 +1029,12 @@ export function ReservasManager() {
                                   style={{
                                     fontSize: "0.8125rem",
                                     marginBottom: 4,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 4,
                                   }}
                                 >
-                                  📅 {b.booking_date}
+                                  <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} /> {b.booking_date}
                                 </p>
                                 <p
                                   className="text-muted"

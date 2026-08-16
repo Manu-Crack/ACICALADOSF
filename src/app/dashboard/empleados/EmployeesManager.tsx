@@ -795,8 +795,8 @@ export default function EmployeesManager() {
                                   borderRadius: 4,
                                 }}
                               >
-                                <span>
-                                  📅 {b.block_date} — {b.reason}
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                  <img src="/calendario.svg" alt="Fecha" style={{ width: 13, height: 13, display: "inline-block" }} /> {b.block_date} — {b.reason}
                                 </span>
                                 <button
                                   onClick={() => handleDeleteAbsence(b.id)}
@@ -855,9 +855,9 @@ export default function EmployeesManager() {
                         <button
                           onClick={() => handleOpenAbsenceModal(emp)}
                           className="btn btn-ghost btn-sm"
-                          style={{ flex: 1, color: "var(--color-warning)" }}
+                          style={{ flex: 1, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
                         >
-                          📅 Permiso
+                          <img src="/calendario.svg" alt="Permiso" style={{ width: 14, height: 14, display: "inline-block" }} /> Permiso
                         </button>
                         <button
                           onClick={() => handleDeleteEmp(emp)}
@@ -952,7 +952,7 @@ export default function EmployeesManager() {
                   fontSize: "1.25rem",
                 }}
               >
-                📅
+                <img src="/calendario.svg" alt="Citas para Hoy" style={{ width: 22, height: 22 }} />
               </div>
               <div>
                 <p
@@ -1236,7 +1236,9 @@ export default function EmployeesManager() {
                           className="text-muted"
                           style={{ fontSize: "0.875rem", display: "flex", gap: 14, flexWrap: "wrap" }}
                         >
-                          <span>📅 {b.booking_date}</span>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} /> {b.booking_date}
+                          </span>
                           <span>
                             ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
                           </span>
@@ -1659,8 +1661,8 @@ export default function EmployeesManager() {
           }}
         >
           <div className="card" style={{ width: "100%", maxWidth: 450, padding: 24 }}>
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800, marginBottom: 8 }}>
-              📅 Registrar Permiso / Ausencia
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 800, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <img src="/calendario.svg" alt="Permiso" style={{ width: 18, height: 18, display: "inline-block" }} /> Registrar Permiso / Ausencia
             </h2>
             <p style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", marginBottom: 16 }}>
               Para: <strong>{absenceEmp.first_name} {absenceEmp.last_name}</strong>

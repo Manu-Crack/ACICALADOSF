@@ -186,7 +186,10 @@ export default async function MiCuentaPage() {
                     </div>
 
                     <p className="text-muted" style={{ fontSize: "0.875rem", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                      <span>📅 {b.booking_date}</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} />
+                        {b.booking_date}
+                      </span>
                       <span>·</span>
                       <span>⏰ {b.start_time?.slice(0, 5)}</span>
                       {b.total_duration_minutes ? (

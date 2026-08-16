@@ -985,7 +985,10 @@ export default function ReservarPage() {
                 className="text-muted"
                 style={{ fontSize: "0.8125rem", marginTop: 12, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}
               >
-                <span>📅 {bookingDate}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} />
+                  {bookingDate}
+                </span>
                 <span>·</span>
                 <span>⏰ {startTime}</span>
                 <span>·</span>
