@@ -207,9 +207,9 @@ export function ReservasManager() {
       <div
         className="grid"
         style={{
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 16,
-          marginBottom: 28,
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 12,
+          marginBottom: 24,
         }}
       >
         {/* Card 1: Pendientes WhatsApp */}
@@ -429,23 +429,26 @@ export function ReservasManager() {
           gap: 12,
           flexWrap: "wrap",
           alignItems: "end",
+          padding: "16px 18px",
         }}
       >
-        <div style={{ flex: "1 1 220px" }}>
+        <div style={{ flex: "1 1 200px", minWidth: 0, width: "100%" }}>
           <label className="label">Buscar</label>
           <input
             className="input"
             placeholder="Código, nombre, teléfono, DNI..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: "100%" }}
           />
         </div>
-        <div style={{ flex: "0 0 180px" }}>
+        <div style={{ flex: "1 1 150px", minWidth: 0 }}>
           <label className="label">Estado</label>
           <select
             className="select"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
+            style={{ width: "100%" }}
           >
             <option value="">Todos los estados</option>
             <option value="pendiente">🟡 Pendientes (WhatsApp)</option>
@@ -454,21 +457,23 @@ export function ReservasManager() {
             <option value="cancelada">❌ Canceladas</option>
           </select>
         </div>
-        <div style={{ flex: "0 0 160px" }}>
+        <div style={{ flex: "1 1 140px", minWidth: 0 }}>
           <label className="label">Fecha</label>
           <input
             type="date"
             className="input"
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
+            style={{ width: "100%" }}
           />
         </div>
-        <div style={{ flex: "0 0 140px" }}>
+        <div style={{ flex: "1 1 130px", minWidth: 0 }}>
           <label className="label">Tipo</label>
           <select
             className="select"
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
+            style={{ width: "100%" }}
           >
             <option value="">Todos</option>
             <option value="barberia">Barbería</option>
@@ -484,7 +489,7 @@ export function ReservasManager() {
             setSearchTerm("");
           }}
           className="btn btn-ghost btn-sm"
-          style={{ marginBottom: 2 }}
+          style={{ marginBottom: 2, flex: "0 0 auto" }}
         >
           Limpiar
         </button>
@@ -504,8 +509,8 @@ export function ReservasManager() {
             </p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", minWidth: "960px", borderCollapse: "collapse" }}>
               <thead>
                 <tr
                   style={{
@@ -939,7 +944,7 @@ export function ReservasManager() {
                         >
                           <div
                             style={{
-                              padding: "20px 24px",
+                              padding: "16px 18px",
                               background: "rgba(200,164,92,0.03)",
                               borderTop: "1px solid var(--color-border)",
                               animation: "fadeIn 0.2s ease-out",
@@ -949,9 +954,9 @@ export function ReservasManager() {
                               style={{
                                 display: "grid",
                                 gridTemplateColumns:
-                                  "repeat(auto-fit, minmax(220px, 1fr))",
-                                gap: 20,
-                                marginBottom: 20,
+                                  "repeat(auto-fit, minmax(180px, 1fr))",
+                                gap: 16,
+                                marginBottom: 18,
                               }}
                             >
                               {/* Client Info */}

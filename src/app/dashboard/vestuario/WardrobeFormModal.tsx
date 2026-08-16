@@ -175,9 +175,9 @@ export function WardrobeFormModal({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.75)",
+        background: "rgba(0,0,0,0.85)",
         backdropFilter: "blur(6px)",
-        padding: 20,
+        padding: "16px 10px",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -190,7 +190,7 @@ export function WardrobeFormModal({
           width: "100%",
           maxHeight: "92vh",
           overflowY: "auto",
-          padding: "28px 32px",
+          padding: "20px 18px",
           background: "var(--color-bg-card)",
           border: "1px solid var(--color-primary-border)",
           boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
@@ -199,7 +199,7 @@ export function WardrobeFormModal({
         {/* Modal Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
-            <h2 className="heading-md" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h2 className="heading-md" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "1.125rem" }}>
               <span>👔</span>
               <span>{isEditing ? "Editar Prenda de Vestuario" : "Nueva Prenda de Vestuario"}</span>
             </h2>
@@ -262,7 +262,7 @@ export function WardrobeFormModal({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
                 gap: 8,
               }}
             >
@@ -608,12 +608,12 @@ export function WardrobeFormModal({
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: "flex", gap: 12 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={onClose}
               className="btn btn-ghost"
-              style={{ flex: 1 }}
+              style={{ flex: "1 1 120px" }}
               disabled={saving || uploading}
             >
               Cancelar
@@ -622,7 +622,7 @@ export function WardrobeFormModal({
               type="submit"
               disabled={saving || uploading || !name.trim()}
               className="btn btn-primary"
-              style={{ flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              style={{ flex: "2 1 180px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               {saving ? (
                 <span>Guardando...</span>

@@ -129,9 +129,9 @@ export function WardrobeManager() {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", flex: 1, maxWidth: 600 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", flex: "1 1 280px", maxWidth: 600, width: "100%" }}>
           {/* Search bar */}
-          <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+          <div style={{ position: "relative", flex: 1, minWidth: 0, width: "100%" }}>
             <span
               style={{
                 position: "absolute",
@@ -149,7 +149,7 @@ export function WardrobeManager() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar por título, categoría o letra (A, B...)..."
-              style={{ paddingLeft: 34, height: 40 }}
+              style={{ paddingLeft: 34, height: 40, width: "100%" }}
             />
             {searchQuery && (
               <button
@@ -189,13 +189,13 @@ export function WardrobeManager() {
           marginBottom: 24,
           overflowX: "auto",
           paddingBottom: 6,
-          scrollbarWidth: "thin",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         <button
           onClick={() => setSelectedCategory("all")}
           className={selectedCategory === "all" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-          style={{ borderRadius: "var(--radius-full)", padding: "6px 16px" }}
+          style={{ borderRadius: "var(--radius-full)", padding: "6px 16px", flexShrink: 0 }}
         >
           Todas las categorías ({items.length})
         </button>
@@ -209,7 +209,7 @@ export function WardrobeManager() {
               key={cat.name}
               onClick={() => setSelectedCategory(cat.name)}
               className={isSelected ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-              style={{ borderRadius: "var(--radius-full)", padding: "6px 16px", fontWeight: 600 }}
+              style={{ borderRadius: "var(--radius-full)", padding: "6px 16px", fontWeight: 600, flexShrink: 0 }}
             >
               {cat.icon} {cat.name} ({count})
             </button>
@@ -254,8 +254,8 @@ export function WardrobeManager() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: 24,
+            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            gap: 20,
           }}
         >
           {filteredItems.map((item) => {

@@ -185,7 +185,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "20px 16px",
+        padding: "16px 10px",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving && !uploading) onClose();
@@ -199,7 +199,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
         style={{
           width: "100%",
           maxWidth: "800px",
-          maxHeight: "90vh",
+          maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
           padding: 0,
@@ -211,7 +211,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
         {/* Modal Header */}
         <div
           style={{
-            padding: "20px 24px",
+            padding: "16px 20px",
             borderBottom: "1px solid var(--color-border)",
             display: "flex",
             justifyContent: "space-between",
@@ -220,7 +220,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
           }}
         >
           <div>
-            <h2 id={modalTitleId} className="heading-md" style={{ margin: 0 }}>
+            <h2 id={modalTitleId} className="heading-md" style={{ margin: 0, fontSize: "1.125rem" }}>
               {isEditing ? "Editar Artículo de Blog" : "Nuevo Artículo de Blog"}
             </h2>
             <p className="text-muted" style={{ fontSize: "0.8125rem", marginTop: 4 }}>
@@ -240,7 +240,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
         </div>
 
         {/* Modal Body */}
-        <form onSubmit={handleSubmit} style={{ overflowY: "auto", padding: "24px", flex: 1 }}>
+        <form onSubmit={handleSubmit} style={{ overflowY: "auto", padding: "20px 16px", flex: 1 }}>
           {error && (
             <div
               style={{
@@ -521,9 +521,10 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
               display: "flex",
               justifyContent: "flex-end",
               gap: 12,
-              marginTop: 28,
+              marginTop: 24,
               borderTop: "1px solid var(--color-border)",
-              paddingTop: 20,
+              paddingTop: 18,
+              flexWrap: "wrap",
             }}
           >
             <button
@@ -531,6 +532,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
               onClick={onClose}
               className="btn btn-ghost"
               disabled={saving || uploading}
+              style={{ flex: "1 1 120px" }}
             >
               Cancelar
             </button>
@@ -538,7 +540,7 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
               type="submit"
               className="btn btn-primary"
               disabled={saving || uploading}
-              style={{ minWidth: "140px" }}
+              style={{ minWidth: "140px", flex: "1 1 150px" }}
             >
               {saving ? "Guardando..." : isEditing ? "Actualizar Post" : "Crear Post"}
             </button>

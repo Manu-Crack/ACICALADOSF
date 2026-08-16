@@ -155,28 +155,28 @@ export function ProductManager({ initialProducts }: ProductManagerProps) {
           padding: "16px 20px",
           display: "flex",
           flexWrap: "wrap",
-          gap: 16,
+          gap: 12,
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
-        <div style={{ display: "flex", flex: 1, minWidth: "240px", gap: 12 }}>
+        <div style={{ display: "flex", flex: "1 1 240px", minWidth: 0, width: "100%" }}>
           <input
             type="text"
             className="input"
             placeholder="🔍 Buscar por nombre, categoría o descripción..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ padding: "8px 14px", fontSize: "0.875rem" }}
+            style={{ padding: "8px 14px", fontSize: "0.875rem", width: "100%" }}
           />
         </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", flex: "1 1 auto" }}>
           <select
             className="select"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            style={{ padding: "8px 32px 8px 12px", fontSize: "0.875rem", width: "auto", minWidth: "160px" }}
+            style={{ padding: "8px 32px 8px 12px", fontSize: "0.875rem", flex: "1 1 160px", minWidth: 0 }}
           >
             <option value="all">Todas las categorías</option>
             {categories.map((cat) => (
@@ -190,7 +190,7 @@ export function ProductManager({ initialProducts }: ProductManagerProps) {
             className="select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ padding: "8px 32px 8px 12px", fontSize: "0.875rem", width: "auto", minWidth: "140px" }}
+            style={{ padding: "8px 32px 8px 12px", fontSize: "0.875rem", flex: "1 1 140px", minWidth: 0 }}
           >
             <option value="all">Todos los estados</option>
             <option value="active">Activos</option>
@@ -201,8 +201,8 @@ export function ProductManager({ initialProducts }: ProductManagerProps) {
 
       {/* Tabla de Productos (Data Table con Precio y Stock Obligatorio) */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", minWidth: "760px", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
             <thead>
               <tr
                 style={{
@@ -455,7 +455,7 @@ export function ProductManager({ initialProducts }: ProductManagerProps) {
               maxWidth: 440,
               width: "100%",
               textAlign: "center",
-              padding: 28,
+              padding: "24px 18px",
               background: "rgba(20, 16, 12, 0.95)",
             }}
           >
@@ -466,12 +466,13 @@ export function ProductManager({ initialProducts }: ProductManagerProps) {
             <p className="text-muted" style={{ fontSize: "0.875rem", marginBottom: 24, lineHeight: 1.5 }}>
               Estás a punto de eliminar &ldquo;<strong style={{ color: "var(--color-text)" }}>{deleteConfirmProduct.name}</strong>&rdquo;. Esta acción borrará el registro y sus fotos de Storage de forma permanente.
             </p>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <button
                 type="button"
                 onClick={() => setDeleteConfirmProduct(null)}
                 className="btn btn-ghost"
                 disabled={deleting}
+                style={{ flex: "1 1 120px" }}
               >
                 Cancelar
               </button>
@@ -486,6 +487,7 @@ export function ProductManager({ initialProducts }: ProductManagerProps) {
                   padding: "10px 20px",
                   fontWeight: 600,
                   cursor: "pointer",
+                  flex: "1 1 140px",
                 }}
                 disabled={deleting}
               >

@@ -207,7 +207,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "20px 16px",
+        padding: "16px 10px",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving && !uploading) onClose();
@@ -221,7 +221,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
         style={{
           width: "100%",
           maxWidth: "760px",
-          maxHeight: "90vh",
+          maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
           padding: 0,
@@ -233,7 +233,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
         {/* Header Modal */}
         <div
           style={{
-            padding: "20px 24px",
+            padding: "16px 20px",
             borderBottom: "1px solid var(--color-border)",
             display: "flex",
             justifyContent: "space-between",
@@ -242,7 +242,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
           }}
         >
           <div>
-            <h2 id={modalTitleId} className="heading-md" style={{ margin: 0 }}>
+            <h2 id={modalTitleId} className="heading-md" style={{ margin: 0, fontSize: "1.125rem" }}>
               {isEditing ? "Editar Producto del Catálogo" : "Nuevo Producto del Catálogo"}
             </h2>
             <p className="text-muted" style={{ fontSize: "0.8125rem", marginTop: 4 }}>
@@ -262,7 +262,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit} style={{ overflowY: "auto", padding: "24px", flex: 1 }}>
+        <form onSubmit={handleSubmit} style={{ overflowY: "auto", padding: "20px 16px", flex: 1 }}>
           {error && (
             <div
               style={{
@@ -337,7 +337,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
                 gap: 16,
                 padding: "16px",
                 background: "rgba(200, 164, 92, 0.04)",
@@ -588,9 +588,10 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
               display: "flex",
               justifyContent: "flex-end",
               gap: 12,
-              marginTop: 28,
+              marginTop: 24,
               borderTop: "1px solid var(--color-border)",
-              paddingTop: 20,
+              paddingTop: 18,
+              flexWrap: "wrap",
             }}
           >
             <button
@@ -598,6 +599,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
               onClick={onClose}
               className="btn btn-ghost"
               disabled={saving || uploading}
+              style={{ flex: "1 1 120px" }}
             >
               Cancelar
             </button>
@@ -605,7 +607,7 @@ export function ProductFormModal({ product, onClose, onSave }: ProductFormModalP
               type="submit"
               className="btn btn-primary"
               disabled={saving || uploading}
-              style={{ minWidth: "150px" }}
+              style={{ minWidth: "150px", flex: "1 1 150px" }}
             >
               {saving ? "Guardando..." : isEditing ? "Actualizar Producto" : "Crear Producto"}
             </button>
