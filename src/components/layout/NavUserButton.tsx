@@ -67,9 +67,8 @@ export function NavUserButton({
 
         {/* Chevron Down */}
         <svg
-          className={`w-3.5 h-3.5 text-gray-400 group-hover:text-[#C8A45C] transition-transform duration-200 shrink-0 hidden sm:block ${
-            isOpen ? "rotate-180" : ""
-          }`}
+          className={`w-3.5 h-3.5 text-gray-400 group-hover:text-[#C8A45C] transition-transform duration-200 shrink-0 hidden sm:block ${isOpen ? "rotate-180" : ""
+            }`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -113,14 +112,6 @@ export function NavUserButton({
                 <span>Mi Perfil</span>
               </Link>
 
-              <Link
-                href="/reservar"
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-200 hover:text-white hover:bg-[#C8A45C]/15 transition-colors"
-              >
-                <span className="text-base">📅</span>
-                <span>Reservar Cita</span>
-              </Link>
 
               <div className="my-1 border-t border-[#C8A45C]/20" />
 
