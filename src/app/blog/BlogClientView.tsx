@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 export interface PublicBlogPost {
@@ -22,6 +22,24 @@ interface BlogClientViewProps {
 export function BlogClientView({ posts }: BlogClientViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
   const [visibleCount, setVisibleCount] = useState<number>(6);
+  const [readingPost, setReadingPost] = useState<PublicBlogPost | null>(null);
+
+  // Close overlay on ESC key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setReadingPost(null);
+    };
+    if (readingPost) {
+      document.body.style.overflow = "hidden";
+      window.addEventListener("keydown", handleKeyDown);
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [readingPost]);
 
   // Extract unique categories
   const categories = [
@@ -81,7 +99,7 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
         </div>
       )}
 
-      {/* Grid de Tarjetas de Artículos */}
+      {/* Grid de Tarjetas de Artículos (Superposición interactiva sin redirigir) */}
       {displayedPosts.length > 0 ? (
         <div className="grid grid-3" style={{ gap: 28 }}>
           {displayedPosts.map((post) => {
@@ -96,11 +114,20 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
             const readingMinutes = post.reading_time || 5;
 
             return (
-              <Link
+              <div
                 key={post.id}
-                href={`/blog/${post.slug}`}
-                style={{ textDecoration: "none", color: "inherit", display: "flex" }}
+                onClick={() => setReadingPost(post)}
+                style={{ cursor: "pointer", display: "flex" }}
                 className="group"
+                role="button"
+                tabIndex={0}
+                aria-label={`Leer artículo: ${post.title}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setReadingPost(post);
+                  }
+                }}
               >
                 <article
                   className="card card-gold"
@@ -119,7 +146,8 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
                   onMouseOver={(e) => {
                     e.currentTarget.style.borderColor = "var(--color-primary-border)";
                     e.currentTarget.style.transform = "translateY(-4px)";
-                    e.currentTarget.style.boxShadow = "0 12px 30px rgba(0,0,0,0.7), 0 0 15px rgba(200,164,92,0.15)";
+                    e.currentTarget.style.boxShadow =
+                      "0 12px 30px rgba(0,0,0,0.7), 0 0 15px rgba(200,164,92,0.15)";
                   }}
                   onMouseOut={(e) => {
                     e.currentTarget.style.borderColor = "var(--color-border)";
@@ -159,7 +187,8 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
                           alignItems: "center",
                           justifyContent: "center",
                           fontSize: "2.5rem",
-                          background: "radial-gradient(circle at center, rgba(200,164,92,0.1) 0%, rgba(10,10,10,0.9) 100%)",
+                          background:
+                            "radial-gradient(circle at center, rgba(200,164,92,0.1) 0%, rgba(10,10,10,0.9) 100%)",
                         }}
                       >
                         📝
@@ -251,7 +280,14 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
                       </div>
 
                       {/* Tiempo de Lectura */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--color-primary-light)" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          color: "var(--color-primary-light)",
+                        }}
+                      >
                         <img
                           src="/tiempo.svg"
                           alt="Tiempo de lectura"
@@ -262,7 +298,7 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
                     </div>
                   </div>
                 </article>
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -283,7 +319,8 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
             Pronto publicaremos nuevos artículos
           </h3>
           <p className="text-muted" style={{ marginBottom: 28, lineHeight: 1.6 }}>
-            Estamos preparando guías de estilo, consejos de afeitado y las últimas tendencias en spa y barbería para ti.
+            Estamos preparando guías de estilo, consejos de afeitado y las últimas tendencias en spa y
+            barbería para ti.
           </p>
           <Link href="/servicios" className="btn btn-primary btn-lg">
             Explorar Nuestros Servicios
@@ -311,6 +348,253 @@ export function BlogClientView({ posts }: BlogClientViewProps) {
             <span>Ver más artículos</span>
             <span>→</span>
           </button>
+        </div>
+      )}
+
+      {/* ============================================================
+          MODAL DE LECTURA SUPERPUESTA (OVERLAY IN SITU)
+          ============================================================ */}
+      {readingPost && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            background: "rgba(0, 0, 0, 0.88)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px 16px",
+            animation: "fadeIn 0.25s ease-out",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setReadingPost(null);
+          }}
+        >
+          <div
+            className="card card-gold animate-fadeIn"
+            style={{
+              maxWidth: "840px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 0,
+              background: "rgba(14, 12, 8, 0.96)",
+              boxShadow: "0 25px 70px rgba(0,0,0,0.95), 0 0 30px rgba(200,164,92,0.2)",
+              border: "1px solid var(--color-primary-border)",
+              borderRadius: "var(--radius-lg)",
+              position: "relative",
+            }}
+          >
+            {/* Barra superior fija del modal */}
+            <div
+              style={{
+                position: "sticky",
+                top: 0,
+                zIndex: 10,
+                background: "rgba(18, 15, 10, 0.95)",
+                backdropFilter: "blur(10px)",
+                padding: "14px 24px",
+                borderBottom: "1px solid var(--color-border)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span className="badge badge-gold" style={{ fontSize: "0.75rem", padding: "4px 10px" }}>
+                  {readingPost.category || "Cuidado Masculino"}
+                </span>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: "0.8125rem",
+                    color: "var(--color-primary-light)",
+                  }}
+                >
+                  <img
+                    src="/tiempo.svg"
+                    alt="Tiempo de lectura"
+                    style={{ width: 14, height: 14, objectFit: "contain" }}
+                  />
+                  <span>{readingPost.reading_time || 5} min de lectura</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setReadingPost(null)}
+                className="btn btn-ghost btn-sm"
+                style={{
+                  fontSize: "1.25rem",
+                  padding: "4px 12px",
+                  borderRadius: "var(--radius-full)",
+                  background: "rgba(200, 164, 92, 0.1)",
+                  color: "#FFFFFF",
+                }}
+                aria-label="Cerrar artículo"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Contenido Completo del Artículo */}
+            <div style={{ padding: "28px 32px 40px" }}>
+              {/* Fecha y Meta */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                  marginBottom: 12,
+                }}
+              >
+                <img
+                  src="/calendarioT.svg"
+                  alt="Fecha"
+                  style={{ width: 15, height: 15, objectFit: "contain" }}
+                />
+                <span>
+                  {readingPost.published_at
+                    ? new Date(readingPost.published_at).toLocaleDateString("es-PE", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })
+                    : "Fecha reciente"}
+                </span>
+              </div>
+
+              {/* Título Principal */}
+              <h2
+                className="heading-xl"
+                style={{
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: "clamp(1.6rem, 3.2vw, 2.3rem)",
+                  lineHeight: 1.28,
+                  color: "#FFFFFF",
+                  marginBottom: 16,
+                }}
+              >
+                {readingPost.title}
+              </h2>
+
+              {/* Extracto */}
+              {readingPost.excerpt && (
+                <p
+                  style={{
+                    fontSize: "1.05rem",
+                    lineHeight: 1.6,
+                    color: "var(--color-paper-dark)",
+                    borderLeft: "3px solid var(--color-primary)",
+                    paddingLeft: 16,
+                    margin: "18px 0 24px",
+                    fontStyle: "italic",
+                  }}
+                >
+                  {readingPost.excerpt}
+                </p>
+              )}
+
+              {/* Imagen de Portada Principal */}
+              {readingPost.cover_image && (
+                <div
+                  style={{
+                    width: "100%",
+                    borderRadius: "var(--radius-md)",
+                    overflow: "hidden",
+                    border: "1px solid var(--color-primary-border)",
+                    boxShadow: "0 12px 30px rgba(0,0,0,0.8)",
+                    marginBottom: 28,
+                    background: "rgba(14, 12, 8, 0.9)",
+                  }}
+                >
+                  <img
+                    src={readingPost.cover_image}
+                    alt={readingPost.title}
+                    style={{
+                      width: "100%",
+                      maxHeight: "420px",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Texto completo del artículo */}
+              <div
+                style={{
+                  whiteSpace: "pre-line",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  fontSize: "1.02rem",
+                  lineHeight: 1.8,
+                  color: "var(--color-text)",
+                  borderBottom: "1px solid rgba(200, 164, 92, 0.2)",
+                  paddingBottom: 28,
+                }}
+              >
+                {readingPost.content}
+              </div>
+
+              {/* Acciones de WhatsApp y Cita */}
+              <div
+                style={{
+                  marginTop: 28,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 16,
+                }}
+              >
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `Te recomiendo este artículo de Acicalados: ${readingPost.title}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-sm"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: "#25D366",
+                    color: "#FFFFFF",
+                    padding: "8px 16px",
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    borderRadius: "var(--radius-full)",
+                  }}
+                >
+                  <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 16, height: 16 }} />
+                  <span>Compartir por WhatsApp</span>
+                </a>
+
+                <div style={{ display: "flex", gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setReadingPost(null)}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Cerrar
+                  </button>
+                  <Link href="/reservar" className="btn btn-primary btn-sm">
+                    Reservar Cita
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
