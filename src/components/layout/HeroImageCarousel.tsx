@@ -15,6 +15,18 @@ const IMAGES = [
     src: "/fondo3.webp",
     alt: "Spa Acicalados",
   },
+  {
+    src: "/fondo4.webp",
+    alt: "Spa Acicalados",
+  },
+  {
+    src: "/fondo5.webp",
+    alt: "Spa Acicalados",
+  },
+  {
+    src: "/fondo6.webp",
+    alt: "Spa Acicalados",
+  },
 ];
 
 export function HeroImageCarousel() {
