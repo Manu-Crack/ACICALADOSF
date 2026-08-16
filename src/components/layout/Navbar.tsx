@@ -36,9 +36,9 @@ export async function Navbar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-[#C8A45C]/35 shadow-[0_4px_25px_rgba(0,0,0,0.85)]">
-      <div className="max-w-[1440px] mx-auto h-[74px] sm:h-[78px] px-6 sm:px-10 md:px-14 lg:px-16 xl:px-20 flex justify-between items-center">
+      <div className="max-w-[1440px] mx-auto h-[74px] sm:h-[78px] px-3 sm:px-6 md:px-10 lg:px-16 xl:px-20 flex justify-between items-center">
         {/* SECCIÓN IZQUIERDA (Marca & Logo) */}
-        <div className="flex items-center pl-2 sm:pl-4 md:pl-8 lg:pl-12 xl:pl-16">
+        <div className="flex items-center pl-0 sm:pl-3 md:pl-6 lg:pl-10 xl:pl-16">
           <Link
             href="/"
             className="flex items-center group cursor-pointer"
@@ -85,13 +85,13 @@ export async function Navbar() {
           {/* Separador vertical sutil */}
           <div className="h-6 w-[1px] bg-[#C8A45C]/30 mx-1 hidden md:block" />
 
-          {/* Botón de Carrito (Pill en desktop/tablet) */}
-          <div className="hidden sm:block">
+          {/* Botón de Carrito (Visible en móvil y desktop) */}
+          <div className="flex items-center">
             <CartButton />
           </div>
 
-          {/* Botón de Usuario (Pill en desktop) */}
-          <div className="hidden lg:block">
+          {/* Botón de Usuario (Visible en móvil y desktop) */}
+          <div className="flex items-center">
             <NavUserButton
               user={!!user}
               profileName={profile?.first_name}

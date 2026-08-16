@@ -40,13 +40,15 @@ export function NavUserButton({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="group inline-flex items-center justify-center h-9 sm:h-[38px] px-3 py-1.5 rounded-full hover:bg-[#C8A45C]/15 text-gray-200 hover:text-[#C8A45C] transition-all duration-200 text-sm font-medium cursor-pointer shrink-0 gap-2"
+        className="group inline-flex items-center justify-center h-9 sm:h-[38px] px-2 sm:px-3 py-1.5 rounded-full hover:bg-[#C8A45C]/15 text-gray-200 hover:text-[#C8A45C] transition-all duration-200 text-sm font-medium cursor-pointer shrink-0 gap-1.5 sm:gap-2"
         aria-expanded={isOpen}
         aria-haspopup="true"
+        title="Mi Cuenta"
+        aria-label="Mi Cuenta"
       >
         {/* User Icon */}
         <svg
-          className="w-4 h-4 text-gray-200 group-hover:text-[#C8A45C] transition-colors shrink-0"
+          className="w-5 h-5 sm:w-4 sm:h-4 text-gray-200 group-hover:text-[#C8A45C] transition-colors shrink-0"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -59,13 +61,13 @@ export function NavUserButton({
           />
         </svg>
 
-        <span className="max-w-[130px] truncate leading-none select-none">
+        <span className="hidden md:inline max-w-[130px] truncate leading-none select-none">
           {displayName}
         </span>
 
         {/* Chevron Down */}
         <svg
-          className={`w-3.5 h-3.5 text-gray-400 group-hover:text-[#C8A45C] transition-transform duration-200 shrink-0 ${
+          className={`w-3.5 h-3.5 text-gray-400 group-hover:text-[#C8A45C] transition-transform duration-200 shrink-0 hidden sm:block ${
             isOpen ? "rotate-180" : ""
           }`}
           fill="none"
@@ -79,7 +81,7 @@ export function NavUserButton({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-[#111111] border border-[#C8A45C]/35 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] py-2 z-50 animate-fadeIn backdrop-blur-md">
+        <div className="absolute right-0 top-full mt-2 w-52 sm:w-56 max-w-[calc(100vw-2rem)] bg-[#111111] border border-[#C8A45C]/35 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] py-2 z-50 animate-fadeIn backdrop-blur-md">
           {user ? (
             <>
               <div className="px-4 py-2.5 border-b border-[#C8A45C]/20 mb-1">
