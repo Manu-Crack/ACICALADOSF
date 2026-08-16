@@ -214,8 +214,8 @@ export function CartDrawer() {
                     >
                       {item.name}
                     </h4>
-                    <p style={{ fontSize: "0.75rem", color: "var(--color-primary-light)" }}>
-                      ⏱️ {formatDuration(item.duration_minutes)}
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-primary-light)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <img src="/Reloj.svg" alt="Duración" style={{ width: 13, height: 13, display: "inline-block" }} /> {formatDuration(item.duration_minutes)}
                     </p>
                   </div>
 
@@ -291,8 +291,8 @@ export function CartDrawer() {
                 }}
               >
                 <span>Duración estimada total:</span>
-                <span style={{ fontWeight: 600, color: "var(--color-primary-light)" }}>
-                  ⏱️ {formatDuration(totalDuration)}
+                <span style={{ fontWeight: 600, color: "var(--color-primary-light)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(totalDuration)}
                 </span>
               </div>
               <div

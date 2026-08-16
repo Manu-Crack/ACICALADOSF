@@ -1240,8 +1240,8 @@ export default function EmployeesManager() {
                           <span>
                             ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
                           </span>
-                          <span>
-                            ⏱️ {formatDuration(b.total_duration_minutes || 30)}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(b.total_duration_minutes || 30)}
                           </span>
                         </p>
                       </div>

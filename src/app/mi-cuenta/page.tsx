@@ -185,8 +185,19 @@ export default async function MiCuentaPage() {
                       </span>
                     </div>
 
-                    <p className="text-muted" style={{ fontSize: "0.875rem" }}>
-                      📅 {b.booking_date} · ⏰ {b.start_time?.slice(0, 5)}{b.total_duration_minutes ? ` · ⏱️ ${formatDuration(b.total_duration_minutes)}` : ""} · S/ {(b.total_price_cents / 100).toFixed(2)}
+                    <p className="text-muted" style={{ fontSize: "0.875rem", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                      <span>📅 {b.booking_date}</span>
+                      <span>·</span>
+                      <span>⏰ {b.start_time?.slice(0, 5)}</span>
+                      {b.total_duration_minutes ? (
+                        <>
+                          <span>·</span>
+                          <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} />
+                          <span>{formatDuration(b.total_duration_minutes)}</span>
+                        </>
+                      ) : null}
+                      <span>·</span>
+                      <span>S/ {(b.total_price_cents / 100).toFixed(2)}</span>
                     </p>
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>

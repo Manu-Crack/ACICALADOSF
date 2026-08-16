@@ -321,10 +321,10 @@ export function BlogFormModal({ post, onClose, onSave }: BlogFormModalProps) {
                     type="button"
                     onClick={calculateReadingTime}
                     className="btn btn-ghost btn-sm"
-                    style={{ fontSize: "0.75rem", padding: "2px 6px" }}
+                    style={{ fontSize: "0.75rem", padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 4 }}
                     title="Calcular según cantidad de palabras en el contenido"
                   >
-                    ⏱️ Auto-calcular
+                    <img src="/Reloj.svg" alt="Auto-calcular" style={{ width: 13, height: 13, display: "inline-block" }} /> Auto-calcular
                   </button>
                 </div>
                 <input

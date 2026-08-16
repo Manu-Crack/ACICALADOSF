@@ -227,8 +227,10 @@ export function ServicesManager() {
                 </p>
               )}
 
-              <div className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 16, display: "flex", gap: 16 }}>
-                <span>⏱️ {formatDuration(service.duration_minutes)}</span>
+              <div className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(service.duration_minutes)}
+                </span>
                 <span>👥 Cap: {service.capacity}</span>
                 <span>📋 Orden: {service.sort_order}</span>
               </div>

@@ -634,7 +634,7 @@ export default function ReservarPage() {
                           gap: 4,
                         }}
                       >
-                        ⏱️ {formatDuration(service.duration_minutes)}
+                        <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(service.duration_minutes)}
                       </p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -983,10 +983,14 @@ export default function ReservarPage() {
               </div>
               <p
                 className="text-muted"
-                style={{ fontSize: "0.8125rem", marginTop: 12 }}
+                style={{ fontSize: "0.8125rem", marginTop: 12, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}
               >
-                📅 {bookingDate} · ⏰ {startTime} · ⏱️{" "}
-                {formatDuration(totalDuration)}
+                <span>📅 {bookingDate}</span>
+                <span>·</span>
+                <span>⏰ {startTime}</span>
+                <span>·</span>
+                <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} />
+                <span>{formatDuration(totalDuration)}</span>
               </p>
               <div
                 style={{

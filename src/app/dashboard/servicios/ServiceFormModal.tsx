@@ -405,8 +405,8 @@ export function ServiceFormModal({
                     <p style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 2 }}>
                       {currentCatalog[selectedCatalogIndex].name}
                     </p>
-                    <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                      ⏱️ {formatDuration(currentCatalog[selectedCatalogIndex].duration_minutes)}
+                    <p className="text-muted" style={{ fontSize: "0.8125rem", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(currentCatalog[selectedCatalogIndex].duration_minutes)}
                     </p>
                   </div>
                   <p style={{ fontWeight: 700, fontSize: "1.25rem", color: "var(--color-primary)" }}>

@@ -320,9 +320,11 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
                         </span>
                       </td>
 
-                      {/* Tiempo de Lectura */}
                       <td style={{ padding: "14px 16px", whiteSpace: "nowrap", color: "var(--color-primary-light)" }}>
-                        ⏱️ {post.reading_time || 5} min
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          <img src="/Reloj.svg" alt="Tiempo de lectura" style={{ width: 14, height: 14, display: "inline-block" }} />
+                          {post.reading_time || 5} min
+                        </span>
                       </td>
 
                       {/* Estado */}

@@ -103,8 +103,8 @@ export function ServiceCard({
         >
           S/ {priceFormatted}
         </span>
-        <span className="badge badge-neutral">
-          ⏱️ {formatDuration(service.duration_minutes)}
+        <span className="badge badge-neutral" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(service.duration_minutes)}
         </span>
       </div>
 
