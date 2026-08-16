@@ -31,9 +31,11 @@ export function CartButton() {
       <span className="tracking-wide select-none leading-none">Carrito</span>
 
       {/* Circular Gold Badge with Black Text */}
-      <span className="w-5 h-5 min-w-[20px] rounded-full bg-[#C8A45C] text-black font-extrabold text-xs flex items-center justify-center shrink-0 shadow-inner leading-none ml-0.5">
-        {cartCount > 0 ? cartCount : 2}
-      </span>
+      {cartCount > 0 && (
+        <span className="w-5 h-5 min-w-[20px] rounded-full bg-[#C8A45C] text-black font-extrabold text-xs flex items-center justify-center shrink-0 shadow-inner leading-none ml-0.5">
+          {cartCount}
+        </span>
+      )}
     </button>
   );
 }
