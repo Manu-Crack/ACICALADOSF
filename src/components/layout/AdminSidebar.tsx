@@ -38,13 +38,13 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
 
   // Exclusive 7 Official Sections
   const navItems = [
-    { href: "/dashboard", label: "Inicio", icon: "🏠", show: true },
-    { href: "/dashboard/reservas", label: "Reservas", icon: "📋", show: isAdminOrRecep },
-    { href: "/dashboard/empleados", label: "Empleados", icon: "👥", show: isAdmin },
-    { href: "/dashboard/servicios", label: "Servicios", icon: "✂️", show: isAdmin },
-    { href: "/dashboard/vestuario", label: "Vestuario", icon: "👔", show: isAdminOrRecep },
-    { href: "/dashboard/productos", label: "Productos", icon: "🛍️", show: isAdmin },
-    { href: "/dashboard/blog", label: "Blog", icon: "📝", show: isAdmin },
+    { href: "/dashboard", label: "Inicio", icon: "/iconsAdmi/Inicio.svg", show: true },
+    { href: "/dashboard/reservas", label: "Reservas", icon: "/iconsAdmi/Reservas.svg", show: isAdminOrRecep },
+    { href: "/dashboard/empleados", label: "Empleados", icon: "/iconsAdmi/Empleados.svg", show: isAdmin },
+    { href: "/dashboard/servicios", label: "Servicios", icon: "/iconsAdmi/Servicios.svg", show: isAdmin },
+    { href: "/dashboard/vestuario", label: "Vestuario", icon: "/iconsAdmi/Vestuario.svg", show: isAdminOrRecep },
+    { href: "/dashboard/productos", label: "Productos", icon: "/iconsAdmi/Productos.svg", show: isAdmin },
+    { href: "/dashboard/blog", label: "Blog", icon: "/iconsAdmi/Blog.svg", show: isAdmin },
   ];
 
   const filteredNav = navItems.filter((item) => item.show);
@@ -123,7 +123,18 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
                   textDecoration: "none",
                 }}
               >
-                <span style={{ fontSize: "1.15rem" }}>{item.icon}</span>
+                <img
+                  src={item.icon}
+                  alt={item.label}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    objectFit: "contain",
+                    opacity: isActive ? 1 : 0.75,
+                    filter: isActive ? "brightness(1.15)" : "none",
+                    transition: "all var(--transition-fast)",
+                  }}
+                />
                 <span>{item.label}</span>
               </Link>
             );
