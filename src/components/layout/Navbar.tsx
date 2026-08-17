@@ -83,7 +83,7 @@ export async function Navbar() {
         <NavLinks />
 
         {/* SECCIÓN DERECHA (Acciones, Carrito, Usuario & Menú) */}
-        <div className="flex items-center gap-3 sm:gap-4 lg:gap-5">
+        <div className="flex items-center gap-4 sm:gap-5 lg:gap-6">
           {/* Lupa (Búsqueda interactiva en desktop/tablet) */}
           <div className="hidden md:block">
             <NavSearch />
