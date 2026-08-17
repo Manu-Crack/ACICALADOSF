@@ -32,7 +32,7 @@ export function NavUserButton({
     };
   }, []);
 
-  const displayName = profileName || (user ? "Manuel Elias" : "Iniciar Sesión");
+  const displayName = profileName || (user ? "Administrador" : "Iniciar Sesión");
 
   return (
     <div className="relative inline-flex items-center" ref={menuRef}>

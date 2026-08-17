@@ -5,18 +5,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 type Profile = {
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
   role: string;
 };
 
 type AdminSidebarProps = {
   profile: Profile;
+  userName?: string;
 };
 
-export function AdminSidebar({ profile }: AdminSidebarProps) {
+export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
+
+  // Resolve user display name with fallbacks
+  const displayName =
+    userName ||
+    (profile?.first_name || profile?.last_name
+      ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+      : "Administrador");
 
   // Close drawer on path change or resize above 768px
   useEffect(() => {
@@ -148,14 +156,67 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
           padding: "16px 20px",
           borderTop: "1px solid var(--color-border)",
           marginTop: "auto",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
         }}
       >
-        <p style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-          {profile.first_name} {profile.last_name}
-        </p>
-        <p className="badge badge-gold" style={{ marginTop: 4 }}>
-          {profile.role}
-        </p>
+        {/* Generic User SVG Icon (No img avatar, keeping Premium Black/Gold theme) */}
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: "var(--radius-full)",
+            background: "rgba(200, 164, 92, 0.12)",
+            border: "1px solid rgba(200, 164, 92, 0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--color-primary)",
+            flexShrink: 0,
+          }}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p
+            style={{
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              color: "var(--color-text)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+            title={displayName}
+          >
+            {displayName}
+          </p>
+          <p
+            className="badge badge-gold"
+            style={{
+              marginTop: 4,
+              fontSize: "0.6875rem",
+              textTransform: "capitalize",
+              display: "inline-block",
+            }}
+          >
+            {profile.role || "Admin"}
+          </p>
+        </div>
       </div>
     </>
   );

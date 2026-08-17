@@ -14,13 +14,20 @@ export async function Navbar() {
   } = await supabase.auth.getUser();
 
   let profile = null;
+  let userName = null;
   if (user) {
     const { data } = await supabase
       .from("profiles")
-      .select("first_name, role")
+      .select("first_name, last_name, role")
       .eq("id", user.id)
       .single();
     profile = data;
+
+    const metaFullName = (user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
+    const profileFullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "";
+    const emailFallback = user.email ? user.email.split("@")[0] : "Administrador";
+
+    userName = metaFullName || profileFullName || emailFallback || "Administrador";
   }
 
   const isInternal =
@@ -94,7 +101,7 @@ export async function Navbar() {
           <div className="flex items-center">
             <NavUserButton
               user={!!user}
-              profileName={profile?.first_name}
+              profileName={userName}
               isInternal={isInternal}
               onSignOut={handleSignOut}
             />
@@ -103,7 +110,7 @@ export async function Navbar() {
           {/* Menú Hamburguesa con líneas doradas (Móvil y Drawer lateral) */}
           <MobileMenu
             user={!!user}
-            profileName={profile?.first_name}
+            profileName={userName}
             isInternal={isInternal}
             onSignOut={handleSignOut}
           />

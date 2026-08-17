@@ -24,10 +24,17 @@ export default async function DashboardLayout({
     redirect("/");
   }
 
+  // Extract name from user_metadata (Google OAuth) with safe fallbacks
+  const metaFullName = (user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
+  const profileFullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "";
+  const emailFallback = user.email ? user.email.split("@")[0] : "Administrador";
+
+  const resolvedName = metaFullName || profileFullName || emailFallback || "Administrador";
+
   return (
     <div className="dashboard-container">
       {/* Responsive Admin Sidebar */}
-      <AdminSidebar profile={profile} />
+      <AdminSidebar profile={profile} userName={resolvedName} />
 
       {/* Main Content */}
       <main className="dashboard-main">
