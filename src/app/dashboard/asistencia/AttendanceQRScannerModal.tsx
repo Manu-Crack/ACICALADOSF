@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats, CameraDevice } from "html5-qrcode";
+import jsQR from "jsqr";
 
 interface AttendanceQRScannerModalProps {
   onClose: () => void;
@@ -22,21 +22,21 @@ interface ScanResult {
   check_out_time?: string;
 }
 
-// Simple Web Audio API beep sound for feedback
+// Audio tone synthesizer for feedback
 function playAudioTone(type: "success" | "error") {
   try {
-    const AudioContextClass =
+    const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     if (type === "success") {
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
       gain.gain.setValueAtTime(0.2, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
       osc.start();
@@ -49,7 +49,7 @@ function playAudioTone(type: "success" | "error") {
       osc.stop(ctx.currentTime + 0.4);
     }
   } catch {
-    // Audio tone fallback
+    // Tone fallback
   }
 }
 
@@ -59,31 +59,23 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
   const [processing, setProcessing] = useState(false);
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
 
-  // Camera devices state
-  const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const isStoppingRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const isProcessingRef = useRef(false);
 
-  // 1. Process Scanned Code and pause scanner synchronously
+  // 1. Process detected code safely
   const handleCodeScanned = useCallback(
     async (decodedText: string) => {
-      // Synchronous lock prevents duplicate scans in tight frame loops
       if (isProcessingRef.current) return;
       isProcessingRef.current = true;
       setIsScanning(false);
       setProcessing(true);
-
-      // Pause HTML5 QR camera decoder immediately
-      if (scannerRef.current) {
-        try {
-          scannerRef.current.pause(true);
-        } catch (pauseErr) {
-          console.warn("Scanner pause notice:", pauseErr);
-        }
-      }
 
       try {
         const res = await fetch("/api/admin/attendance/scan", {
@@ -96,14 +88,14 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
         try {
           data = await res.json();
         } catch {
-          data = { error: "Respuesta no válida del servidor." };
+          data = { error: "Respuesta inesperada del servidor." };
         }
 
         if (res.ok) {
           playAudioTone("success");
           setLastResult({
             action: (data.action as ScanResult["action"]) || "check_in",
-            message: String(data.message || "Asistencia registrada correctamente."),
+            message: String(data.message || "Marcación registrada con éxito."),
             employee: data.employee as ScanResult["employee"],
             timestamp: typeof data.timestamp === "string" ? data.timestamp : undefined,
             check_in_time: typeof data.check_in_time === "string" ? data.check_in_time : undefined,
@@ -115,13 +107,11 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           }
         } else {
           playAudioTone("error");
-          let errText = "No se pudo registrar la asistencia.";
-          if (data && typeof data.error === "string") {
+          let errText = "No se pudo procesar la asistencia.";
+          if (typeof data.error === "string") {
             errText = data.error;
-          } else if (data && typeof data.message === "string") {
+          } else if (typeof data.message === "string") {
             errText = data.message;
-          } else if (typeof data === "string") {
-            errText = data;
           }
 
           setLastResult({
@@ -132,12 +122,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
         }
       } catch (err: unknown) {
         playAudioTone("error");
-        let msg = "Error de conexión al procesar el código.";
-        if (err instanceof Error) {
-          msg = err.message;
-        } else if (err && typeof err === "object" && "message" in err) {
-          msg = String((err as { message: unknown }).message);
-        }
+        const msg = err instanceof Error ? err.message : "Error de comunicación con el servidor.";
         setLastResult({
           action: "error",
           message: msg,
@@ -149,156 +134,149 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
     [onScanSuccess]
   );
 
-  // 2. Discover available cameras and prioritize 1x main rear camera
+  // 2. Camera stream lifecycle (Robust, Crash-proof)
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
-    async function initCameras() {
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        if (!mounted) return;
-
-        if (devices && devices.length > 0) {
-          setAvailableCameras(devices);
-
-          // Find standard 1x rear camera (avoid ultra-wide 0.5x if possible)
-          const preferredBackCamera =
-            devices.find((d) => {
-              const label = d.label.toLowerCase();
-              const isBack =
-                label.includes("back") ||
-                label.includes("rear") ||
-                label.includes("trasera") ||
-                label.includes("environment") ||
-                label.includes("camera2 0") ||
-                label.includes("0, facing back");
-              const isUltraWide =
-                label.includes("wide") ||
-                label.includes("ultra") ||
-                label.includes("0.5") ||
-                label.includes("0.6") ||
-                label.includes("macro");
-              return isBack && !isUltraWide;
-            }) ||
-            devices.find((d) => {
-              const label = d.label.toLowerCase();
-              return (
-                label.includes("back") ||
-                label.includes("rear") ||
-                label.includes("trasera") ||
-                label.includes("environment")
-              );
-            }) ||
-            devices[0];
-
-          setSelectedCameraId(preferredBackCamera.id);
-        }
-      } catch (err) {
-        console.warn("Could not list video devices directly:", err);
-      }
-    }
-
-    initCameras();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // 3. Start or re-start camera on selectedCameraId change
-  useEffect(() => {
-    let html5QrCode: Html5Qrcode | null = null;
-    isStoppingRef.current = false;
-    isProcessingRef.current = false;
-    setIsScanning(true);
-    setLastResult(null);
-
-    async function startScanner() {
+    async function startCamera() {
       try {
         setCameraError(null);
 
-        // If scanner instance already exists, stop and clear it first
-        if (scannerRef.current) {
-          try {
-            await scannerRef.current.stop();
-            await scannerRef.current.clear();
-          } catch {
-            // Ignore stop errors on switch
-          }
+        // Stop any active previous tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
         }
 
-        html5QrCode = new Html5Qrcode("qr-reader-video-box", {
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false,
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setCameraError("Tu navegador no soporta el acceso a la cámara.");
+          return;
+        }
+
+        // Build standard, crash-safe constraints
+        const videoConstraints: MediaTrackConstraints = selectedDeviceId
+          ? { deviceId: { exact: selectedDeviceId } }
+          : { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } };
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: videoConstraints,
         });
-        scannerRef.current = html5QrCode;
 
-        // Configure camera target: specific device ID if available, else environment facingMode
-        const cameraConfig = selectedCameraId
-          ? { deviceId: { exact: selectedCameraId } }
-          : { facingMode: "environment" };
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
 
-        await html5QrCode.start(
-          cameraConfig,
-          {
-            fps: 12,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const minDim = Math.min(viewfinderWidth, viewfinderHeight);
-              return {
-                width: Math.floor(minDim * 0.75),
-                height: Math.floor(minDim * 0.75),
-              };
-            },
-            aspectRatio: 1.0,
-            videoConstraints: {
-              facingMode: "environment",
-              // Request standard 1x zoom without ultra-wide distortion
-              focusMode: "continuous",
-              zoom: 1.0,
-            } as unknown as MediaTrackConstraints,
-          },
-          (decodedText: string) => {
-            handleCodeScanned(decodedText);
-          },
-          () => {
-            // frame pass miss - ignored
+        streamRef.current = stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+
+        // Enumerate video devices to allow user camera selection
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter((d) => d.kind === "videoinput");
+          if (active && videoDevices.length > 0) {
+            setAvailableCameras(videoDevices);
           }
-        );
+        } catch {
+          // Device list fallback
+        }
       } catch (err: unknown) {
-        console.error("Camera scanner start error:", err);
-        setCameraError(
-          "No se pudo iniciar la cámara. Por favor verifica los permisos de cámara en tu navegador."
-        );
+        console.error("Camera access error:", err);
+        if (active) {
+          setCameraError(
+            "No se pudo acceder a la cámara. Por favor permite los permisos de cámara en tu navegador."
+          );
+        }
       }
     }
 
-    startScanner();
+    startCamera();
 
     return () => {
-      if (scannerRef.current && !isStoppingRef.current) {
-        isStoppingRef.current = true;
-        scannerRef.current
-          .stop()
-          .then(() => scannerRef.current?.clear())
-          .catch(() => {});
+      active = false;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
       }
     };
-  }, [selectedCameraId, handleCodeScanned]);
+  }, [selectedDeviceId, facingMode]);
 
-  // 4. Resume scan for next employee
+  // 3. Continuous frame scanning loop
+  useEffect(() => {
+    let isRunning = true;
+
+    function scanLoop() {
+      if (!isRunning) return;
+
+      const video = videoRef.current;
+      if (
+        isScanning &&
+        !isProcessingRef.current &&
+        video &&
+        video.readyState === video.HAVE_ENOUGH_DATA
+      ) {
+        try {
+          if (!canvasRef.current) {
+            canvasRef.current = document.createElement("canvas");
+          }
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+          if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+            // Downscale for lightning-fast analysis (~480px width)
+            const scale = Math.min(1, 480 / video.videoWidth);
+            canvas.width = Math.floor(video.videoWidth * scale);
+            canvas.height = Math.floor(video.videoHeight * scale);
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: "dontInvert",
+            });
+
+            if (qrCode && qrCode.data && qrCode.data.trim().length > 0) {
+              handleCodeScanned(qrCode.data);
+              return; // Stop loop once detected!
+            }
+          }
+        } catch (scanErr) {
+          console.warn("Scan frame error:", scanErr);
+        }
+      }
+
+      if (isRunning) {
+        animFrameRef.current = requestAnimationFrame(scanLoop);
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(scanLoop);
+
+    return () => {
+      isRunning = false;
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, [isScanning, handleCodeScanned]);
+
+  // 4. Resume scanning for the next employee
   function handleResumeScan() {
     setLastResult(null);
     setProcessing(false);
     isProcessingRef.current = false;
     setIsScanning(true);
+  }
 
-    if (scannerRef.current) {
-      try {
-        scannerRef.current.resume();
-      } catch (resumeErr) {
-        console.warn("Scanner resume notice:", resumeErr);
-      }
-    }
+  // Toggle front / back camera
+  function toggleFacingMode() {
+    setSelectedDeviceId("");
+    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   }
 
   return (
@@ -324,7 +302,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           border: "1px solid var(--color-primary-border)",
           borderRadius: "var(--radius-lg)",
           width: "100%",
-          maxWidth: 480,
+          maxWidth: 460,
           maxHeight: "92vh",
           boxShadow: "var(--shadow-elevated)",
           overflow: "hidden",
@@ -333,7 +311,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
+        {/* Header */}
         <div
           style={{
             padding: "16px 20px",
@@ -370,14 +348,13 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           </button>
         </div>
 
-        {/* Video Box Container */}
+        {/* Content Body */}
         <div
           style={{
             padding: 20,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            position: "relative",
             overflowY: "auto",
             flex: 1,
           }}
@@ -385,7 +362,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           {cameraError ? (
             <div
               style={{
-                padding: "32px 20px",
+                padding: "28px 20px",
                 textAlign: "center",
                 background: "rgba(184, 59, 46, 0.12)",
                 border: "1px solid rgba(184, 59, 46, 0.3)",
@@ -399,7 +376,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
               </p>
               <button
                 type="button"
-                onClick={() => setSelectedCameraId((prev) => prev)}
+                onClick={() => setFacingMode((p) => p)}
                 className="btn btn-secondary btn-sm"
                 style={{ marginTop: 16 }}
               >
@@ -417,12 +394,27 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
                 background: "#000",
                 position: "relative",
                 minHeight: 280,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              {/* HTML5 QR Camera Container */}
-              <div id="qr-reader-video-box" style={{ width: "100%", minHeight: 280 }} />
+              {/* Native React Video Element */}
+              <video
+                ref={videoRef}
+                playsInline
+                autoPlay
+                muted
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                  minHeight: 280,
+                }}
+              />
 
-              {/* Gold target frame overlay */}
+              {/* Gold target box overlay */}
               {isScanning && !lastResult && (
                 <div
                   style={{
@@ -436,10 +428,10 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
                 >
                   <div
                     style={{
-                      width: 210,
-                      height: 210,
+                      width: 200,
+                      height: 200,
                       border: "2px solid var(--color-primary)",
-                      borderRadius: 12,
+                      borderRadius: 14,
                       boxShadow: "0 0 0 9999px rgba(0,0,0,0.45), 0 0 15px rgba(200,164,92,0.6)",
                       position: "relative",
                     }}
@@ -463,26 +455,47 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
             </div>
           )}
 
-          {/* Camera Selection Dropdown / Selector */}
-          {availableCameras.length > 1 && (
-            <div style={{ width: "100%", marginTop: 14 }}>
-              <label className="label" style={{ fontSize: "0.75rem", marginBottom: 4 }}>
-                Seleccionar Lente / Cámara
-              </label>
+          {/* Camera Selection Controls */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              width: "100%",
+              marginTop: 12,
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            {availableCameras.length > 1 ? (
               <select
                 className="select"
-                value={selectedCameraId}
-                onChange={(e) => setSelectedCameraId(e.target.value)}
-                style={{ fontSize: "0.8125rem", padding: "6px 10px" }}
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                style={{ fontSize: "0.8125rem", padding: "6px 8px", flex: "1 1 180px" }}
               >
+                <option value="">Lente Automático (1x)</option>
                 {availableCameras.map((cam, idx) => (
-                  <option key={cam.id} value={cam.id}>
+                  <option key={cam.deviceId} value={cam.deviceId}>
                     {cam.label || `Cámara ${idx + 1}`}
                   </option>
                 ))}
               </select>
-            </div>
-          )}
+            ) : (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>
+                Cámara: {facingMode === "environment" ? "Trasera (1x)" : "Frontal"}
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={toggleFacingMode}
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: "0.75rem", padding: "4px 8px", display: "inline-flex", gap: 4, alignItems: "center" }}
+            >
+              🔄 Alternar Frontal/Trasera
+            </button>
+          </div>
 
           {/* Processing Indicator */}
           {processing && (
