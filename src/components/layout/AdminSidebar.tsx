@@ -44,11 +44,12 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
   const isAdmin = profile.role === "admin";
   const isAdminOrRecep = ["admin", "recepcionista"].includes(profile.role);
 
-  // Exclusive 7 Official Sections
+  // Exclusive Official Sections
   const navItems = [
     { href: "/dashboard", label: "Inicio", icon: "/iconsAdmi/Inicio.svg", show: true },
     { href: "/dashboard/reservas", label: "Reservas", icon: "/iconsAdmi/Reservas.svg", show: isAdminOrRecep },
     { href: "/dashboard/empleados", label: "Empleados", icon: "/iconsAdmi/Empleados.svg", show: isAdmin },
+    { href: "/dashboard/asistencia", label: "Asistencia", icon: "/iconsAdmi/Asistencia.svg", show: isAdminOrRecep },
     { href: "/dashboard/servicios", label: "Servicios", icon: "/iconsAdmi/Servicios.svg", show: isAdmin },
     { href: "/dashboard/vestuario", label: "Vestuario", icon: "/iconsAdmi/Vestuario.svg", show: isAdminOrRecep },
     { href: "/dashboard/productos", label: "Productos", icon: "/iconsAdmi/Productos.svg", show: isAdmin },

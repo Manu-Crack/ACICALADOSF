@@ -1,0 +1,271 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+async function verifyAdmin() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado", status: 401 };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "recepcionista"].includes(profile.role)) {
+    return { error: "Acceso denegado", status: 403 };
+  }
+
+  return { user, profile };
+}
+
+/**
+ * GET /api/admin/attendance
+ * Consulta asistencias consolidadas cruzadas con empleados y permisos (employee_blocks).
+ * Parámetros de consulta:
+ * - date: YYYY-MM-DD (para vista de un día específico)
+ * - start_date y end_date: YYYY-MM-DD (para rangos: semana, mes, año)
+ * - type: "all" | "spa" | "barberia"
+ * - employee_id: UUID (para historial de un trabajador específico)
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await verifyAdmin();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const dateParam = searchParams.get("date");
+    const startDateParam = searchParams.get("start_date");
+    const endDateParam = searchParams.get("end_date");
+    const typeParam = searchParams.get("type") || "all";
+    const employeeIdParam = searchParams.get("employee_id");
+
+    const admin = createAdminClient();
+
+    // 1. Obtener empleados según filtro de tipo y/o ID
+    let empQuery = admin
+      .from("employees")
+      .select("id, first_name, last_name, email, phone, type, is_active, rotation_order")
+      .order("first_name");
+
+    if (typeParam !== "all") {
+      empQuery = empQuery.eq("type", typeParam);
+    }
+    if (employeeIdParam) {
+      empQuery = empQuery.eq("id", employeeIdParam);
+    }
+
+    const { data: employees, error: empError } = await empQuery;
+    if (empError) throw empError;
+
+    // Determinar rango de fechas
+    let startDate: string;
+    let endDate: string;
+
+    if (dateParam) {
+      startDate = dateParam;
+      endDate = dateParam;
+    } else if (startDateParam && endDateParam) {
+      startDate = startDateParam;
+      endDate = endDateParam;
+    } else {
+      // Default: Hoy en hora Perú (UTC-5)
+      const now = new Date();
+      const peruDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(now);
+      startDate = peruDate;
+      endDate = peruDate;
+    }
+
+    // 2. Obtener asistencias registradas en el rango
+    let attQuery = admin
+      .from("employee_attendances")
+      .select("*")
+      .gte("date", startDate)
+      .lte("date", endDate)
+      .order("date", { ascending: false });
+
+    if (employeeIdParam) {
+      attQuery = attQuery.eq("employee_id", employeeIdParam);
+    }
+
+    const { data: attendances, error: attError } = await attQuery;
+    if (attError) throw attError;
+
+    // 3. Obtener permisos / ausencias justificadas (employee_blocks) en el rango
+    let blockQuery = admin
+      .from("employee_blocks")
+      .select("*")
+      .gte("block_date", startDate)
+      .lte("block_date", endDate);
+
+    if (employeeIdParam) {
+      blockQuery = blockQuery.eq("employee_id", employeeIdParam);
+    }
+
+    const { data: blocks, error: blockError } = await blockQuery;
+    if (blockError) throw blockError;
+
+    return NextResponse.json({
+      startDate,
+      endDate,
+      employees: employees || [],
+      attendances: attendances || [],
+      blocks: blocks || [],
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("GET attendance error:", msg);
+    return NextResponse.json(
+      { error: "Error al obtener datos de asistencia: " + msg },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/admin/attendance
+ * Crear o registrar manualmente una asistencia (ajuste administrativo)
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await verifyAdmin();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const body = await request.json();
+    const { employee_id, date, check_in, check_out, status, notes } = body;
+
+    if (!employee_id || !date || !check_in) {
+      return NextResponse.json(
+        { error: "El trabajador, la fecha y la hora de entrada son obligatorios" },
+        { status: 422 }
+      );
+    }
+
+    const admin = createAdminClient();
+
+    // Upsert asistencia para ese empleado y fecha
+    const { data, error } = await admin
+      .from("employee_attendances")
+      .upsert(
+        {
+          employee_id,
+          date,
+          check_in,
+          check_out: check_out || null,
+          status: status || "presente",
+          notes: notes || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "employee_id,date" }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("POST attendance error:", msg);
+    return NextResponse.json(
+      { error: "Error al registrar asistencia manual: " + msg },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PUT /api/admin/attendance
+ * Actualizar una asistencia existente (hora de salida, estado o notas)
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const auth = await verifyAdmin();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const body = await request.json();
+    const { id, check_in, check_out, status, notes } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "El ID del registro de asistencia es obligatorio" },
+        { status: 422 }
+      );
+    }
+
+    const admin = createAdminClient();
+
+    const { data, error } = await admin
+      .from("employee_attendances")
+      .update({
+        check_in,
+        check_out: check_out || null,
+        status: status || "presente",
+        notes: notes || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json(data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("PUT attendance error:", msg);
+    return NextResponse.json(
+      { error: "Error al actualizar asistencia: " + msg },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/admin/attendance?id=<id>
+ * Eliminar un registro de asistencia
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await verifyAdmin();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "El ID del registro es obligatorio" },
+        { status: 422 }
+      );
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("employee_attendances")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, id });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("DELETE attendance error:", msg);
+    return NextResponse.json(
+      { error: "Error al eliminar registro de asistencia: " + msg },
+      { status: 500 }
+    );
+  }
+}

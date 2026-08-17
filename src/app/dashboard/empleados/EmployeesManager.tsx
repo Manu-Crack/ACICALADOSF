@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
+import { EmployeeQRBadgeModal } from "@/app/dashboard/asistencia/EmployeeQRBadgeModal";
 
 type Service = {
   id: string;
@@ -107,6 +108,7 @@ export default function EmployeesManager() {
 
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
   const [absenceEmp, setAbsenceEmp] = useState<Employee | null>(null);
+  const [selectedQrEmp, setSelectedQrEmp] = useState<Employee | null>(null);
 
   // Form states - Employee
   const [firstName, setFirstName] = useState("");
@@ -858,25 +860,33 @@ export default function EmployeesManager() {
                         </span>
                       </button>
 
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          onClick={() => setSelectedQrEmp(emp)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ flex: "1 1 60px", padding: "6px 8px", fontSize: "0.75rem" }}
+                          title="Ver / Descargar Carnet QR"
+                        >
+                          🪪 QR
+                        </button>
                         <button
                           onClick={() => handleOpenEmpModal(emp)}
                           className="btn btn-ghost btn-sm"
-                          style={{ flex: 1 }}
+                          style={{ flex: "1 1 70px", padding: "6px 8px", fontSize: "0.75rem" }}
                         >
                           ✏️ Editar
                         </button>
                         <button
                           onClick={() => handleOpenAbsenceModal(emp)}
                           className="btn btn-ghost btn-sm"
-                          style={{ flex: 1, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                          style={{ flex: "1 1 75px", padding: "6px 8px", fontSize: "0.75rem", color: "var(--color-warning)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
                         >
-                          <img src="/calendario.svg" alt="Permiso" style={{ width: 14, height: 14, display: "inline-block" }} /> Permiso
+                          <img src="/calendario.svg" alt="Permiso" style={{ width: 13, height: 13, display: "inline-block" }} /> Permiso
                         </button>
                         <button
                           onClick={() => handleDeleteEmp(emp)}
                           className="btn btn-ghost btn-sm"
-                          style={{ color: "#ef4444" }}
+                          style={{ color: "#ef4444", padding: "6px 8px", fontSize: "0.75rem" }}
                           title="Eliminar trabajador"
                         >
                           🗑️
@@ -1724,6 +1734,14 @@ export default function EmployeesManager() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Employee QR Badge Modal */}
+      {selectedQrEmp && (
+        <EmployeeQRBadgeModal
+          employee={selectedQrEmp}
+          onClose={() => setSelectedQrEmp(null)}
+        />
       )}
     </div>
   );
