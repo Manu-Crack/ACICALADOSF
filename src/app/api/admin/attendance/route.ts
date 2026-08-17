@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // 1. Obtener empleados según filtro de tipo y/o ID
     let empQuery = admin
       .from("employees")
-      .select("id, first_name, last_name, email, phone, type, is_active, rotation_order")
+      .select("id, first_name, last_name, type, is_active, phone, rotation_order")
       .order("first_name");
 
     if (typeParam !== "all") {
