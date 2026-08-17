@@ -103,7 +103,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60, width: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Top Header & Actions */}
       <div
         style={{

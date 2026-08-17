@@ -977,6 +977,9 @@ details>summary {
 .dashboard-container {
   display: flex;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .dashboard-main {
@@ -984,6 +987,9 @@ details>summary {
   margin-left: 260px;
   padding: 32px;
   min-height: 100vh;
+  min-width: 0;
+  width: calc(100% - 260px);
+  max-width: 100%;
   transition: margin-left var(--transition-normal);
 }
 
@@ -1009,9 +1015,19 @@ details>summary {
 }
 
 @media (max-width: 768px) {
+  .dashboard-container {
+    width: 100vw;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
   .dashboard-main {
     margin-left: 0 !important;
-    padding: 80px 16px 32px 16px !important;
+    padding: 76px 14px 32px 14px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
   }
 
   .dashboard-mobile-header {

@@ -202,7 +202,7 @@ export function ReservasManager() {
     .reduce((sum, b) => sum + b.total_price_cents, 0);
 
   return (
-    <div>
+    <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60, width: "100%", minWidth: 0 }}>
       {/* Stats Strip */}
       <div
         className="grid"
