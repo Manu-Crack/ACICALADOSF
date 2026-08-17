@@ -864,10 +864,10 @@ export default function EmployeesManager() {
                         <button
                           onClick={() => setSelectedQrEmp(emp)}
                           className="btn btn-secondary btn-sm"
-                          style={{ flex: "1 1 60px", padding: "6px 8px", fontSize: "0.75rem" }}
-                          title="Ver / Descargar Carnet QR"
+                          style={{ flex: "1 1 80px", padding: "6px 10px", fontSize: "0.75rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                          title="Ver, descargar o compartir Carnet QR por WhatsApp"
                         >
-                          🪪 QR
+                          🪪 Carnet QR
                         </button>
                         <button
                           onClick={() => handleOpenEmpModal(emp)}
@@ -1151,6 +1151,21 @@ export default function EmployeesManager() {
                 onChange={(e) => setAssignmentSearch(e.target.value)}
               />
             </div>
+
+            {selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const emp = employees.find((e) => e.id === selectedEmpFilter);
+                  if (emp) setSelectedQrEmp(emp);
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ marginBottom: 2, display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="Ver, descargar o compartir Carnet QR por WhatsApp"
+              >
+                🪪 Ver Carnet QR
+              </button>
+            )}
 
             <button
               type="button"
@@ -1649,18 +1664,32 @@ export default function EmployeesManager() {
                 </div>
               )}
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, paddingTop: 16, borderTop: "1px solid var(--color-border)", flexWrap: "wrap" }}>
+                {editingEmp && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const empToView = editingEmp;
+                      setShowEmpModal(false);
+                      setSelectedQrEmp(empToView);
+                    }}
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginRight: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    🪪 Ver Carnet QR
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowEmpModal(false)}
-                  className="btn btn-ghost"
+                  className="btn btn-ghost btn-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingEmp}
-                  className="btn btn-primary"
+                  className="btn btn-primary btn-sm"
                 >
                   {savingEmp ? "Guardando..." : "Guardar Trabajador"}
                 </button>
