@@ -60,15 +60,22 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: getAuthRedirectURL("/auth/callback"),
-      },
-    });
+    try {
+      const redirectUrl = getAuthRedirectURL("/auth/callback");
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al iniciar sesión con proveedor social.";
+      setError(msg);
       setLoading(false);
     }
   }

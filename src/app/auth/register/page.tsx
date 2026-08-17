@@ -76,14 +76,23 @@ export default function RegisterPage() {
 
   async function handleOAuth(provider: "google" | "facebook") {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: getAuthRedirectURL("/auth/callback"),
-      },
-    });
-    if (error) {
-      setError(error.message);
+    setError("");
+
+    try {
+      const redirectUrl = getAuthRedirectURL("/auth/callback");
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al iniciar sesión con proveedor social.";
+      setError(msg);
       setLoading(false);
     }
   }

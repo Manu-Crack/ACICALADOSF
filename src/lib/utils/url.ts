@@ -10,6 +10,12 @@
  * 4. http://localhost:3000 (Fallback para desarrollo local)
  */
 export function getSiteURL(): string {
+  // 1. En el navegador del cliente, usar siempre el origen exacto actual
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  // 2. En el servidor, verificar variables de entorno
   let url =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_VERCEL_URL ||
@@ -18,23 +24,20 @@ export function getSiteURL(): string {
   if (url) {
     url = url.includes("http") ? url : `https://${url}`;
     try {
-      // Extrae únicamente la raíz/origen (protocolo + host) ignorando rutas como /auth/login
+      // Extrae únicamente la raíz/origen (protocolo + host) ignorando rutas adicionales
       return new URL(url).origin;
     } catch {
       return url.replace(/\/$/, "");
     }
   }
 
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-
+  // 3. Fallback de desarrollo local
   return "http://localhost:3000";
 }
 
 /**
  * Genera la URL completa de redirección para flujos de autenticación de Supabase (OAuth o Confirmación por correo).
- * Garantiza la ruta limpia (ej: https://acicaladosf.vercel.app/auth/callback)
+ * Garantiza la ruta limpia (ej: http://localhost:3000/auth/callback o https://acicaladosf.vercel.app/auth/callback)
  */
 export function getAuthRedirectURL(path: string = "/auth/callback"): string {
   const siteUrl = getSiteURL();

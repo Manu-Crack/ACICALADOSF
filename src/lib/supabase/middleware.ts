@@ -29,6 +29,21 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // Intercept OAuth callback codes landing on root or any other page and forward to /auth/callback
+  if (
+    request.nextUrl.searchParams.has("code") &&
+    !request.nextUrl.pathname.startsWith("/auth/callback")
+  ) {
+    const code = request.nextUrl.searchParams.get("code");
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = "/auth/callback";
+    callbackUrl.searchParams.set("code", code!);
+    if (request.nextUrl.pathname !== "/") {
+      callbackUrl.searchParams.set("next", request.nextUrl.pathname);
+    }
+    return NextResponse.redirect(callbackUrl);
+  }
+
   // Refresh session - IMPORTANT: don't remove this
   const {
     data: { user },

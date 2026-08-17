@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 interface NavUserButtonProps {
   user: boolean;
@@ -17,7 +18,52 @@ export function NavUserButton({
   onSignOut,
 }: NavUserButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [hasSession, setHasSession] = useState(user);
+  const [userName, setUserName] = useState<string | null>(profileName || null);
+  const [isStaff, setIsStaff] = useState(isInternal);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Sync props to state
+  useEffect(() => {
+    setHasSession(user);
+    if (profileName) setUserName(profileName);
+    setIsStaff(isInternal);
+  }, [user, profileName, isInternal]);
+
+  // Client-side auth listener for instant sync on OAuth redirect
+  useEffect(() => {
+    const supabase = createClient();
+
+    // Check user session
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      if (authUser) {
+        setHasSession(true);
+        const metaName = (authUser.user_metadata?.full_name || authUser.user_metadata?.name || "").trim();
+        const emailFallback = authUser.email ? authUser.email.split("@")[0] : "Administrador";
+        if (!userName || userName === "Administrador") {
+          setUserName(metaName || emailFallback || "Administrador");
+        }
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setHasSession(true);
+        const metaName = (session.user.user_metadata?.full_name || session.user.user_metadata?.name || "").trim();
+        const emailFallback = session.user.email ? session.user.email.split("@")[0] : "Administrador";
+        setUserName(metaName || emailFallback || "Administrador");
+      } else {
+        setHasSession(false);
+        setUserName(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -32,7 +78,7 @@ export function NavUserButton({
     };
   }, []);
 
-  const displayName = profileName || (user ? "Administrador" : "Iniciar Sesión");
+  const displayName = userName || (hasSession ? "Administrador" : "Iniciar Sesión");
 
   return (
     <div className="relative inline-flex items-center" ref={menuRef}>
@@ -81,7 +127,7 @@ export function NavUserButton({
       {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 w-52 sm:w-56 max-w-[calc(100vw-2rem)] bg-[#111111] border border-[#C8A45C]/35 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] py-2 z-50 animate-fadeIn backdrop-blur-md">
-          {user ? (
+          {hasSession ? (
             <>
               <div className="px-4 py-2.5 border-b border-[#C8A45C]/20 mb-1">
                 <p className="text-[11px] text-gray-400 uppercase tracking-wider">
@@ -92,7 +138,7 @@ export function NavUserButton({
                 </p>
               </div>
 
-              {isInternal && (
+              {isStaff && (
                 <Link
                   href="/dashboard"
                   onClick={() => setIsOpen(false)}

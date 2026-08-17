@@ -18,12 +18,12 @@ export async function GET(request: Request) {
           ? `https://${forwardedHost}`
           : origin;
 
-      // If a specific redirect was requested, use it
-      if (next) {
+      // If a specific valid internal redirect was requested, use it
+      if (next && next.startsWith("/") && !next.startsWith("/auth/")) {
         return NextResponse.redirect(`${baseUrl}${next}`);
       }
 
-      // Otherwise, check user role and redirect accordingly
+      // Check user role and redirect accordingly
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -31,12 +31,35 @@ export async function GET(request: Request) {
       if (user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("role")
+          .select("first_name, last_name, role")
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
 
+        // Sync name from Google metadata into profile if missing
+        const metaFullName = (user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
+        const metaFirstName = (user.user_metadata?.first_name || metaFullName.split(" ")[0] || "").trim();
+        const metaLastName = (user.user_metadata?.last_name || metaFullName.split(" ").slice(1).join(" ") || "").trim();
+
+        if (!profile) {
+          await supabase.from("profiles").insert({
+            id: user.id,
+            first_name: metaFirstName || (user.email ? user.email.split("@")[0] : "Cliente"),
+            last_name: metaLastName || "",
+            role: "cliente",
+          });
+        } else if (!profile.first_name && metaFirstName) {
+          await supabase
+            .from("profiles")
+            .update({
+              first_name: metaFirstName,
+              last_name: profile.last_name || metaLastName || "",
+            })
+            .eq("id", user.id);
+        }
+
+        const currentRole = profile?.role || "cliente";
         const internalRoles = ["admin", "recepcionista", "empleado"];
-        if (profile && internalRoles.includes(profile.role)) {
+        if (internalRoles.includes(currentRole)) {
           return NextResponse.redirect(`${baseUrl}/dashboard`);
         }
       }

@@ -25,7 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Ubicación", href: "/ubicacion" },
 ];
 
-export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
+export function MobileMenu({ user, profileName, isInternal, onSignOut }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
 
@@ -150,7 +150,7 @@ export function MobileMenu({ user, onSignOut }: MobileMenuProps) {
                     className="text-xl sm:text-2xl font-serif tracking-wider text-[#C8A45C]/60 hover:text-[#C8A45C] hover:drop-shadow-[0_0_6px_rgba(200,164,92,0.35)] transition-all duration-200 text-center pb-1"
                     style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
                   >
-                    Cerrar sesión
+                    Iniciar sesión
                   </Link>
                 )}
               </div>
