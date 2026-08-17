@@ -83,7 +83,7 @@ export async function Navbar() {
         <NavLinks />
 
         {/* SECCIÓN DERECHA (Acciones, Carrito, Usuario & Menú) */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 lg:gap-3.5">
           {/* Lupa (Búsqueda interactiva en desktop/tablet) */}
           <div className="hidden md:block">
             <NavSearch />
@@ -93,12 +93,12 @@ export async function Navbar() {
           <div className="h-6 w-[1px] bg-[#C8A45C]/30 mx-1 hidden md:block" />
 
           {/* Botón de Carrito (Visible en móvil y desktop) */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
             <CartButton />
           </div>
 
           {/* Botón de Usuario (Visible en móvil y desktop) */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
             <NavUserButton
               user={!!user}
               profileName={userName}
