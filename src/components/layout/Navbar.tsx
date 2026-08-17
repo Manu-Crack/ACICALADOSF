@@ -93,12 +93,12 @@ export async function Navbar() {
           <div className="h-6 w-[1px] bg-[#C8A45C]/30 mx-1 hidden md:block" />
 
           {/* Botón de Carrito (Visible en móvil y desktop) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-5">
             <CartButton />
           </div>
 
           {/* Botón de Usuario (Visible en móvil y desktop) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-5">
             <NavUserButton
               user={!!user}
               profileName={userName}
