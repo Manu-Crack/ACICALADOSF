@@ -9,11 +9,8 @@ interface Employee {
   id: string;
   first_name: string;
   last_name: string;
-  email?: string | null;
-  phone?: string | null;
   type: "spa" | "barberia";
   is_active: boolean;
-  rotation_order?: number;
 }
 
 interface AttendanceRecord {

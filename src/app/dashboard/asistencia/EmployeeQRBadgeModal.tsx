@@ -9,8 +9,6 @@ interface Employee {
   last_name: string;
   type: "spa" | "barberia";
   is_active: boolean;
-  email?: string | null;
-  phone?: string | null;
 }
 
 interface EmployeeQRBadgeModalProps {
@@ -209,10 +207,7 @@ export function EmployeeQRBadgeModal({ employee, onClose }: EmployeeQRBadgeModal
 
     // Fallback: Download image and open WhatsApp Web with pre-filled message
     handleDownloadBadge();
-    const phoneClean = employee.phone ? employee.phone.replace(/[^0-9]/g, "") : "";
-    const waUrl = phoneClean
-      ? `https://api.whatsapp.com/send?phone=${phoneClean}&text=${encodeURIComponent(textMsg)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(textMsg)}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(textMsg)}`;
     window.open(waUrl, "_blank");
   }
 

@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     // 1. Buscar el empleado en la base de datos
     const { data: employee, error: empError } = await admin
       .from("employees")
-      .select("id, first_name, last_name, type, is_active, phone")
+      .select("id, first_name, last_name, type, is_active")
       .eq("id", employeeId)
       .maybeSingle();
 
