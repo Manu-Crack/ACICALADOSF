@@ -22,6 +22,26 @@ async function verifyAdmin() {
   return { user, profile };
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    if ("message" in err && typeof (err as { message: unknown }).message === "string") {
+      return (err as { message: string }).message;
+    }
+    if ("error" in err && typeof (err as { error: unknown }).error === "string") {
+      return (err as { error: string }).error;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
 /**
  * Normaliza y extrae el UUID del empleado desde diferentes formatos de QR:
  * - "acicalados:emp:550e8400-e29b-41d4-a716-446655440000"
@@ -76,15 +96,15 @@ export async function POST(request: NextRequest) {
 
     if (!rawCode) {
       return NextResponse.json(
-        { error: "No se proporcionó ningún código QR para escanear" },
+        { error: "No se proporcionó ningún código QR para escanear." },
         { status: 400 }
       );
     }
 
     const employeeId = extractEmployeeId(rawCode);
-    if (!employeeId) {
+    if (!employeeId || !UUID_REGEX.test(employeeId)) {
       return NextResponse.json(
-        { error: "El código escaneado no contiene un identificador válido" },
+        { error: "El código escaneado no es un identificador de empleado válido de Acicalados." },
         { status: 400 }
       );
     }
@@ -98,7 +118,13 @@ export async function POST(request: NextRequest) {
       .eq("id", employeeId)
       .maybeSingle();
 
-    if (empError) throw empError;
+    if (empError) {
+      const dbMsg = getErrorMessage(empError);
+      return NextResponse.json(
+        { error: `Error al consultar empleado: ${dbMsg}` },
+        { status: 500 }
+      );
+    }
 
     if (!employee) {
       return NextResponse.json(
@@ -137,7 +163,13 @@ export async function POST(request: NextRequest) {
       .eq("date", peruDate)
       .maybeSingle();
 
-    if (attError) throw attError;
+    if (attError) {
+      const dbMsg = getErrorMessage(attError);
+      return NextResponse.json(
+        { error: `Error al consultar asistencia: ${dbMsg}` },
+        { status: 500 }
+      );
+    }
 
     // Verificar si tenía un permiso registrado para hoy
     const { data: blockRecord } = await admin
@@ -162,7 +194,13 @@ export async function POST(request: NextRequest) {
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        const dbMsg = getErrorMessage(insertError);
+        return NextResponse.json(
+          { error: `Error al registrar entrada: ${dbMsg}` },
+          { status: 500 }
+        );
+      }
 
       return NextResponse.json({
         action: "check_in",
@@ -187,7 +225,13 @@ export async function POST(request: NextRequest) {
         .select()
         .single();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        const dbMsg = getErrorMessage(updateError);
+        return NextResponse.json(
+          { error: `Error al registrar salida: ${dbMsg}` },
+          { status: 500 }
+        );
+      }
 
       const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
 
@@ -218,7 +262,7 @@ export async function POST(request: NextRequest) {
       date: peruDate,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     console.error("POST attendance/scan error:", msg);
     return NextResponse.json(
       { error: "Error al procesar el escaneo QR: " + msg },

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Html5Qrcode, Html5QrcodeSupportedFormats, CameraDevice } from "html5-qrcode";
 
 interface AttendanceQRScannerModalProps {
   onClose: () => void;
@@ -25,7 +25,9 @@ interface ScanResult {
 // Simple Web Audio API beep sound for feedback
 function playAudioTone(type: "success" | "error") {
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     const osc = ctx.createOscillator();
@@ -56,39 +58,216 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
   const [isScanning, setIsScanning] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
-  const [selectedFacingMode, setSelectedFacingMode] = useState<"environment" | "user">("environment");
+
+  // Camera devices state
+  const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isStoppingRef = useRef(false);
+  const isProcessingRef = useRef(false);
 
+  // 1. Process Scanned Code and pause scanner synchronously
+  const handleCodeScanned = useCallback(
+    async (decodedText: string) => {
+      // Synchronous lock prevents duplicate scans in tight frame loops
+      if (isProcessingRef.current) return;
+      isProcessingRef.current = true;
+      setIsScanning(false);
+      setProcessing(true);
+
+      // Pause HTML5 QR camera decoder immediately
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.pause(true);
+        } catch (pauseErr) {
+          console.warn("Scanner pause notice:", pauseErr);
+        }
+      }
+
+      try {
+        const res = await fetch("/api/admin/attendance/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: decodedText }),
+        });
+
+        let data: Record<string, unknown> = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = { error: "Respuesta no válida del servidor." };
+        }
+
+        if (res.ok) {
+          playAudioTone("success");
+          setLastResult({
+            action: (data.action as ScanResult["action"]) || "check_in",
+            message: String(data.message || "Asistencia registrada correctamente."),
+            employee: data.employee as ScanResult["employee"],
+            timestamp: typeof data.timestamp === "string" ? data.timestamp : undefined,
+            check_in_time: typeof data.check_in_time === "string" ? data.check_in_time : undefined,
+            check_out_time: typeof data.check_out_time === "string" ? data.check_out_time : undefined,
+          });
+
+          if (onScanSuccess) {
+            onScanSuccess();
+          }
+        } else {
+          playAudioTone("error");
+          let errText = "No se pudo registrar la asistencia.";
+          if (data && typeof data.error === "string") {
+            errText = data.error;
+          } else if (data && typeof data.message === "string") {
+            errText = data.message;
+          } else if (typeof data === "string") {
+            errText = data;
+          }
+
+          setLastResult({
+            action: "error",
+            message: errText,
+            employee: data.employee as ScanResult["employee"],
+          });
+        }
+      } catch (err: unknown) {
+        playAudioTone("error");
+        let msg = "Error de conexión al procesar el código.";
+        if (err instanceof Error) {
+          msg = err.message;
+        } else if (err && typeof err === "object" && "message" in err) {
+          msg = String((err as { message: unknown }).message);
+        }
+        setLastResult({
+          action: "error",
+          message: msg,
+        });
+      } finally {
+        setProcessing(false);
+      }
+    },
+    [onScanSuccess]
+  );
+
+  // 2. Discover available cameras and prioritize 1x main rear camera
+  useEffect(() => {
+    let mounted = true;
+
+    async function initCameras() {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (!mounted) return;
+
+        if (devices && devices.length > 0) {
+          setAvailableCameras(devices);
+
+          // Find standard 1x rear camera (avoid ultra-wide 0.5x if possible)
+          const preferredBackCamera =
+            devices.find((d) => {
+              const label = d.label.toLowerCase();
+              const isBack =
+                label.includes("back") ||
+                label.includes("rear") ||
+                label.includes("trasera") ||
+                label.includes("environment") ||
+                label.includes("camera2 0") ||
+                label.includes("0, facing back");
+              const isUltraWide =
+                label.includes("wide") ||
+                label.includes("ultra") ||
+                label.includes("0.5") ||
+                label.includes("0.6") ||
+                label.includes("macro");
+              return isBack && !isUltraWide;
+            }) ||
+            devices.find((d) => {
+              const label = d.label.toLowerCase();
+              return (
+                label.includes("back") ||
+                label.includes("rear") ||
+                label.includes("trasera") ||
+                label.includes("environment")
+              );
+            }) ||
+            devices[0];
+
+          setSelectedCameraId(preferredBackCamera.id);
+        }
+      } catch (err) {
+        console.warn("Could not list video devices directly:", err);
+      }
+    }
+
+    initCameras();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // 3. Start or re-start camera on selectedCameraId change
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
+    isStoppingRef.current = false;
+    isProcessingRef.current = false;
+    setIsScanning(true);
+    setLastResult(null);
 
     async function startScanner() {
       try {
         setCameraError(null);
+
+        // If scanner instance already exists, stop and clear it first
+        if (scannerRef.current) {
+          try {
+            await scannerRef.current.stop();
+            await scannerRef.current.clear();
+          } catch {
+            // Ignore stop errors on switch
+          }
+        }
+
         html5QrCode = new Html5Qrcode("qr-reader-video-box", {
           formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
           verbose: false,
         });
         scannerRef.current = html5QrCode;
 
+        // Configure camera target: specific device ID if available, else environment facingMode
+        const cameraConfig = selectedCameraId
+          ? { deviceId: { exact: selectedCameraId } }
+          : { facingMode: "environment" };
+
         await html5QrCode.start(
-          { facingMode: selectedFacingMode },
+          cameraConfig,
           {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
+            fps: 12,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const minDim = Math.min(viewfinderWidth, viewfinderHeight);
+              return {
+                width: Math.floor(minDim * 0.75),
+                height: Math.floor(minDim * 0.75),
+              };
+            },
             aspectRatio: 1.0,
+            videoConstraints: {
+              facingMode: "environment",
+              // Request standard 1x zoom without ultra-wide distortion
+              focusMode: "continuous",
+              zoom: 1.0,
+            } as unknown as MediaTrackConstraints,
           },
-          onCodeScanned,
+          (decodedText: string) => {
+            handleCodeScanned(decodedText);
+          },
           () => {
-            // onScanError callback - ignored for frame-by-frame misses
+            // frame pass miss - ignored
           }
         );
       } catch (err: unknown) {
         console.error("Camera scanner start error:", err);
         setCameraError(
-          "No se pudo acceder a la cámara. Por favor permite los permisos de cámara en tu navegador."
+          "No se pudo iniciar la cámara. Por favor verifica los permisos de cámara en tu navegador."
         );
       }
     }
@@ -104,62 +283,22 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           .catch(() => {});
       }
     };
-  }, [selectedFacingMode]);
+  }, [selectedCameraId, handleCodeScanned]);
 
-  async function onCodeScanned(decodedText: string) {
-    if (processing || !isScanning) return;
-    setProcessing(true);
-    setIsScanning(false);
-
-    try {
-      const res = await fetch("/api/admin/attendance/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: decodedText }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        playAudioTone("success");
-        setLastResult({
-          action: data.action,
-          message: data.message,
-          employee: data.employee,
-          timestamp: data.timestamp,
-          check_in_time: data.check_in_time,
-          check_out_time: data.check_out_time,
-        });
-        if (onScanSuccess) {
-          onScanSuccess();
-        }
-      } else {
-        playAudioTone("error");
-        setLastResult({
-          action: "error",
-          message: data.error || "No se pudo procesar el código QR.",
-          employee: data.employee,
-        });
-      }
-    } catch (err: unknown) {
-      playAudioTone("error");
-      const msg = err instanceof Error ? err.message : "Error de conexión con el servidor.";
-      setLastResult({
-        action: "error",
-        message: msg,
-      });
-    } finally {
-      setProcessing(false);
-    }
-  }
-
+  // 4. Resume scan for next employee
   function handleResumeScan() {
     setLastResult(null);
+    setProcessing(false);
+    isProcessingRef.current = false;
     setIsScanning(true);
-  }
 
-  function toggleCamera() {
-    setSelectedFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+    if (scannerRef.current) {
+      try {
+        scannerRef.current.resume();
+      } catch (resumeErr) {
+        console.warn("Scanner resume notice:", resumeErr);
+      }
+    }
   }
 
   return (
@@ -186,6 +325,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           borderRadius: "var(--radius-lg)",
           width: "100%",
           maxWidth: 480,
+          maxHeight: "92vh",
           boxShadow: "var(--shadow-elevated)",
           overflow: "hidden",
           display: "flex",
@@ -238,6 +378,8 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
             flexDirection: "column",
             alignItems: "center",
             position: "relative",
+            overflowY: "auto",
+            flex: 1,
           }}
         >
           {cameraError ? (
@@ -257,7 +399,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
               </p>
               <button
                 type="button"
-                onClick={() => setSelectedFacingMode((prev) => (prev === "environment" ? "user" : "environment"))}
+                onClick={() => setSelectedCameraId((prev) => prev)}
                 className="btn btn-secondary btn-sm"
                 style={{ marginTop: 16 }}
               >
@@ -294,8 +436,8 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
                 >
                   <div
                     style={{
-                      width: 200,
-                      height: 200,
+                      width: 210,
+                      height: 210,
                       border: "2px solid var(--color-primary)",
                       borderRadius: 12,
                       boxShadow: "0 0 0 9999px rgba(0,0,0,0.45), 0 0 15px rgba(200,164,92,0.6)",
@@ -321,20 +463,35 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
             </div>
           )}
 
-          {/* Camera switch toggle */}
-          <div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginTop: 12 }}>
-            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-dim)" }}>
-              Cámara activa: {selectedFacingMode === "environment" ? "Trasera" : "Frontal"}
-            </span>
-            <button
-              type="button"
-              onClick={toggleCamera}
-              className="btn btn-ghost btn-sm"
-              style={{ padding: "4px 8px", fontSize: "0.75rem", display: "inline-flex", gap: 4, alignItems: "center" }}
-            >
-              🔄 Cambiar Cámara
-            </button>
-          </div>
+          {/* Camera Selection Dropdown / Selector */}
+          {availableCameras.length > 1 && (
+            <div style={{ width: "100%", marginTop: 14 }}>
+              <label className="label" style={{ fontSize: "0.75rem", marginBottom: 4 }}>
+                Seleccionar Lente / Cámara
+              </label>
+              <select
+                className="select"
+                value={selectedCameraId}
+                onChange={(e) => setSelectedCameraId(e.target.value)}
+                style={{ fontSize: "0.8125rem", padding: "6px 10px" }}
+              >
+                {availableCameras.map((cam, idx) => (
+                  <option key={cam.id} value={cam.id}>
+                    {cam.label || `Cámara ${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Processing Indicator */}
+          {processing && (
+            <div style={{ marginTop: 14, textAlign: "center", color: "var(--color-primary)" }}>
+              <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                ⏳ Procesando marcación de empleado...
+              </span>
+            </div>
+          )}
 
           {/* Result Banner after scan */}
           {lastResult && (
@@ -405,11 +562,17 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
                 </p>
               )}
 
+              {lastResult.check_in_time && lastResult.check_out_time && (
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                  Entrada: {lastResult.check_in_time} | Salida: {lastResult.check_out_time}
+                </p>
+              )}
+
               <button
                 type="button"
                 onClick={handleResumeScan}
                 className="btn btn-primary btn-sm"
-                style={{ marginTop: 14, width: "100%" }}
+                style={{ marginTop: 14, width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
                 📷 Escanear Siguiente Empleado
               </button>
