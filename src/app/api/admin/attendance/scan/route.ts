@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Determinar la fecha y hora actual en Zona Horaria de Perú (America/Lima, UTC-5)
+    // 2. Determinar la fecha, hora y día actual en Zona Horaria de Perú (America/Lima, UTC-5)
     const now = new Date();
     const peruDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(now);
     const timeFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -154,6 +154,30 @@ export async function POST(request: NextRequest) {
       hour12: true,
     });
     const currentTimeFormatted = timeFormatter.format(now);
+
+    const peruParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Lima",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+
+    const getPart = (type: string) => peruParts.find((p) => p.type === type)?.value || "";
+    const weekdayStr = getPart("weekday"); // "Sun", "Mon", "Tue", etc.
+    const hourNum = parseInt(getPart("hour"), 10) || 0;
+    const minNum = parseInt(getPart("minute"), 10) || 0;
+    const currentMinutesOfDay = hourNum * 60 + minNum;
+
+    // Reglas de horario y tolerancia de entrada:
+    // De Lunes a Sábado: Entrada 09:00 AM (540 min) -> Tolerancia 15 min hasta 09:15 AM (555 min)
+    // Domingos: Entrada 10:00 AM (600 min) -> Tolerancia 15 min hasta 10:15 AM (615 min)
+    const isSunday = weekdayStr === "Sun";
+    const expectedEntryMinutes = isSunday ? 10 * 60 : 9 * 60;
+    const entryToleranceLimit = expectedEntryMinutes + 15;
+
+    const isPunctual = currentMinutesOfDay <= entryToleranceLimit;
+    const calculatedStatus = isPunctual ? "Puntual" : "Tardanza";
 
     // 3. Consultar si ya tiene marcación hoy
     const { data: attendanceRecord, error: attError } = await admin
@@ -179,7 +203,7 @@ export async function POST(request: NextRequest) {
       .eq("block_date", peruDate)
       .maybeSingle();
 
-    // CASO A: No tiene registro hoy -> Marcar ENTRADA (Check-in)
+    // CASO A: No tiene registro hoy -> Marcar ENTRADA (Check-in) con estado de puntualidad
     if (!attendanceRecord) {
       const { data: newAttendance, error: insertError } = await admin
         .from("employee_attendances")
@@ -188,8 +212,8 @@ export async function POST(request: NextRequest) {
           date: peruDate,
           check_in: now.toISOString(),
           check_out: null,
-          status: "presente",
-          notes: blockRecord ? `Asistió con permiso previo: ${blockRecord.reason}` : null,
+          status: calculatedStatus,
+          notes: blockRecord ? `Permiso previo: ${blockRecord.reason}` : null,
         })
         .select()
         .single();
@@ -205,7 +229,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         action: "check_in",
         status: "success",
-        message: `¡Bienvenido(a)! Entrada registrada a las ${currentTimeFormatted}`,
+        punctuality: calculatedStatus,
+        message: `Entrada registrada: ${employee.first_name} ${employee.last_name} (${calculatedStatus} - ${currentTimeFormatted})`,
         employee,
         attendance: newAttendance,
         timestamp: currentTimeFormatted,
@@ -213,8 +238,26 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // CASO B: Ya tiene ENTRADA pero NO tiene SALIDA -> Marcar SALIDA (Check-out)
+    // CASO B: Ya tiene ENTRADA pero NO tiene SALIDA -> Flujo de Confirmación de Salida
     if (!attendanceRecord.check_out) {
+      const confirmCheckout = Boolean(body.confirm_checkout);
+      const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
+
+      // Si no ha confirmado la salida, solicitar confirmación modal
+      if (!confirmCheckout) {
+        return NextResponse.json({
+          action: "requires_checkout_confirmation",
+          status: "confirmation_needed",
+          message: `El empleado ${employee.first_name} ${employee.last_name} ya registró su entrada hoy a las ${checkInFormatted}. ¿Desea registrar su salida ahora?`,
+          employee,
+          attendance: attendanceRecord,
+          check_in_time: checkInFormatted,
+          current_time: currentTimeFormatted,
+          date: peruDate,
+        });
+      }
+
+      // Si confirmó la salida, registrar check_out
       const { data: updatedAttendance, error: updateError } = await admin
         .from("employee_attendances")
         .update({
@@ -233,12 +276,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
-
       return NextResponse.json({
         action: "check_out",
         status: "success",
-        message: `¡Hasta luego! Salida registrada a las ${currentTimeFormatted}`,
+        message: `Salida registrada: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted}`,
         employee,
         attendance: updatedAttendance,
         check_in_time: checkInFormatted,
@@ -247,14 +288,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // CASO C: Ya tiene ENTRADA y SALIDA registradas hoy -> Notificar jornada completada
+    // CASO C: Ya tiene ENTRADA y SALIDA registradas hoy -> Notificar turno completado
     const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
     const checkOutFormatted = timeFormatter.format(new Date(attendanceRecord.check_out));
 
     return NextResponse.json({
       action: "already_completed",
       status: "info",
-      message: `El trabajador ya completó su jornada de hoy (Entrada: ${checkInFormatted} | Salida: ${checkOutFormatted}).`,
+      message: `El empleado ${employee.first_name} ${employee.last_name} ya completó su turno de hoy (Entrada: ${checkInFormatted} | Salida: ${checkOutFormatted}).`,
       employee,
       attendance: attendanceRecord,
       check_in_time: checkInFormatted,

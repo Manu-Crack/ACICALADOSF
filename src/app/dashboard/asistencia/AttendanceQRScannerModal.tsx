@@ -9,7 +9,7 @@ interface AttendanceQRScannerModalProps {
 }
 
 interface ScanResult {
-  action: "check_in" | "check_out" | "already_completed" | "error";
+  action: "check_in" | "check_out" | "requires_checkout_confirmation" | "already_completed" | "error";
   message: string;
   employee?: {
     id: string;
@@ -20,10 +20,11 @@ interface ScanResult {
   timestamp?: string;
   check_in_time?: string;
   check_out_time?: string;
+  punctuality?: "Puntual" | "Tardanza";
 }
 
 // Audio tone synthesizer for feedback
-function playAudioTone(type: "success" | "error") {
+function playAudioTone(type: "success" | "error" | "notice") {
   try {
     const AudioCtx =
       window.AudioContext ||
@@ -41,6 +42,12 @@ function playAudioTone(type: "success" | "error") {
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
       osc.start();
       osc.stop(ctx.currentTime + 0.25);
+    } else if (type === "notice") {
+      osc.frequency.setValueAtTime(650, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
     } else {
       osc.frequency.setValueAtTime(300, ctx.currentTime);
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
@@ -58,6 +65,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
   const [isScanning, setIsScanning] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
+  const [pendingCode, setPendingCode] = useState<string>("");
 
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -71,8 +79,8 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
 
   // 1. Process detected code safely
   const handleCodeScanned = useCallback(
-    async (decodedText: string) => {
-      if (isProcessingRef.current) return;
+    async (decodedText: string, confirmCheckout = false) => {
+      if (isProcessingRef.current && !confirmCheckout) return;
       isProcessingRef.current = true;
       setIsScanning(false);
       setProcessing(true);
@@ -81,7 +89,10 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
         const res = await fetch("/api/admin/attendance/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: decodedText }),
+          body: JSON.stringify({
+            code: decodedText,
+            confirm_checkout: confirmCheckout,
+          }),
         });
 
         let data: Record<string, unknown> = {};
@@ -92,21 +103,41 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
         }
 
         if (res.ok) {
-          playAudioTone("success");
-          setLastResult({
-            action: (data.action as ScanResult["action"]) || "check_in",
-            message: String(data.message || "Marcación registrada con éxito."),
-            employee: data.employee as ScanResult["employee"],
-            timestamp: typeof data.timestamp === "string" ? data.timestamp : undefined,
-            check_in_time: typeof data.check_in_time === "string" ? data.check_in_time : undefined,
-            check_out_time: typeof data.check_out_time === "string" ? data.check_out_time : undefined,
-          });
+          const action = (data.action as ScanResult["action"]) || "check_in";
 
-          if (onScanSuccess) {
-            onScanSuccess();
+          if (action === "requires_checkout_confirmation") {
+            playAudioTone("notice");
+            setPendingCode(decodedText);
+            setLastResult({
+              action: "requires_checkout_confirmation",
+              message: String(
+                data.message ||
+                  `El empleado ya registró su entrada hoy. ¿Desea registrar su salida ahora?`
+              ),
+              employee: data.employee as ScanResult["employee"],
+              check_in_time: typeof data.check_in_time === "string" ? data.check_in_time : undefined,
+              timestamp: typeof data.current_time === "string" ? data.current_time : undefined,
+            });
+          } else {
+            playAudioTone("success");
+            setPendingCode("");
+            setLastResult({
+              action,
+              message: String(data.message || "Marcación procesada con éxito."),
+              employee: data.employee as ScanResult["employee"],
+              timestamp: typeof data.timestamp === "string" ? data.timestamp : undefined,
+              check_in_time: typeof data.check_in_time === "string" ? data.check_in_time : undefined,
+              check_out_time: typeof data.check_out_time === "string" ? data.check_out_time : undefined,
+              punctuality: data.punctuality as ScanResult["punctuality"],
+            });
+
+            if (onScanSuccess) {
+              onScanSuccess();
+            }
           }
         } else {
           playAudioTone("error");
+          setPendingCode("");
           let errText = "No se pudo procesar la asistencia.";
           if (typeof data.error === "string") {
             errText = data.error;
@@ -122,6 +153,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
         }
       } catch (err: unknown) {
         playAudioTone("error");
+        setPendingCode("");
         const msg = err instanceof Error ? err.message : "Error de comunicación con el servidor.";
         setLastResult({
           action: "error",
@@ -134,7 +166,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
     [onScanSuccess]
   );
 
-  // 2. Camera stream lifecycle (Robust, Crash-proof)
+  // 2. Camera stream lifecycle
   useEffect(() => {
     let active = true;
 
@@ -142,7 +174,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
       try {
         setCameraError(null);
 
-        // Stop any active previous tracks
+        // Stop previous tracks
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
@@ -153,7 +185,6 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           return;
         }
 
-        // Build standard, crash-safe constraints
         const videoConstraints: MediaTrackConstraints = selectedDeviceId
           ? { deviceId: { exact: selectedDeviceId } }
           : { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } };
@@ -175,7 +206,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           await videoRef.current.play().catch(() => {});
         }
 
-        // Enumerate video devices to allow user camera selection
+        // List cameras
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter((d) => d.kind === "videoinput");
@@ -183,7 +214,7 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
             setAvailableCameras(videoDevices);
           }
         } catch {
-          // Device list fallback
+          // Device enumeration fallback
         }
       } catch (err: unknown) {
         console.error("Camera access error:", err);
@@ -228,7 +259,6 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
           if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
-            // Downscale for lightning-fast analysis (~480px width)
             const scale = Math.min(1, 480 / video.videoWidth);
             canvas.width = Math.floor(video.videoWidth * scale);
             canvas.height = Math.floor(video.videoHeight * scale);
@@ -241,8 +271,8 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
             });
 
             if (qrCode && qrCode.data && qrCode.data.trim().length > 0) {
-              handleCodeScanned(qrCode.data);
-              return; // Stop loop once detected!
+              handleCodeScanned(qrCode.data, false);
+              return; // Pause scanning on detect!
             }
           }
         } catch (scanErr) {
@@ -265,12 +295,19 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
     };
   }, [isScanning, handleCodeScanned]);
 
-  // 4. Resume scanning for the next employee
+  // 4. Resume scanning
   function handleResumeScan() {
     setLastResult(null);
+    setPendingCode("");
     setProcessing(false);
     isProcessingRef.current = false;
     setIsScanning(true);
+  }
+
+  // 5. Confirm Check-out action
+  function handleConfirmCheckoutAction() {
+    if (!pendingCode) return;
+    handleCodeScanned(pendingCode, true);
   }
 
   // Toggle front / back camera
@@ -506,8 +543,60 @@ export function AttendanceQRScannerModal({ onClose, onScanSuccess }: AttendanceQ
             </div>
           )}
 
-          {/* Result Banner after scan */}
-          {lastResult && (
+          {/* CASO B: DIALOGO DE CONFIRMACION DE SALIDA */}
+          {lastResult && lastResult.action === "requires_checkout_confirmation" && (
+            <div
+              style={{
+                width: "100%",
+                marginTop: 16,
+                padding: "18px 16px",
+                borderRadius: "var(--radius-md)",
+                animation: "fadeIn 0.2s ease-out",
+                background: "linear-gradient(180deg, rgba(200,164,92,0.18) 0%, rgba(20,16,10,0.95) 100%)",
+                border: "2px solid var(--color-primary)",
+                textAlign: "center",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+              }}
+            >
+              <span style={{ fontSize: "2rem", display: "block", marginBottom: 6 }}>🚪⏳</span>
+
+              {lastResult.employee && (
+                <h4 style={{ margin: "0 0 6px 0", fontSize: "1.1875rem", color: "#ffffff", fontWeight: 800 }}>
+                  {lastResult.employee.first_name} {lastResult.employee.last_name}
+                </h4>
+              )}
+
+              <p style={{ margin: "0 0 14px 0", fontSize: "0.875rem", color: "var(--color-text-muted)", lineHeight: 1.4 }}>
+                Ya registró su entrada hoy a las <strong style={{ color: "var(--color-primary)" }}>{lastResult.check_in_time}</strong>.
+                <br />
+                ¿Desea registrar su salida ahora?
+              </p>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={handleResumeScan}
+                  disabled={processing}
+                  className="btn btn-secondary btn-sm"
+                  style={{ width: "100%", padding: "8px" }}
+                >
+                  ✕ Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCheckoutAction}
+                  disabled={processing}
+                  className="btn btn-primary btn-sm"
+                  style={{ width: "100%", padding: "8px", fontWeight: 700 }}
+                >
+                  ✓ Confirmar Salida
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* CASO A, C o ERROR: RESULTADO DE LA MARCACION */}
+          {lastResult && lastResult.action !== "requires_checkout_confirmation" && (
             <div
               style={{
                 width: "100%",
