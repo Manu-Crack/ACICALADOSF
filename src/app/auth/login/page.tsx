@@ -34,18 +34,18 @@ export default function LoginPage() {
 
       if (data?.user) {
         try {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", data.user.id)
-          .single();
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", data.user.id)
+            .single();
 
-        const internalRoles = ["admin", "recepcionista", "empleado"];
-        const redirectTo = profile && internalRoles.includes(profile.role)
-          ? "/dashboard"
-          : "/";
+          const internalRoles = ["admin", "recepcionista", "empleado"];
+          const redirectTo = profile && internalRoles.includes(profile.role)
+            ? "/dashboard"
+            : "/";
 
-        window.location.href = redirectTo;
+          window.location.href = redirectTo;
         } catch {
           window.location.href = "/";
         }
@@ -133,15 +133,7 @@ export default function LoginPage() {
             <img src="/icons/Google.svg" alt="Google" style={{ width: 18, height: 18 }} />
             Continuar con Google
           </button>
-          <button
-            onClick={() => handleOAuth("facebook")}
-            disabled={loading}
-            className="btn btn-secondary"
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-          >
-            <img src="/icons/Facebook.svg" alt="Facebook" style={{ width: 18, height: 18 }} />
-            Continuar con Facebook
-          </button>
+
         </div>
 
         {/* Divider */}

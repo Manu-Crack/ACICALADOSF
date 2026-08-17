@@ -181,15 +181,6 @@ export default function RegisterPage() {
             <img src="/icons/Google.svg" alt="Google" style={{ width: 18, height: 18 }} />
             Continuar con Google
           </button>
-          <button
-            onClick={() => handleOAuth("facebook")}
-            disabled={loading}
-            className="btn btn-secondary"
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-          >
-            <img src="/icons/Facebook.svg" alt="Facebook" style={{ width: 18, height: 18 }} />
-            Continuar con Facebook
-          </button>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
