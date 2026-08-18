@@ -1053,7 +1053,7 @@ export default function ReservarPage() {
                   alt="WhatsApp"
                   style={{ width: 22, height: 22 }}
                 />
-                {loading ? "Registrando..." : "Reservar por WhatsApp"}
+                {loading ? "Registrando..." : "Click para Reservar y enviar WhatsApp"}
               </button>
             </div>
           </div>
