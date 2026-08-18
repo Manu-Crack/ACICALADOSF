@@ -82,12 +82,13 @@ export async function findAvailableEmployeeForBooking(
   const nonAbsentIds = nonAbsentEmployees.map((e) => e.id);
 
   // 3. Filtrar empleados con citas existentes superpuestas en ese bloque horario
+  // Solo se consideran colisiones con reservas efectivamente COBRADAS o CONFIRMADAS
   const { data: existingBookings } = await admin
     .from("bookings")
     .select("assigned_employee_id, start_time, end_time, status, payment_status")
     .eq("booking_date", bookingDate)
     .in("assigned_employee_id", nonAbsentIds)
-    .in("status", ["pendiente", "confirmada", "completada"]);
+    .not("status", "in", '("cancelada","expirada")');
 
   const busyEmployeeIds = new Set<string>();
   const dailyWorkload = new Map<string, number>();
@@ -101,13 +102,21 @@ export async function findAvailableEmployeeForBooking(
     for (const b of existingBookings) {
       if (!b.assigned_employee_id) continue;
 
-      // Incrementar carga de trabajo diaria de la trabajadora
-      const currentCount = dailyWorkload.get(b.assigned_employee_id) || 0;
-      dailyWorkload.set(b.assigned_employee_id, currentCount + 1);
+      const isCobradaOrConfirmada =
+        b.payment_status === "total" ||
+        b.status === "confirmada" ||
+        b.status === "completada";
 
-      // Verificar si hay colisión horaria directa con el bloque solicitado
-      if (b.start_time < endTime && b.end_time > startTime) {
-        busyEmployeeIds.add(b.assigned_employee_id);
+      // Solo las reservas cobradas/confirmadas generan colisión estricta de agenda
+      if (isCobradaOrConfirmada) {
+        // Incrementar carga de trabajo diaria de la trabajadora
+        const currentCount = dailyWorkload.get(b.assigned_employee_id) || 0;
+        dailyWorkload.set(b.assigned_employee_id, currentCount + 1);
+
+        // Verificar si hay colisión horaria directa con el bloque solicitado
+        if (b.start_time < endTime && b.end_time > startTime) {
+          busyEmployeeIds.add(b.assigned_employee_id);
+        }
       }
     }
   }
