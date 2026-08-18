@@ -45,7 +45,73 @@ export default function ReservarPage() {
     whatsapp_url: string;
   } | null>(null);
 
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  type SlotStatus = "available" | "past" | "capacity_full";
+  type SlotDetail = {
+    slot: string;
+    status: SlotStatus;
+    occupied_count: number;
+    max_capacity: number;
+  };
+  const [slotDetails, setSlotDetails] = useState<SlotDetail[]>([]);
+  const [maxCapacity, setMaxCapacity] = useState(1);
+
   const supabase = createClient();
+
+  // Calcular tipo de servicio efectivo (barbería, spa o mixto)
+  const typesInCart = new Set(cart.map((s) => s.type));
+  const effectiveServiceType: "barberia" | "spa" | "mixto" =
+    typesInCart.size > 1
+      ? "mixto"
+      : cart[0]?.type || serviceType || "spa";
+
+  // Consultar disponibilidad dinámica en tiempo real al cambiar fecha o servicios
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function fetchAvailability() {
+      if (!bookingDate) {
+        setSlotDetails([]);
+        return;
+      }
+
+      setAvailabilityLoading(true);
+      try {
+        const serviceIds = cart.map((s) => s.id).join(",");
+        const params = new URLSearchParams({
+          date: bookingDate,
+          service_type: effectiveServiceType,
+          service_ids: serviceIds,
+        });
+
+        const res = await fetch(`/api/availability?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled) {
+            setSlotDetails(data.slot_details || []);
+            setMaxCapacity(data.max_capacity || 1);
+
+            // Si el horario seleccionado previamente quedó deshabilitado, deseleccionarlo
+            if (startTime && !data.available_slots?.includes(startTime)) {
+              setStartTime("");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error al consultar disponibilidad:", err);
+      } finally {
+        if (!isCancelled) {
+          setAvailabilityLoading(false);
+        }
+      }
+    }
+
+    fetchAvailability();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [bookingDate, effectiveServiceType, cart]);
 
   function goToStep(nextStep: Step) {
     setError("");
@@ -255,11 +321,9 @@ export default function ReservarPage() {
     setStepHistory(["type"]);
   }
 
-  // Generate time slots according to selected day of week:
-  // Lunes a Sábado: 9:00 am a 9:00 pm (09:00 - 21:00)
-  // Domingo: 10:00 am a 8:00 pm (10:00 - 20:00)
+  // Horario del día según sea domingo o día de semana
   let isSunday = false;
-  const timeSlots: string[] = [];
+  const fallbackSlots: string[] = [];
 
   if (bookingDate) {
     const [y, m, d] = bookingDate.split("-").map(Number);
@@ -270,15 +334,19 @@ export default function ReservarPage() {
     const endHour = isSunday ? 20 : 21;
 
     for (let h = startHour; h <= endHour; h++) {
-      timeSlots.push(`${String(h).padStart(2, "0")}:00`);
+      fallbackSlots.push(`${String(h).padStart(2, "0")}:00`);
       if (h < endHour) {
-        timeSlots.push(`${String(h).padStart(2, "0")}:30`);
+        fallbackSlots.push(`${String(h).padStart(2, "0")}:30`);
       }
     }
   }
 
-  const today = new Date();
-  const minDate = today.toISOString().split("T")[0];
+  // Fecha mínima permitida (Hoy en horario de Perú UTC-5)
+  const now = new Date();
+  const minDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+  }).format(now);
+
 
   return (
     <div
@@ -765,13 +833,13 @@ export default function ReservarPage() {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    marginBottom: 8,
+                    marginBottom: 12,
                     flexWrap: "wrap",
-                    gap: 4,
+                    gap: 6,
                   }}
                 >
                   <label className="label" style={{ marginBottom: 0 }}>
-                    Horario de atención *
+                    Horarios de atención *
                   </label>
                   <span
                     style={{
@@ -785,33 +853,212 @@ export default function ReservarPage() {
                       : "Lunes a Sábado (9:00 am – 9:00 pm)"}
                   </span>
                 </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
-                    gap: 8,
-                  }}
-                >
-                  {timeSlots.map((slot) => {
-                    const isSelected = startTime === slot;
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => setStartTime(slot)}
-                        className={`btn ${isSelected ? "btn-primary" : "btn-secondary"
-                          } btn-sm`}
-                        style={{
-                          padding: "8px 4px",
-                          fontSize: "0.875rem",
-                          fontWeight: isSelected ? 700 : 500,
-                        }}
-                      >
-                        {slot}
-                      </button>
-                    );
-                  })}
-                </div>
+
+                {availabilityLoading ? (
+                  <div
+                    style={{
+                      padding: "24px 16px",
+                      textAlign: "center",
+                      background: "rgba(20, 18, 12, 0.6)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-md)",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: "0.875rem",
+                        color: "var(--color-primary)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span className="animate-spin" style={{ display: "inline-block" }}>
+                        ⏳
+                      </span>
+                      Consultando disponibilidad y capacidad en tiempo real...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))",
+                        gap: 8,
+                        marginBottom: 16,
+                      }}
+                    >
+                      {(slotDetails.length > 0
+                        ? slotDetails
+                        : fallbackSlots.map((s) => ({
+                            slot: s,
+                            status: "available" as SlotStatus,
+                            occupied_count: 0,
+                            max_capacity: 1,
+                          }))
+                      ).map((item) => {
+                        const isSelected = startTime === item.slot;
+                        const isAvailable = item.status === "available";
+                        const isPast = item.status === "past";
+                        const isFull = item.status === "capacity_full";
+
+                        if (isPast) {
+                          return (
+                            <button
+                              key={item.slot}
+                              type="button"
+                              disabled
+                              title="Este horario ya ha pasado el día de hoy"
+                              style={{
+                                padding: "8px 4px",
+                                fontSize: "0.8125rem",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px solid rgba(255, 255, 255, 0.08)",
+                                background: "rgba(255, 255, 255, 0.02)",
+                                color: "rgba(255, 255, 255, 0.3)",
+                                cursor: "not-allowed",
+                                textAlign: "center",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 2,
+                              }}
+                            >
+                              <span style={{ textDecoration: "line-through" }}>{item.slot}</span>
+                              <span style={{ fontSize: "0.625rem", color: "rgba(255,255,255,0.3)" }}>
+                                Pasado
+                              </span>
+                            </button>
+                          );
+                        }
+
+                        if (isFull) {
+                          return (
+                            <button
+                              key={item.slot}
+                              type="button"
+                              disabled
+                              title="Capacidad máxima de colaboradoras ocupada en este horario"
+                              style={{
+                                padding: "8px 4px",
+                                fontSize: "0.8125rem",
+                                borderRadius: "var(--radius-sm)",
+                                border: "1px dashed rgba(239, 68, 68, 0.4)",
+                                background: "rgba(239, 68, 68, 0.05)",
+                                color: "rgba(239, 68, 68, 0.6)",
+                                cursor: "not-allowed",
+                                textAlign: "center",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 2,
+                              }}
+                            >
+                              <span style={{ textDecoration: "line-through" }}>{item.slot}</span>
+                              <span style={{ fontSize: "0.625rem", color: "#EF4444", fontWeight: 700 }}>
+                                Agotado
+                              </span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={item.slot}
+                            type="button"
+                            onClick={() => setStartTime(item.slot)}
+                            className={`btn ${isSelected ? "btn-primary" : "btn-secondary"} btn-sm`}
+                            style={{
+                              padding: "8px 4px",
+                              fontSize: "0.875rem",
+                              fontWeight: isSelected ? 800 : 600,
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 2,
+                              boxShadow: isSelected
+                                ? "0 0 10px rgba(200, 164, 92, 0.45)"
+                                : "none",
+                              transition: "all var(--transition-fast)",
+                            }}
+                          >
+                            <span>{item.slot}</span>
+                            <span
+                              style={{
+                                fontSize: "0.625rem",
+                                color: isSelected ? "#000000" : "var(--color-primary-light)",
+                                opacity: 0.85,
+                              }}
+                            >
+                              Libre
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Leyenda de estados */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 16,
+                        flexWrap: "wrap",
+                        padding: "10px 14px",
+                        background: "rgba(200, 164, 92, 0.04)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: "0.75rem",
+                        color: "rgba(255, 255, 255, 0.75)",
+                      }}
+                    >
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "var(--color-primary)",
+                            display: "inline-block",
+                          }}
+                        />
+                        <span>Disponible</span>
+                      </div>
+
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "rgba(255, 255, 255, 0.25)",
+                            display: "inline-block",
+                          }}
+                        />
+                        <span>Hora pasada</span>
+                      </div>
+
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "#EF4444",
+                            display: "inline-block",
+                          }}
+                        />
+                        <span>Agotado (Lleno)</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

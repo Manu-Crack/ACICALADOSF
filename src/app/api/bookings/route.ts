@@ -86,13 +86,39 @@ export async function POST(request: NextRequest) {
     const endMin = totalEndMinutes % 60;
     const endTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
 
-    // 4. Get authenticated user if logged in
+    // 4. Validación cronológica estricta en tiempo real (Zona Horaria Perú: America/Lima)
+    const now = new Date();
+    const peruDateStr = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Lima",
+    }).format(now);
+    const peruCurrentTime = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Lima",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(now);
+
+    if (booking_date < peruDateStr) {
+      return NextResponse.json(
+        { error: "No es posible reservar en fechas pasadas" },
+        { status: 422 }
+      );
+    }
+
+    if (booking_date === peruDateStr && start_time <= peruCurrentTime) {
+      return NextResponse.json(
+        { error: "El horario seleccionado ya ha transcurrido. Por favor elige una hora posterior." },
+        { status: 422 }
+      );
+    }
+
+    // 5. Get authenticated user if logged in
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // 5. Algoritmo de asignación automática de empleado
+    // 6. Algoritmo de asignación automática de empleado (Least Loaded + Round Robin)
     const serviceIds = services.map((s: { id: string }) => s.id);
     const assignedEmployeeId = await findAvailableEmployeeForBooking({
       serviceIds,
@@ -104,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     const clientFullName = `${client_first_name} ${client_last_name}`.trim();
 
-    // 6. Insert booking with status 'pendiente' (Pago en local)
+    // 7. Insert booking with status 'pendiente' (Pago en local)
     const { data: booking, error: bookingError } = await admin
       .from("bookings")
       .insert({
