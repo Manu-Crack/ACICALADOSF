@@ -14,7 +14,22 @@ export function createClient() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
+
+    // Sincronizar automáticamente el token JWT con Supabase Realtime
+    client.auth.getSession().then((res: { data: { session?: { access_token?: string } | null } }) => {
+      const session = res?.data?.session;
+      if (session?.access_token && client) {
+        client.realtime.setAuth(session.access_token);
+      }
+    });
+
+    client.auth.onAuthStateChange((_event: unknown, session: { access_token?: string } | null) => {
+      if (session?.access_token && client) {
+        client.realtime.setAuth(session.access_token);
+      }
+    });
   }
   return client;
 }
+
 

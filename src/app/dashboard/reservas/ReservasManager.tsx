@@ -138,90 +138,136 @@ export function ReservasManager() {
     loadBookingsRef.current = loadBookings;
   }, [loadBookings]);
 
-  // Suscripción protegida y persistente a Supabase Realtime para cambios en la tabla bookings
+  // Suscripción protegida, autenticada y persistente a Supabase Realtime
   useEffect(() => {
-    console.log("[Supabase Realtime: Bookings] 🔄 Inicializando canal 'realtime-admin-bookings-changes'...");
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let isMounted = true;
 
-    const channel = supabase
-      .channel("realtime-admin-bookings-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookings",
-        },
-        (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
-          console.log("[Supabase Realtime: Bookings] ⚡ Evento recibido:", payload.eventType, payload);
+    async function initRealtime() {
+      try {
+        console.log("[Supabase Realtime: Bookings] 🔄 Verificando sesión de administrador...");
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        if (session?.access_token) {
+          console.log("[Supabase Realtime: Bookings] 🔑 Autenticando canal Realtime con JWT de administrador...");
+          await supabase.realtime.setAuth(session.access_token);
+        } else {
+          console.warn("[Supabase Realtime: Bookings] ⚠️ No se detectó sesión activa en el cliente al iniciar Realtime.");
+        }
 
-          const { filterStatus: curStatus, filterDate: curDate, filterType: curType } = filtersRef.current;
+        if (!isMounted) return;
 
-          if (payload.eventType === "INSERT") {
-            const newBooking = payload.new as unknown as Booking;
-            setBookings((prev) => {
-              if (prev.some((b) => b.id === newBooking.id)) return prev;
-              if (curStatus && newBooking.status !== curStatus) return prev;
-              if (curDate && newBooking.booking_date !== curDate) return prev;
-              if (curType && newBooking.service_type !== curType) return prev;
-              return [newBooking, ...prev];
-            });
-          } else if (payload.eventType === "UPDATE") {
-            const updatedBooking = payload.new as unknown as Booking;
-            setBookings((prev) => {
-              if (curStatus && updatedBooking.status !== curStatus) {
-                return prev.filter((b) => b.id !== updatedBooking.id);
-              }
-              if (curDate && updatedBooking.booking_date !== curDate) {
-                return prev.filter((b) => b.id !== updatedBooking.id);
-              }
-              if (curType && updatedBooking.service_type !== curType) {
-                return prev.filter((b) => b.id !== updatedBooking.id);
+        console.log("[Supabase Realtime: Bookings] 📡 Inicializando canal 'realtime-admin-bookings-changes'...");
+
+        channel = supabase
+          .channel("realtime-admin-bookings-changes")
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "bookings",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Bookings] ⚡ Evento recibido:", payload.eventType, payload);
+
+              const { filterStatus: curStatus, filterDate: curDate, filterType: curType } = filtersRef.current;
+
+              if (payload.eventType === "INSERT") {
+                const newBooking = payload.new as unknown as Booking;
+                setBookings((prev) => {
+                  if (prev.some((b) => b.id === newBooking.id)) return prev;
+                  if (curStatus && newBooking.status !== curStatus) return prev;
+                  if (curDate && newBooking.booking_date !== curDate) return prev;
+                  if (curType && newBooking.service_type !== curType) return prev;
+                  return [newBooking, ...prev];
+                });
+              } else if (payload.eventType === "UPDATE") {
+                const updatedBooking = payload.new as unknown as Booking;
+                setBookings((prev) => {
+                  if (curStatus && updatedBooking.status !== curStatus) {
+                    return prev.filter((b) => b.id !== updatedBooking.id);
+                  }
+                  if (curDate && updatedBooking.booking_date !== curDate) {
+                    return prev.filter((b) => b.id !== updatedBooking.id);
+                  }
+                  if (curType && updatedBooking.service_type !== curType) {
+                    return prev.filter((b) => b.id !== updatedBooking.id);
+                  }
+
+                  const exists = prev.some((b) => b.id === updatedBooking.id);
+                  if (exists) {
+                    return prev.map((b) =>
+                      b.id === updatedBooking.id ? { ...b, ...updatedBooking } : b
+                    );
+                  } else {
+                    return [updatedBooking, ...prev];
+                  }
+                });
+              } else if (payload.eventType === "DELETE") {
+                const deletedId = (payload.old as { id?: string })?.id;
+                if (deletedId) {
+                  setBookings((prev) => prev.filter((b) => b.id !== deletedId));
+                }
               }
 
-              const exists = prev.some((b) => b.id === updatedBooking.id);
-              if (exists) {
-                return prev.map((b) =>
-                  b.id === updatedBooking.id ? { ...b, ...updatedBooking } : b
-                );
-              } else {
-                return [updatedBooking, ...prev];
+              // Recarga silenciosa en segundo plano para asegurar consistencia y orden de datos
+              if (loadBookingsRef.current) {
+                loadBookingsRef.current(true);
               }
-            });
-          } else if (payload.eventType === "DELETE") {
-            const deletedId = (payload.old as { id?: string })?.id;
-            if (deletedId) {
-              setBookings((prev) => prev.filter((b) => b.id !== deletedId));
             }
-          }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "employees",
+            },
+            () => {
+              console.log("[Supabase Realtime: Bookings] ⚡ Cambio detectado en empleados, recargando directorio...");
+              loadEmployees();
+            }
+          )
+          .subscribe((status: string, err?: Error | unknown) => {
+            console.log(`[Supabase Realtime: Bookings] 📡 Estado de suscripción: ${status}`);
+            if (status === "SUBSCRIBED") {
+              console.log("[Supabase Realtime: Bookings] 🟢 Conexión activa y autenticada escuchando 'bookings'.");
+              setIsRealtimeConnected(true);
+            } else if (status === "CHANNEL_ERROR") {
+              console.error("[Supabase Realtime: Bookings] ❌ Error en el canal Realtime:", err);
+              setIsRealtimeConnected(false);
+            } else if (status === "TIMED_OUT") {
+              console.warn("[Supabase Realtime: Bookings] ⏱️ Timeout esperando conexión Realtime.");
+              setIsRealtimeConnected(false);
+            } else if (status === "CLOSED") {
+              console.log("[Supabase Realtime: Bookings] 🔒 Canal Realtime cerrado.");
+              setIsRealtimeConnected(false);
+            }
+          });
+      } catch (err) {
+        console.error("[Supabase Realtime: Bookings] Error inicializando suscripción:", err);
+      }
+    }
 
-          // Recarga silenciosa en segundo plano para asegurar consistencia y orden de datos
-          if (loadBookingsRef.current) {
-            loadBookingsRef.current(true);
-          }
-        }
-      )
-      .subscribe((status: string, err?: Error | unknown) => {
-        console.log(`[Supabase Realtime: Bookings] 📡 Estado de suscripción: ${status}`);
-        if (status === "SUBSCRIBED") {
-          console.log("[Supabase Realtime: Bookings] 🟢 Conexión activa y escuchando cambios en la tabla 'bookings'.");
-          setIsRealtimeConnected(true);
-        } else if (status === "CHANNEL_ERROR") {
-          console.error("[Supabase Realtime: Bookings] ❌ Error en el canal Realtime:", err);
-          setIsRealtimeConnected(false);
-        } else if (status === "TIMED_OUT") {
-          console.warn("[Supabase Realtime: Bookings] ⏱️ Timeout esperando conexión Realtime.");
-          setIsRealtimeConnected(false);
-        } else if (status === "CLOSED") {
-          console.log("[Supabase Realtime: Bookings] 🔒 Canal Realtime cerrado.");
-          setIsRealtimeConnected(false);
-        }
-      });
+    initRealtime();
+
+    const { data: authSubData } = supabase.auth.onAuthStateChange(async (_event: string, session: { access_token?: string } | null) => {
+      if (session?.access_token) {
+        console.log("[Supabase Realtime: Bookings] 🔄 Token renovado, actualizando Realtime auth...");
+        await supabase.realtime.setAuth(session.access_token);
+      }
+    });
 
     return () => {
-      console.log("[Supabase Realtime: Bookings] 🛑 Desmontando componente: Removiendo canal...");
-      supabase.removeChannel(channel);
+      isMounted = false;
+      authSubData?.subscription?.unsubscribe();
+      if (channel) {
+        console.log("[Supabase Realtime: Bookings] 🛑 Desmontando componente: Removiendo canal...");
+        supabase.removeChannel(channel);
+      }
     };
-  }, [supabase]);
+  }, [supabase, loadEmployees]);
 
 
   // Actualizar estado general mediante API administrativa

@@ -191,56 +191,88 @@ export default function EmployeesManager() {
     loadDataRef.current = loadData;
   }, [loadData]);
 
-  // Suscripción protegida a Supabase Realtime para cambios en reservas y asignaciones de empleados
+  // Suscripción protegida y autenticada a Supabase Realtime para cambios en reservas y asignaciones de empleados
   useEffect(() => {
-    console.log("[Supabase Realtime: Employees/Assignments] 🔄 Inicializando canal 'realtime-employees-assignments-changes'...");
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let isMounted = true;
 
-    const channel = supabase
-      .channel("realtime-employees-assignments-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookings",
-        },
-        (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
-          console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla bookings:", payload.eventType, payload);
-          if (loadDataRef.current) {
-            loadDataRef.current();
-          }
+    async function initRealtime() {
+      try {
+        console.log("[Supabase Realtime: Employees] 🔄 Verificando sesión de administrador...");
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        if (session?.access_token) {
+          console.log("[Supabase Realtime: Employees] 🔑 Autenticando canal Realtime con JWT...");
+          await supabase.realtime.setAuth(session.access_token);
         }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "employees",
-        },
-        (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
-          console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla employees:", payload.eventType, payload);
-          if (loadDataRef.current) {
-            loadDataRef.current();
-          }
-        }
-      )
-      .subscribe((status: string, err?: Error | unknown) => {
-        console.log(`[Supabase Realtime: Employees/Assignments] 📡 Estado de suscripción: ${status}`);
-        if (status === "SUBSCRIBED") {
-          console.log("[Supabase Realtime: Employees/Assignments] 🟢 Conexión activa escuchando 'bookings' y 'employees'.");
-        } else if (status === "CHANNEL_ERROR") {
-          console.error("[Supabase Realtime: Employees/Assignments] ❌ Error en el canal Realtime:", err);
-        } else if (status === "TIMED_OUT") {
-          console.warn("[Supabase Realtime: Employees/Assignments] ⏱️ Timeout en canal Realtime.");
-        } else if (status === "CLOSED") {
-          console.log("[Supabase Realtime: Employees/Assignments] 🔒 Canal Realtime cerrado.");
-        }
-      });
+
+        if (!isMounted) return;
+
+        console.log("[Supabase Realtime: Employees/Assignments] 🔄 Inicializando canal 'realtime-employees-assignments-changes'...");
+
+        channel = supabase
+          .channel("realtime-employees-assignments-changes")
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "bookings",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla bookings:", payload.eventType, payload);
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "employees",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla employees:", payload.eventType, payload);
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
+          .subscribe((status: string, err?: Error | unknown) => {
+            console.log(`[Supabase Realtime: Employees/Assignments] 📡 Estado de suscripción: ${status}`);
+            if (status === "SUBSCRIBED") {
+              console.log("[Supabase Realtime: Employees/Assignments] 🟢 Conexión activa y autenticada escuchando 'bookings' y 'employees'.");
+            } else if (status === "CHANNEL_ERROR") {
+              console.error("[Supabase Realtime: Employees/Assignments] ❌ Error en el canal Realtime:", err);
+            } else if (status === "TIMED_OUT") {
+              console.warn("[Supabase Realtime: Employees/Assignments] ⏱️ Timeout en canal Realtime.");
+            } else if (status === "CLOSED") {
+              console.log("[Supabase Realtime: Employees/Assignments] 🔒 Canal Realtime cerrado.");
+            }
+          });
+      } catch (err) {
+        console.error("[Supabase Realtime: Employees] Error inicializando suscripción:", err);
+      }
+    }
+
+    initRealtime();
+
+    const { data: authSubData } = supabase.auth.onAuthStateChange(async (_event: string, session: { access_token?: string } | null) => {
+      if (session?.access_token) {
+        console.log("[Supabase Realtime: Employees] 🔄 Token renovado, actualizando Realtime auth...");
+        await supabase.realtime.setAuth(session.access_token);
+      }
+    });
 
     return () => {
-      console.log("[Supabase Realtime: Employees/Assignments] 🛑 Desmontando componente: Removiendo canal...");
-      supabase.removeChannel(channel);
+      isMounted = false;
+      authSubData?.subscription?.unsubscribe();
+      if (channel) {
+        console.log("[Supabase Realtime: Employees/Assignments] 🛑 Desmontando componente: Removiendo canal...");
+        supabase.removeChannel(channel);
+      }
     };
   }, [supabase]);
 
