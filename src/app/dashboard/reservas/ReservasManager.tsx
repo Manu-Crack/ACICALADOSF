@@ -67,6 +67,7 @@ export function ReservasManager() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterDate, setFilterDate] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
@@ -76,34 +77,37 @@ export function ReservasManager() {
 
   const supabase = createClient();
 
-  const loadBookings = useCallback(async () => {
-    setLoading(true);
+  const loadBookings = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) setLoading(true);
 
-    let query = supabase
-      .from("bookings")
-      .select(
-        "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
-      )
-      .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
-      .order("booking_date", { ascending: false })
-      .order("start_time", { ascending: true });
+      let query = supabase
+        .from("bookings")
+        .select(
+          "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
+        )
+        .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
+        .order("booking_date", { ascending: false })
+        .order("start_time", { ascending: true });
 
-    if (filterStatus) {
-      query = query.eq("status", filterStatus);
-    }
+      if (filterStatus) {
+        query = query.eq("status", filterStatus);
+      }
 
-    if (filterDate) {
-      query = query.eq("booking_date", filterDate);
-    }
+      if (filterDate) {
+        query = query.eq("booking_date", filterDate);
+      }
 
-    if (filterType) {
-      query = query.eq("service_type", filterType);
-    }
+      if (filterType) {
+        query = query.eq("service_type", filterType);
+      }
 
-    const { data } = await query.limit(200);
-    setBookings(data ?? []);
-    setLoading(false);
-  }, [supabase, filterStatus, filterDate, filterType]);
+      const { data } = await query.limit(200);
+      setBookings(data ?? []);
+      if (!isSilent) setLoading(false);
+    },
+    [supabase, filterStatus, filterDate, filterType]
+  );
 
   const loadEmployees = useCallback(async () => {
     const { data } = await supabase
@@ -119,6 +123,70 @@ export function ReservasManager() {
     loadEmployees();
   }, [loadBookings, loadEmployees]);
 
+  // Suscripción a Supabase Realtime para cambios en la tabla bookings
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime-admin-bookings-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "bookings",
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newBooking = payload.new as Booking;
+            setBookings((prev) => {
+              if (prev.some((b) => b.id === newBooking.id)) return prev;
+              if (filterStatus && newBooking.status !== filterStatus) return prev;
+              if (filterDate && newBooking.booking_date !== filterDate) return prev;
+              if (filterType && newBooking.service_type !== filterType) return prev;
+              return [newBooking, ...prev];
+            });
+            // Recargar silenciosamente en segundo plano para ordenar correctamente
+            loadBookings(true);
+          } else if (payload.eventType === "UPDATE") {
+            const updatedBooking = payload.new as Booking;
+            setBookings((prev) => {
+              if (filterStatus && updatedBooking.status !== filterStatus) {
+                return prev.filter((b) => b.id !== updatedBooking.id);
+              }
+              if (filterDate && updatedBooking.booking_date !== filterDate) {
+                return prev.filter((b) => b.id !== updatedBooking.id);
+              }
+              if (filterType && updatedBooking.service_type !== filterType) {
+                return prev.filter((b) => b.id !== updatedBooking.id);
+              }
+
+              const exists = prev.some((b) => b.id === updatedBooking.id);
+              if (exists) {
+                return prev.map((b) =>
+                  b.id === updatedBooking.id ? { ...b, ...updatedBooking } : b
+                );
+              } else {
+                return [updatedBooking, ...prev];
+              }
+            });
+            loadBookings(true);
+          } else if (payload.eventType === "DELETE") {
+            const deletedId = (payload.old as { id?: string })?.id;
+            if (deletedId) {
+              setBookings((prev) => prev.filter((b) => b.id !== deletedId));
+            }
+            loadBookings(true);
+          }
+        }
+      )
+      .subscribe((status) => {
+        setIsRealtimeConnected(status === "SUBSCRIBED");
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, loadBookings, filterStatus, filterDate, filterType]);
+
   // Actualizar estado general mediante API administrativa
   async function updateBooking(bookingId: string, payload: Record<string, unknown>) {
     setActionLoading(bookingId);
@@ -132,7 +200,7 @@ export function ReservasManager() {
       if (!res.ok) {
         alert(data.error || "No se pudo actualizar la reserva.");
       } else {
-        await loadBookings();
+        await loadBookings(true);
       }
     } catch {
       alert("Error de conexión al actualizar la reserva.");
@@ -203,6 +271,58 @@ export function ReservasManager() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60, width: "100%", minWidth: 0 }}>
+      {/* Realtime Connection Indicator Bar */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+          flexWrap: "wrap",
+          gap: 8,
+          background: "rgba(200, 164, 92, 0.04)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-md)",
+          padding: "8px 14px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              backgroundColor: isRealtimeConnected ? "var(--color-success)" : "#f59e0b",
+              display: "inline-block",
+              boxShadow: isRealtimeConnected
+                ? "0 0 8px var(--color-success)"
+                : "0 0 8px #f59e0b",
+            }}
+          />
+          <span
+            style={{
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              color: isRealtimeConnected ? "var(--color-success)" : "var(--color-text-muted)",
+            }}
+          >
+            {isRealtimeConnected
+              ? "🟢 Sincronización en tiempo real activa (Supabase Realtime)"
+              : "🟡 Conectando tiempo real..."}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => loadBookings(false)}
+          className="btn btn-ghost btn-sm"
+          style={{ fontSize: "0.75rem", padding: "3px 8px" }}
+          title="Forzar actualización manual de reservas"
+        >
+          🔄 Actualizar
+        </button>
+      </div>
+
       {/* Stats Strip */}
       <div
         className="grid"
@@ -1396,7 +1516,7 @@ export function ReservasManager() {
             <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
               Mostrando {filteredBookings.length} reserva(s)
             </p>
-            <button onClick={loadBookings} className="btn btn-ghost btn-sm">
+            <button onClick={() => loadBookings()} className="btn btn-ghost btn-sm">
               🔄 Actualizar
             </button>
           </div>

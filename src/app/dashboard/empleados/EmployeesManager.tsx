@@ -186,6 +186,39 @@ export default function EmployeesManager() {
     loadData();
   }, [loadData]);
 
+  // Suscripción a Supabase Realtime para cambios en reservas y asignaciones de empleados
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime-employees-assignments-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "bookings",
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "employees",
+        },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, loadData]);
+
   // Employee Map
   const employeeMap = new Map(
     employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
