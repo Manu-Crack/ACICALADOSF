@@ -35,7 +35,8 @@ export function NavUserButton({
     const supabase = createClient();
 
     // Check user session
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+    supabase.auth.getUser().then((res: { data: { user?: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null } }) => {
+      const authUser = res?.data?.user;
       if (authUser) {
         setHasSession(true);
         const metaName = (authUser.user_metadata?.full_name || authUser.user_metadata?.name || "").trim();
@@ -48,11 +49,12 @@ export function NavUserButton({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
+    } = supabase.auth.onAuthStateChange((_event: unknown, session: unknown) => {
+      const authSession = session as { user?: { user_metadata?: { full_name?: string; name?: string }; email?: string } } | null;
+      if (authSession?.user) {
         setHasSession(true);
-        const metaName = (session.user.user_metadata?.full_name || session.user.user_metadata?.name || "").trim();
-        const emailFallback = session.user.email ? session.user.email.split("@")[0] : "Administrador";
+        const metaName = (authSession.user.user_metadata?.full_name || authSession.user.user_metadata?.name || "").trim();
+        const emailFallback = authSession.user.email ? authSession.user.email.split("@")[0] : "Administrador";
         setUserName(metaName || emailFallback || "Administrador");
       } else {
         setHasSession(false);
@@ -63,7 +65,7 @@ export function NavUserButton({
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [userName]);
 
   // Close dropdown on click outside
   useEffect(() => {

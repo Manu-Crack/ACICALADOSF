@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 
@@ -75,7 +75,7 @@ export function ReservasManager() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const loadBookings = useCallback(
     async (isSilent = false) => {
@@ -118,13 +118,30 @@ export function ReservasManager() {
     setEmployees(data ?? []);
   }, [supabase]);
 
+  // Carga inicial y por cambio de filtros en la vista
   useEffect(() => {
     loadBookings();
-    loadEmployees();
-  }, [loadBookings, loadEmployees]);
+  }, [loadBookings]);
 
-  // Suscripción a Supabase Realtime para cambios en la tabla bookings
   useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
+
+  // Referencias mutables para mantener el canal en tiempo real aislado de re-renders de UI
+  const filtersRef = useRef({ filterStatus, filterDate, filterType });
+  useEffect(() => {
+    filtersRef.current = { filterStatus, filterDate, filterType };
+  }, [filterStatus, filterDate, filterType]);
+
+  const loadBookingsRef = useRef(loadBookings);
+  useEffect(() => {
+    loadBookingsRef.current = loadBookings;
+  }, [loadBookings]);
+
+  // Suscripción protegida y persistente a Supabase Realtime para cambios en la tabla bookings
+  useEffect(() => {
+    console.log("[Supabase Realtime: Bookings] 🔄 Inicializando canal 'realtime-admin-bookings-changes'...");
+
     const channel = supabase
       .channel("realtime-admin-bookings-changes")
       .on(
@@ -134,28 +151,30 @@ export function ReservasManager() {
           schema: "public",
           table: "bookings",
         },
-        (payload) => {
+        (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          console.log("[Supabase Realtime: Bookings] ⚡ Evento recibido:", payload.eventType, payload);
+
+          const { filterStatus: curStatus, filterDate: curDate, filterType: curType } = filtersRef.current;
+
           if (payload.eventType === "INSERT") {
-            const newBooking = payload.new as Booking;
+            const newBooking = payload.new as unknown as Booking;
             setBookings((prev) => {
               if (prev.some((b) => b.id === newBooking.id)) return prev;
-              if (filterStatus && newBooking.status !== filterStatus) return prev;
-              if (filterDate && newBooking.booking_date !== filterDate) return prev;
-              if (filterType && newBooking.service_type !== filterType) return prev;
+              if (curStatus && newBooking.status !== curStatus) return prev;
+              if (curDate && newBooking.booking_date !== curDate) return prev;
+              if (curType && newBooking.service_type !== curType) return prev;
               return [newBooking, ...prev];
             });
-            // Recargar silenciosamente en segundo plano para ordenar correctamente
-            loadBookings(true);
           } else if (payload.eventType === "UPDATE") {
-            const updatedBooking = payload.new as Booking;
+            const updatedBooking = payload.new as unknown as Booking;
             setBookings((prev) => {
-              if (filterStatus && updatedBooking.status !== filterStatus) {
+              if (curStatus && updatedBooking.status !== curStatus) {
                 return prev.filter((b) => b.id !== updatedBooking.id);
               }
-              if (filterDate && updatedBooking.booking_date !== filterDate) {
+              if (curDate && updatedBooking.booking_date !== curDate) {
                 return prev.filter((b) => b.id !== updatedBooking.id);
               }
-              if (filterType && updatedBooking.service_type !== filterType) {
+              if (curType && updatedBooking.service_type !== curType) {
                 return prev.filter((b) => b.id !== updatedBooking.id);
               }
 
@@ -168,24 +187,42 @@ export function ReservasManager() {
                 return [updatedBooking, ...prev];
               }
             });
-            loadBookings(true);
           } else if (payload.eventType === "DELETE") {
             const deletedId = (payload.old as { id?: string })?.id;
             if (deletedId) {
               setBookings((prev) => prev.filter((b) => b.id !== deletedId));
             }
-            loadBookings(true);
+          }
+
+          // Recarga silenciosa en segundo plano para asegurar consistencia y orden de datos
+          if (loadBookingsRef.current) {
+            loadBookingsRef.current(true);
           }
         }
       )
-      .subscribe((status) => {
-        setIsRealtimeConnected(status === "SUBSCRIBED");
+      .subscribe((status: string, err?: Error | unknown) => {
+        console.log(`[Supabase Realtime: Bookings] 📡 Estado de suscripción: ${status}`);
+        if (status === "SUBSCRIBED") {
+          console.log("[Supabase Realtime: Bookings] 🟢 Conexión activa y escuchando cambios en la tabla 'bookings'.");
+          setIsRealtimeConnected(true);
+        } else if (status === "CHANNEL_ERROR") {
+          console.error("[Supabase Realtime: Bookings] ❌ Error en el canal Realtime:", err);
+          setIsRealtimeConnected(false);
+        } else if (status === "TIMED_OUT") {
+          console.warn("[Supabase Realtime: Bookings] ⏱️ Timeout esperando conexión Realtime.");
+          setIsRealtimeConnected(false);
+        } else if (status === "CLOSED") {
+          console.log("[Supabase Realtime: Bookings] 🔒 Canal Realtime cerrado.");
+          setIsRealtimeConnected(false);
+        }
       });
 
     return () => {
+      console.log("[Supabase Realtime: Bookings] 🛑 Desmontando componente: Removiendo canal...");
       supabase.removeChannel(channel);
     };
-  }, [supabase, loadBookings, filterStatus, filterDate, filterType]);
+  }, [supabase]);
+
 
   // Actualizar estado general mediante API administrativa
   async function updateBooking(bookingId: string, payload: Record<string, unknown>) {

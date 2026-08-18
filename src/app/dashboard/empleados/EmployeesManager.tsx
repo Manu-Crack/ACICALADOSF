@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 import { EmployeeQRBadgeModal } from "@/app/dashboard/asistencia/EmployeeQRBadgeModal";
@@ -122,7 +122,7 @@ export default function EmployeesManager() {
   const [blockReason, setBlockReason] = useState("Permiso / Ausencia");
   const [savingAbsence, setSavingAbsence] = useState(false);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -186,8 +186,15 @@ export default function EmployeesManager() {
     loadData();
   }, [loadData]);
 
-  // Suscripción a Supabase Realtime para cambios en reservas y asignaciones de empleados
+  const loadDataRef = useRef(loadData);
   useEffect(() => {
+    loadDataRef.current = loadData;
+  }, [loadData]);
+
+  // Suscripción protegida a Supabase Realtime para cambios en reservas y asignaciones de empleados
+  useEffect(() => {
+    console.log("[Supabase Realtime: Employees/Assignments] 🔄 Inicializando canal 'realtime-employees-assignments-changes'...");
+
     const channel = supabase
       .channel("realtime-employees-assignments-changes")
       .on(
@@ -197,8 +204,11 @@ export default function EmployeesManager() {
           schema: "public",
           table: "bookings",
         },
-        () => {
-          loadData();
+        (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla bookings:", payload.eventType, payload);
+          if (loadDataRef.current) {
+            loadDataRef.current();
+          }
         }
       )
       .on(
@@ -208,16 +218,31 @@ export default function EmployeesManager() {
           schema: "public",
           table: "employees",
         },
-        () => {
-          loadData();
+        (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+          console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla employees:", payload.eventType, payload);
+          if (loadDataRef.current) {
+            loadDataRef.current();
+          }
         }
       )
-      .subscribe();
+      .subscribe((status: string, err?: Error | unknown) => {
+        console.log(`[Supabase Realtime: Employees/Assignments] 📡 Estado de suscripción: ${status}`);
+        if (status === "SUBSCRIBED") {
+          console.log("[Supabase Realtime: Employees/Assignments] 🟢 Conexión activa escuchando 'bookings' y 'employees'.");
+        } else if (status === "CHANNEL_ERROR") {
+          console.error("[Supabase Realtime: Employees/Assignments] ❌ Error en el canal Realtime:", err);
+        } else if (status === "TIMED_OUT") {
+          console.warn("[Supabase Realtime: Employees/Assignments] ⏱️ Timeout en canal Realtime.");
+        } else if (status === "CLOSED") {
+          console.log("[Supabase Realtime: Employees/Assignments] 🔒 Canal Realtime cerrado.");
+        }
+      });
 
     return () => {
+      console.log("[Supabase Realtime: Employees/Assignments] 🛑 Desmontando componente: Removiendo canal...");
       supabase.removeChannel(channel);
     };
-  }, [supabase, loadData]);
+  }, [supabase]);
 
   // Employee Map
   const employeeMap = new Map(
