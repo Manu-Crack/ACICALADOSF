@@ -22,6 +22,27 @@ async function verifyAdmin() {
   return { user, profile };
 }
 
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    if ("message" in err && typeof (err as { message: unknown }).message === "string") {
+      return (err as { message: string }).message;
+    }
+    if ("error" in err && typeof (err as { error: unknown }).error === "string") {
+      return (err as { error: string }).error;
+    }
+    if ("details" in err && typeof (err as { details: unknown }).details === "string") {
+      return (err as { details: string }).details;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
 /**
  * POST /api/admin/employees/absences
  * Registrar un permiso / ausencia para un empleado en una fecha específica
@@ -61,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(block, { status: 201 });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     console.error("POST absence error:", msg);
     return NextResponse.json({ error: "Error al registrar ausencia: " + msg }, { status: 500 });
   }
@@ -92,7 +113,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, id });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrorMessage(err);
     console.error("DELETE absence error:", msg);
     return NextResponse.json({ error: "Error al eliminar ausencia: " + msg }, { status: 500 });
   }

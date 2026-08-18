@@ -26,10 +26,9 @@ type Employee = {
   id: string;
   first_name: string;
   last_name: string;
-  email: string | null;
-  phone: string | null;
   type: "barberia" | "spa";
   is_active: boolean;
+  rotation_order?: number;
   employee_skills?: { service_id: string }[];
   employee_blocks?: EmployeeBlock[];
 };
@@ -113,8 +112,6 @@ export default function EmployeesManager() {
   // Form states - Employee
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [type, setType] = useState<"barberia" | "spa">("spa");
   const [isActive, setIsActive] = useState(true);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -231,8 +228,6 @@ export default function EmployeesManager() {
       setEditingEmp(emp);
       setFirstName(emp.first_name);
       setLastName(emp.last_name);
-      setEmail(emp.email || "");
-      setPhone(emp.phone || "");
       setType(emp.type);
       setIsActive(emp.is_active);
       setSelectedSkills(emp.employee_skills?.map((s) => s.service_id) || []);
@@ -240,8 +235,6 @@ export default function EmployeesManager() {
       setEditingEmp(null);
       setFirstName("");
       setLastName("");
-      setEmail("");
-      setPhone("");
       setType("spa");
       setIsActive(true);
       setSelectedSkills([]);
@@ -265,11 +258,9 @@ export default function EmployeesManager() {
         id: editingEmp?.id,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        email: email.trim() || null,
-        phone: phone.trim() || null,
         type,
         is_active: isActive,
-        service_ids: selectedSkills,
+        service_ids: type === "spa" ? selectedSkills : [],
       };
 
       const res = await fetch(url, {
@@ -283,10 +274,17 @@ export default function EmployeesManager() {
         setShowEmpModal(false);
         loadData();
       } else {
-        alert(data.error || "No se pudo guardar el trabajador");
+        const errorMsg =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.message === "string"
+            ? data.message
+            : "No se pudo guardar el trabajador";
+        alert(errorMsg);
       }
-    } catch {
-      alert("Error de conexión al guardar el trabajador");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Error de conexión al guardar el trabajador: " + msg);
     } finally {
       setSavingEmp(false);
     }
@@ -307,10 +305,17 @@ export default function EmployeesManager() {
       if (res.ok) {
         setEmployees((prev) => prev.filter((e) => e.id !== emp.id));
       } else {
-        alert(data.error || "No se pudo eliminar el trabajador");
+        const errorMsg =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.message === "string"
+            ? data.message
+            : "No se pudo eliminar el trabajador";
+        alert(errorMsg);
       }
-    } catch {
-      alert("Error de conexión al intentar eliminar");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Error de conexión al intentar eliminar: " + msg);
     }
   }
 
@@ -344,10 +349,17 @@ export default function EmployeesManager() {
         setShowAbsenceModal(false);
         loadData();
       } else {
-        alert(data.error || "No se pudo registrar la ausencia");
+        const errorMsg =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.message === "string"
+            ? data.message
+            : "No se pudo registrar la ausencia";
+        alert(errorMsg);
       }
-    } catch {
-      alert("Error de conexión al registrar ausencia");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Error de conexión al registrar ausencia: " + msg);
     } finally {
       setSavingAbsence(false);
     }
@@ -361,13 +373,21 @@ export default function EmployeesManager() {
       const res = await fetch(`/api/admin/employees/absences?id=${blockId}`, {
         method: "DELETE",
       });
+      const data = await res.json();
       if (res.ok) {
         loadData();
       } else {
-        alert("No se pudo eliminar la ausencia");
+        const errorMsg =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.message === "string"
+            ? data.message
+            : "No se pudo eliminar la ausencia";
+        alert(errorMsg);
       }
-    } catch {
-      alert("Error al eliminar ausencia");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Error al eliminar ausencia: " + msg);
     }
   }
 
