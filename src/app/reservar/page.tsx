@@ -652,11 +652,10 @@ export default function ReservarPage() {
                           width: 26,
                           height: 26,
                           borderRadius: "var(--radius-sm)",
-                          border: `2px solid ${
-                            isSelected
+                          border: `2px solid ${isSelected
                               ? "var(--color-primary)"
                               : "var(--color-primary-border)"
-                          }`,
+                            }`,
                           background: isSelected
                             ? "var(--color-primary)"
                             : "transparent",
@@ -800,9 +799,8 @@ export default function ReservarPage() {
                         key={slot}
                         type="button"
                         onClick={() => setStartTime(slot)}
-                        className={`btn ${
-                          isSelected ? "btn-primary" : "btn-secondary"
-                        } btn-sm`}
+                        className={`btn ${isSelected ? "btn-primary" : "btn-secondary"
+                          } btn-sm`}
                         style={{
                           padding: "8px 4px",
                           fontSize: "0.875rem",
@@ -1053,7 +1051,7 @@ export default function ReservarPage() {
                   alt="WhatsApp"
                   style={{ width: 22, height: 22 }}
                 />
-                {loading ? "Registrando..." : "Click para Reservar y enviar WhatsApp"}
+                {loading ? "Registrando..." : "Reservar y contactar"}
               </button>
             </div>
           </div>
