@@ -78,7 +78,7 @@ export default async function HomePage() {
                   }}
                 >
                   <Link
-                    href="/reservar"
+                    href="/servicios"
                     className="btn btn-primary btn-lg hero-cta-btn"
                   >
                     <img
