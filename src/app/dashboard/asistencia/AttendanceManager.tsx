@@ -13,15 +13,7 @@ interface Employee {
   is_active: boolean;
 }
 
-interface AttendanceRecord {
-  id: string;
-  employee_id: string;
-  date: string;
-  check_in: string;
-  check_out: string | null;
-  status: string;
-  notes: string | null;
-}
+import { AttendanceRecord, getAttendanceStatusInfo } from "@/lib/types/attendance";
 
 interface BlockRecord {
   id: string;
@@ -516,9 +508,10 @@ export function AttendanceManager() {
                   );
 
                   if (empAttendance) {
+                    const statusInfo = getAttendanceStatusInfo(empAttendance.status);
                     statusBadge = (
-                      <span className="badge badge-success">
-                        🟢 Presente
+                      <span className={`badge ${statusInfo.badgeClass}`}>
+                        {statusInfo.icon} {statusInfo.label}
                       </span>
                     );
                   } else if (empBlock) {

@@ -10,15 +10,7 @@ interface Employee {
   is_active: boolean;
 }
 
-interface AttendanceRecord {
-  id: string;
-  employee_id: string;
-  date: string;
-  check_in: string;
-  check_out: string | null;
-  status: string;
-  notes: string | null;
-}
+import { AttendanceRecord, getAttendanceStatusInfo } from "@/lib/types/attendance";
 
 interface BlockRecord {
   id: string;
@@ -327,7 +319,14 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
                         {att.date}
                       </td>
                       <td style={{ padding: "12px" }}>
-                        <span className="badge badge-success">🟢 Presente</span>
+                        {(() => {
+                          const statusInfo = getAttendanceStatusInfo(att.status);
+                          return (
+                            <span className={`badge ${statusInfo.badgeClass}`}>
+                              {statusInfo.icon} {statusInfo.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "12px", color: "var(--color-primary)" }}>
                         {formatTime(att.check_in)}

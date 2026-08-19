@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ATTENDANCE_STATUS, AttendanceStatus } from "@/lib/types/attendance";
 
 async function verifyAdmin() {
   const supabase = await createClient();
@@ -127,6 +128,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function normalizeAttendanceStatus(status: unknown): AttendanceStatus {
+  if (typeof status !== "string") return ATTENDANCE_STATUS.PRESENTE;
+  const s = status.toLowerCase().trim();
+  if (s === "puntual" || s === "presente") return ATTENDANCE_STATUS.PRESENTE;
+  if (s === "tardanza") return ATTENDANCE_STATUS.TARDANZA;
+  if (s === "salida_temprana") return ATTENDANCE_STATUS.SALIDA_TEMPRANA;
+  if (s === "falta_justificada") return ATTENDANCE_STATUS.FALTA_JUSTIFICADA;
+  if (s === "falta_injustificada") return ATTENDANCE_STATUS.FALTA_INJUSTIFICADA;
+  return ATTENDANCE_STATUS.PRESENTE;
+}
+
 /**
  * POST /api/admin/attendance
  * Crear o registrar manualmente una asistencia (ajuste administrativo)
@@ -148,6 +160,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const validStatus = normalizeAttendanceStatus(status);
     const admin = createAdminClient();
 
     // Upsert asistencia para ese empleado y fecha
@@ -159,7 +172,7 @@ export async function POST(request: NextRequest) {
           date,
           check_in,
           check_out: check_out || null,
-          status: status || "presente",
+          status: validStatus,
           notes: notes || null,
           updated_at: new Date().toISOString(),
         },
@@ -202,6 +215,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const validStatus = normalizeAttendanceStatus(status);
     const admin = createAdminClient();
 
     const { data, error } = await admin
@@ -209,7 +223,7 @@ export async function PUT(request: NextRequest) {
       .update({
         check_in,
         check_out: check_out || null,
-        status: status || "presente",
+        status: validStatus,
         notes: notes || null,
         updated_at: new Date().toISOString(),
       })

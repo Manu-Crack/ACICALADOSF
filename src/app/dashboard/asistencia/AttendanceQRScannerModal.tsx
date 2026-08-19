@@ -20,7 +20,7 @@ interface ScanResult {
   timestamp?: string;
   check_in_time?: string;
   check_out_time?: string;
-  punctuality?: "Puntual" | "Tardanza";
+  punctuality?: string;
 }
 
 // Audio tone synthesizer for feedback

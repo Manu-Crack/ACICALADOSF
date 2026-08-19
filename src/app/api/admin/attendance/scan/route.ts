@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ATTENDANCE_STATUS, AttendanceStatus } from "@/lib/types/attendance";
 
 async function verifyAdmin() {
   const supabase = await createClient();
@@ -177,7 +178,8 @@ export async function POST(request: NextRequest) {
     const entryToleranceLimit = expectedEntryMinutes + 15;
 
     const isPunctual = currentMinutesOfDay <= entryToleranceLimit;
-    const calculatedStatus = isPunctual ? "Puntual" : "Tardanza";
+    const dbStatus: AttendanceStatus = isPunctual ? ATTENDANCE_STATUS.PRESENTE : ATTENDANCE_STATUS.TARDANZA;
+    const punctualityLabel = isPunctual ? "A tiempo" : "Tardanza";
 
     // 3. Consultar si ya tiene marcación hoy
     const { data: attendanceRecord, error: attError } = await admin
@@ -212,7 +214,7 @@ export async function POST(request: NextRequest) {
           date: peruDate,
           check_in: now.toISOString(),
           check_out: null,
-          status: calculatedStatus,
+          status: dbStatus,
           notes: blockRecord ? `Permiso previo: ${blockRecord.reason}` : null,
         })
         .select()
@@ -229,8 +231,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         action: "check_in",
         status: "success",
-        punctuality: calculatedStatus,
-        message: `Entrada registrada: ${employee.first_name} ${employee.last_name} (${calculatedStatus} - ${currentTimeFormatted})`,
+        punctuality: punctualityLabel,
+        attendance_status: dbStatus,
+        message: `Entrada registrada: ${employee.first_name} ${employee.last_name} (${punctualityLabel} - ${currentTimeFormatted})`,
         employee,
         attendance: newAttendance,
         timestamp: currentTimeFormatted,
