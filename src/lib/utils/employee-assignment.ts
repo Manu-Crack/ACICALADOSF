@@ -18,6 +18,28 @@ export type AvailableEmployeeInfo = {
   skillMatchCount: number;
 };
 
+function timeToMinutes(timeStr: string | null | undefined): number {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(":");
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return h * 60 + m;
+}
+
+function hasTimeOverlap(
+  startA: string | null | undefined,
+  endA: string | null | undefined,
+  startB: string | null | undefined,
+  endB: string | null | undefined
+): boolean {
+  if (!startA || !endA || !startB || !endB) return false;
+  const sA = timeToMinutes(startA);
+  const eA = timeToMinutes(endA);
+  const sB = timeToMinutes(startB);
+  const eB = timeToMinutes(endB);
+  return sA < eB && eA > sB;
+}
+
 /**
  * Algoritmo Inteligente de Asignación Automática y Balanceo de Carga (Least Loaded + Round-Robin)
  * 1. Identifica especialidad requerida (barbería, spa o mixto).
@@ -64,7 +86,7 @@ export async function findAvailableEmployeeForBooking(
       if (!b.start_time || !b.end_time) {
         // Ausencia/permiso de todo el día
         absentEmployeeIds.add(b.employee_id);
-      } else if (b.start_time < endTime && b.end_time > startTime) {
+      } else if (hasTimeOverlap(b.start_time, b.end_time, startTime, endTime)) {
         // Conflicto de horario específico
         absentEmployeeIds.add(b.employee_id);
       }
@@ -82,7 +104,7 @@ export async function findAvailableEmployeeForBooking(
   const nonAbsentIds = nonAbsentEmployees.map((e) => e.id);
 
   // 3. Filtrar empleados con citas existentes superpuestas en ese bloque horario
-  // Solo se consideran colisiones con reservas efectivamente COBRADAS o CONFIRMADAS
+  // Toda reserva activa (estado distinto de 'cancelada' y 'expirada') ocupa la agenda del colaborador
   const { data: existingBookings } = await admin
     .from("bookings")
     .select("assigned_employee_id, start_time, end_time, status, payment_status")
@@ -102,26 +124,18 @@ export async function findAvailableEmployeeForBooking(
     for (const b of existingBookings) {
       if (!b.assigned_employee_id) continue;
 
-      const isCobradaOrConfirmada =
-        b.payment_status === "total" ||
-        b.status === "confirmada" ||
-        b.status === "completada";
+      // Incrementar carga de trabajo diaria de la trabajadora por cada cita activa en el día
+      const currentCount = dailyWorkload.get(b.assigned_employee_id) || 0;
+      dailyWorkload.set(b.assigned_employee_id, currentCount + 1);
 
-      // Solo las reservas cobradas/confirmadas generan colisión estricta de agenda
-      if (isCobradaOrConfirmada) {
-        // Incrementar carga de trabajo diaria de la trabajadora
-        const currentCount = dailyWorkload.get(b.assigned_employee_id) || 0;
-        dailyWorkload.set(b.assigned_employee_id, currentCount + 1);
-
-        // Verificar si hay colisión horaria directa con el bloque solicitado
-        if (b.start_time < endTime && b.end_time > startTime) {
-          busyEmployeeIds.add(b.assigned_employee_id);
-        }
+      // Verificar si hay colisión horaria directa (solapamiento) con el bloque solicitado
+      if (hasTimeOverlap(b.start_time, b.end_time, startTime, endTime)) {
+        busyEmployeeIds.add(b.assigned_employee_id);
       }
     }
   }
 
-  // Empleados totalmente disponibles (sin ausencias y sin colisiones de horario)
+  // Empleados totalmente disponibles (sin ausencias y sin colisiones de horario en la franja)
   const availableEmployees = nonAbsentEmployees.filter(
     (e) => !busyEmployeeIds.has(e.id)
   );

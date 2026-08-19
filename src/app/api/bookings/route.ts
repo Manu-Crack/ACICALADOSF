@@ -128,6 +128,16 @@ export async function POST(request: NextRequest) {
       endTime: endTime,
     });
 
+    if (!assignedEmployeeId) {
+      return NextResponse.json(
+        {
+          error:
+            "El horario seleccionado ya no cuenta con personal disponible debido a la capacidad máxima. Por favor, elige otro horario.",
+        },
+        { status: 409 }
+      );
+    }
+
     const clientFullName = `${client_first_name} ${client_last_name}`.trim();
 
     // 7. Insert booking with status 'pendiente' (Pago en local)

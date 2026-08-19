@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+function timeToMinutes(timeStr: string | null | undefined): number {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(":");
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return h * 60 + m;
+}
+
+function hasTimeOverlap(
+  startA: string | null | undefined,
+  endA: string | null | undefined,
+  startB: string | null | undefined,
+  endB: string | null | undefined
+): boolean {
+  if (!startA || !endA || !startB || !endB) return false;
+  const sA = timeToMinutes(startA);
+  const eA = timeToMinutes(endA);
+  const sB = timeToMinutes(startB);
+  const eB = timeToMinutes(endB);
+  return sA < eB && eA > sB;
+}
+
 async function verifyAdminAuth() {
   const supabase = await createClient();
   const {
@@ -127,7 +149,7 @@ export async function PATCH(request: NextRequest) {
     // 1. Obtener la reserva actual
     const { data: booking, error: fetchError } = await admin
       .from("bookings")
-      .select("id, booking_code, total_price_cents, status, payment_status, confirmed_at")
+      .select("id, booking_code, booking_date, start_time, end_time, total_price_cents, status, payment_status, confirmed_at")
       .eq("id", id)
       .single();
 
@@ -178,7 +200,53 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (assigned_employee_id !== undefined) {
-      updates.assigned_employee_id = assigned_employee_id || null;
+      const newEmpId = assigned_employee_id || null;
+
+      // Si se asigna un colaborador, verificar si ya tiene colisión con otra cita o permiso
+      if (newEmpId) {
+        // Verificar ausencias / permisos
+        const { data: absences } = await admin
+          .from("employee_blocks")
+          .select("id, start_time, end_time, reason")
+          .eq("employee_id", newEmpId)
+          .eq("block_date", booking.booking_date);
+
+        const hasAbsence = (absences || []).some((b) => {
+          if (!b.start_time || !b.end_time) return true;
+          return hasTimeOverlap(b.start_time, b.end_time, booking.start_time, booking.end_time);
+        });
+
+        if (hasAbsence) {
+          return NextResponse.json(
+            { error: "El colaborador seleccionado tiene un permiso o ausencia registrada en ese horario." },
+            { status: 409 }
+          );
+        }
+
+        // Verificar choque con otra reserva activa
+        const { data: conflictingBookings } = await admin
+          .from("bookings")
+          .select("id, booking_code, start_time, end_time")
+          .eq("assigned_employee_id", newEmpId)
+          .eq("booking_date", booking.booking_date)
+          .neq("id", booking.id)
+          .not("status", "in", '("cancelada","expirada")');
+
+        const conflict = (conflictingBookings || []).find((cb) => {
+          return hasTimeOverlap(cb.start_time, cb.end_time, booking.start_time, booking.end_time);
+        });
+
+        if (conflict) {
+          return NextResponse.json(
+            {
+              error: `El colaborador ya cuenta con la cita ${conflict.booking_code} asignada en ese mismo horario (${conflict.start_time?.slice(0, 5)} - ${conflict.end_time?.slice(0, 5)}).`,
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      updates.assigned_employee_id = newEmpId;
     }
 
     const { data: updated, error: updateError } = await admin
