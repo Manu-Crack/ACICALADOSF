@@ -189,7 +189,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await verifyAuth(["admin"]);
+    const auth = await verifyAuth(["admin", "recepcionista"]);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }

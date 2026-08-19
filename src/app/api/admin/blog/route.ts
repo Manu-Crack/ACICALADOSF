@@ -24,8 +24,8 @@ async function verifyAdmin() {
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "admin") {
-    return { error: "Acceso denegado: solo administradores", status: 403 };
+  if (!profile || !["admin", "recepcionista"].includes(profile.role)) {
+    return { error: "Acceso denegado: solo personal autorizado", status: 403 };
   }
 
   return { user, profile };

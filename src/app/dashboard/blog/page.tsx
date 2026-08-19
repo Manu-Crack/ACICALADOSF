@@ -21,7 +21,7 @@ export default async function AdminBlogPage() {
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || !["admin", "recepcionista"].includes(profile.role)) {
     redirect("/dashboard");
   }
 

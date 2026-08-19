@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-async function verifyAdmin() {
+async function verifyAdmin(allowedRoles: string[] = ["admin"]) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -15,8 +15,8 @@ async function verifyAdmin() {
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "recepcionista"].includes(profile.role)) {
-    return { error: "Acceso denegado", status: 403 };
+  if (!profile || !allowedRoles.includes(profile.role)) {
+    return { error: "Acceso denegado. Se requieren permisos de administrador.", status: 403 };
   }
 
   return { user, profile };
@@ -52,7 +52,7 @@ function getErrorMessage(err: unknown): string {
  */
 export async function GET() {
   try {
-    const auth = await verifyAdmin();
+    const auth = await verifyAdmin(["admin", "recepcionista"]);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }

@@ -62,12 +62,12 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
   const navItems = [
     { href: "/dashboard", label: "Inicio", icon: "/iconsAdmi/Inicio.svg", show: true },
     { href: "/dashboard/reservas", label: "Reservas", icon: "/iconsAdmi/Reservas.svg", show: isAdminOrRecep },
-    { href: "/dashboard/empleados", label: "Empleados", icon: "/iconsAdmi/Empleados.svg", show: isAdmin },
+    { href: "/dashboard/empleados", label: "Empleados", icon: "/iconsAdmi/Empleados.svg", show: isAdminOrRecep },
     { href: "/dashboard/asistencia", label: "Asistencia", icon: "/iconsAdmi/Asistencia.svg", show: isAdminOrRecep },
-    { href: "/dashboard/servicios", label: "Servicios", icon: "/iconsAdmi/Servicios.svg", show: isAdmin },
+    { href: "/dashboard/servicios", label: "Servicios", icon: "/iconsAdmi/Servicios.svg", show: isAdminOrRecep },
     { href: "/dashboard/vestuario", label: "Vestuario", icon: "/iconsAdmi/Vestuario.svg", show: isAdminOrRecep },
-    { href: "/dashboard/productos", label: "Productos", icon: "/iconsAdmi/Productos.svg", show: isAdmin },
-    { href: "/dashboard/blog", label: "Blog", icon: "/iconsAdmi/Blog.svg", show: isAdmin },
+    { href: "/dashboard/productos", label: "Productos", icon: "/iconsAdmi/Productos.svg", show: isAdminOrRecep },
+    { href: "/dashboard/blog", label: "Blog", icon: "/iconsAdmi/Blog.svg", show: isAdminOrRecep },
   ];
 
   const filteredNav = navItems.filter((item) => item.show);

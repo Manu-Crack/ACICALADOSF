@@ -82,7 +82,8 @@ const paymentLabels: Record<string, string> = {
   total: "Pagado en local",
 };
 
-export default function EmployeesManager() {
+export default function EmployeesManager({ userRole = "admin" }: { userRole?: string }) {
+  const isAdmin = userRole === "admin";
   const [activeTab, setActiveTab] = useState<"employees" | "assignments">("employees");
 
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -589,13 +590,15 @@ export default function EmployeesManager() {
           </p>
         </div>
 
-        <button
-          onClick={() => handleOpenEmpModal()}
-          className="btn btn-primary"
-          style={{ display: "flex", alignItems: "center", gap: 8 }}
-        >
-          ➕ Nuevo Trabajador
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => handleOpenEmpModal()}
+            className="btn btn-primary"
+            style={{ display: "flex", alignItems: "center", gap: 8 }}
+          >
+            ➕ Nuevo Trabajador
+          </button>
+        )}
       </div>
 
       {/* Tabs Navigation Bar */}
@@ -924,19 +927,21 @@ export default function EmployeesManager() {
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                                   <img src="/calendario.svg" alt="Fecha" style={{ width: 13, height: 13, display: "inline-block" }} /> {b.block_date} — {b.reason}
                                 </span>
-                                <button
-                                  onClick={() => handleDeleteAbsence(b.id)}
-                                  style={{
-                                    border: "none",
-                                    background: "none",
-                                    cursor: "pointer",
-                                    color: "#ef4444",
-                                    fontSize: "0.75rem",
-                                  }}
-                                  title="Eliminar permiso"
-                                >
-                                  ✕
-                                </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleDeleteAbsence(b.id)}
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      color: "#ef4444",
+                                      fontSize: "0.75rem",
+                                    }}
+                                    title="Eliminar permiso"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -979,28 +984,32 @@ export default function EmployeesManager() {
                         >
                           🪪 Carnet QR
                         </button>
-                        <button
-                          onClick={() => handleOpenEmpModal(emp)}
-                          className="btn btn-ghost btn-sm"
-                          style={{ flex: "1 1 70px", padding: "6px 8px", fontSize: "0.75rem" }}
-                        >
-                          ✏️ Editar
-                        </button>
-                        <button
-                          onClick={() => handleOpenAbsenceModal(emp)}
-                          className="btn btn-ghost btn-sm"
-                          style={{ flex: "1 1 75px", padding: "6px 8px", fontSize: "0.75rem", color: "var(--color-warning)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-                        >
-                          <img src="/calendario.svg" alt="Permiso" style={{ width: 13, height: 13, display: "inline-block" }} /> Permiso
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEmp(emp)}
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: "#ef4444", padding: "6px 8px", fontSize: "0.75rem" }}
-                          title="Eliminar trabajador"
-                        >
-                          🗑️
-                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEmpModal(emp)}
+                              className="btn btn-ghost btn-sm"
+                              style={{ flex: "1 1 70px", padding: "6px 8px", fontSize: "0.75rem" }}
+                            >
+                              ✏️ Editar
+                            </button>
+                            <button
+                              onClick={() => handleOpenAbsenceModal(emp)}
+                              className="btn btn-ghost btn-sm"
+                              style={{ flex: "1 1 75px", padding: "6px 8px", fontSize: "0.75rem", color: "var(--color-warning)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                            >
+                              <img src="/calendario.svg" alt="Permiso" style={{ width: 13, height: 13, display: "inline-block" }} /> Permiso
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmp(emp)}
+                              className="btn btn-ghost btn-sm"
+                              style={{ color: "#ef4444", padding: "6px 8px", fontSize: "0.75rem" }}
+                              title="Eliminar trabajador"
+                            >
+                              🗑️
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

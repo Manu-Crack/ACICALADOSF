@@ -32,7 +32,7 @@ export default async function ReservasPage() {
           Gestiona todas las reservas confirmadas de los clientes
         </p>
       </div>
-      <ReservasManager />
+      <ReservasManager userRole={profile.role} />
     </div>
   );
 }

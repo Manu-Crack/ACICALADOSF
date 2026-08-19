@@ -11,7 +11,7 @@ import { extractStoragePath } from "@/lib/utils/storage";
  * DELETE /api/admin/services — Eliminar físicamente (HARD DELETE) un servicio de la base de datos y Storage
  */
 
-async function verifyAdmin(requiredRole: string[] = ["admin"]) {
+async function verifyAdmin(requiredRole: string[] = ["admin", "recepcionista"]) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -54,7 +54,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await verifyAdmin(["admin"]);
+    const auth = await verifyAdmin(["admin", "recepcionista"]);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const auth = await verifyAdmin(["admin"]);
+    const auth = await verifyAdmin(["admin", "recepcionista"]);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -204,7 +204,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await verifyAdmin(["admin"]);
+    const auth = await verifyAdmin(["admin", "recepcionista"]);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }

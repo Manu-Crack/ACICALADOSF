@@ -79,8 +79,8 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // For API admin routes, only admin
-    if (isApiAdminRoute && profile.role !== "admin") {
+    // For API admin routes, require admin or recepcionista
+    if (isApiAdminRoute && !["admin", "recepcionista"].includes(profile.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }

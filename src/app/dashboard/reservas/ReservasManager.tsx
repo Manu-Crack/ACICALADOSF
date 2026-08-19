@@ -63,7 +63,8 @@ const paymentColors: Record<string, string> = {
   total: "badge-success",
 };
 
-export function ReservasManager() {
+export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
+  const isAdmin = userRole === "admin";
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1156,24 +1157,26 @@ export function ReservasManager() {
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteBookingPermanently(b);
-                            }}
-                            disabled={actionLoading === b.id}
-                            className="btn btn-ghost btn-sm"
-                            title="Eliminar reserva definitivamente"
-                            style={{
-                              padding: "4px 8px",
-                              color: "var(--color-error)",
-                              borderColor: "rgba(184,59,46,0.3)",
-                              fontSize: "0.8125rem",
-                            }}
-                          >
-                            🗑️
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteBookingPermanently(b);
+                              }}
+                              disabled={actionLoading === b.id}
+                              className="btn btn-ghost btn-sm"
+                              title="Eliminar reserva definitivamente"
+                              style={{
+                                padding: "4px 8px",
+                                color: "var(--color-error)",
+                                borderColor: "rgba(184,59,46,0.3)",
+                                fontSize: "0.8125rem",
+                              }}
+                            >
+                              🗑️
+                            </button>
+                          )}
 
                           <span
                             style={{
@@ -1612,24 +1615,26 @@ export function ReservasManager() {
                               )}
 
                               {/* Action 5: Delete Permanently */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteBookingPermanently(b);
-                                }}
-                                disabled={actionLoading === b.id}
-                                className="btn btn-ghost btn-sm"
-                                style={{
-                                  color: "var(--color-error)",
-                                  borderColor: "rgba(184,59,46,0.3)",
-                                  marginLeft: "auto",
-                                }}
-                              >
-                                {actionLoading === b.id
-                                  ? "Eliminando..."
-                                  : "🗑️ Eliminar Definitivamente"}
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteBookingPermanently(b);
+                                  }}
+                                  disabled={actionLoading === b.id}
+                                  className="btn btn-ghost btn-sm"
+                                  style={{
+                                    color: "var(--color-error)",
+                                    borderColor: "rgba(184,59,46,0.3)",
+                                    marginLeft: "auto",
+                                  }}
+                                >
+                                  {actionLoading === b.id
+                                    ? "Eliminando..."
+                                    : "🗑️ Eliminar Definitivamente"}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </td>

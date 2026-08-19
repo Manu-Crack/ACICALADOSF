@@ -20,7 +20,7 @@ export default async function ServiciosPage() {
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || !["admin", "recepcionista"].includes(profile.role)) {
     redirect("/dashboard");
   }
 
