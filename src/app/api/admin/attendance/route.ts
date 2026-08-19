@@ -3,7 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ATTENDANCE_STATUS, AttendanceStatus } from "@/lib/types/attendance";
 
-async function verifyAdmin() {
+/**
+ * Verificar autenticación y rol admin o recepcionista (lectura).
+ */
+async function verifyAuth() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -24,6 +27,29 @@ async function verifyAdmin() {
 }
 
 /**
+ * Verificar autenticación y rol exclusivamente admin (escritura/eliminación).
+ */
+async function verifyAdminOnly() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado", status: 401 };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") {
+    return { error: "Acceso denegado: solo administradores pueden modificar asistencias manualmente", status: 403 };
+  }
+
+  return { user, profile };
+}
+
+/**
  * GET /api/admin/attendance
  * Consulta asistencias consolidadas cruzadas con empleados y permisos (employee_blocks).
  * Parámetros de consulta:
@@ -34,7 +60,7 @@ async function verifyAdmin() {
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await verifyAuth();
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -145,7 +171,7 @@ function normalizeAttendanceStatus(status: unknown): AttendanceStatus {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await verifyAdminOnly();
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -200,7 +226,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await verifyAdminOnly();
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -250,7 +276,7 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await verifyAdminOnly();
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }

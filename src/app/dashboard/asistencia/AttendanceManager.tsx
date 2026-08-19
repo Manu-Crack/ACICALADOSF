@@ -24,7 +24,9 @@ interface BlockRecord {
   end_time: string | null;
 }
 
-export function AttendanceManager() {
+export function AttendanceManager({ userRole = "admin" }: { userRole?: string }) {
+  const canEditOrDelete = userRole === "admin";
+
   // Filters
   const [typeFilter, setTypeFilter] = useState<"all" | "spa" | "barberia">("all");
   const [rangeMode, setRangeMode] = useState<"day" | "week" | "month" | "year">("day");
@@ -116,6 +118,7 @@ export function AttendanceManager() {
 
   // Open Manual Modal
   function handleOpenManualModal(emp: Employee) {
+    if (!canEditOrDelete) return;
     setManualEmployee(emp);
     setManualDate(selectedDate);
     setManualCheckIn("09:00");
@@ -619,16 +622,18 @@ export function AttendanceManager() {
                             📊 Historial
                           </button>
 
-                          {/* Manual adjustment */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenManualModal(emp)}
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: "5px 8px", fontSize: "0.75rem" }}
-                            title="Ajuste manual de asistencia"
-                          >
-                            ✏️
-                          </button>
+                          {/* Manual adjustment — solo visible para admin */}
+                          {canEditOrDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenManualModal(emp)}
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: "5px 8px", fontSize: "0.75rem" }}
+                              title="Ajuste manual de asistencia"
+                            >
+                              ✏️
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -665,7 +670,7 @@ export function AttendanceManager() {
       )}
 
       {/* Manual Attendance Adjustment Modal */}
-      {showManualModal && manualEmployee && (
+      {showManualModal && manualEmployee && canEditOrDelete && (
         <div
           style={{
             position: "fixed",
