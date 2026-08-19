@@ -96,7 +96,8 @@ export async function GET(request: NextRequest) {
     let empQuery = admin
       .from("employees")
       .select("id, first_name, last_name, type")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .neq("type", "recepcionista");
 
     if (serviceType === "barberia" || serviceType === "spa") {
       empQuery = empQuery.eq("type", serviceType);

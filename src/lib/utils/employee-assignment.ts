@@ -59,7 +59,8 @@ export async function findAvailableEmployeeForBooking(
   let query = admin
     .from("employees")
     .select("id, first_name, last_name, type, rotation_order")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .neq("type", "recepcionista");
 
   if (serviceType === "barberia" || serviceType === "spa") {
     query = query.eq("type", serviceType);
@@ -199,7 +200,8 @@ export async function getActiveStaffCountBySpecialty(
   let query = admin
     .from("employees")
     .select("id, type")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .neq("type", "recepcionista");
 
   if (serviceType === "barberia" || serviceType === "spa") {
     query = query.eq("type", serviceType);

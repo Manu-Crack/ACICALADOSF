@@ -15,7 +15,7 @@ interface ScanResult {
     id: string;
     first_name: string;
     last_name: string;
-    type: "spa" | "barberia";
+    type: "spa" | "barberia" | "recepcionista";
   };
   timestamp?: string;
   check_in_time?: string;

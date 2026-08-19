@@ -6,7 +6,7 @@ interface Employee {
   id: string;
   first_name: string;
   last_name: string;
-  type: "spa" | "barberia";
+  type: "spa" | "barberia" | "recepcionista";
   is_active: boolean;
 }
 
@@ -176,10 +176,10 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
                 Historial de Asistencia: {employee.first_name} {employee.last_name}
               </h3>
               <span
-                className={`badge ${employee.type === "spa" ? "badge-gold" : "badge-neutral"}`}
+                className={`badge ${employee.type === "recepcionista" ? "badge-success" : employee.type === "spa" ? "badge-gold" : "badge-neutral"}`}
                 style={{ fontSize: "0.6875rem" }}
               >
-                {employee.type === "spa" ? "Spa" : "Barbería"}
+                {employee.type === "recepcionista" ? "🛎️ Recepción" : employee.type === "spa" ? "Spa" : "Barbería"}
               </span>
             </div>
             <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", marginTop: 2 }}>

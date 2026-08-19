@@ -26,7 +26,7 @@ type Employee = {
   id: string;
   first_name: string;
   last_name: string;
-  type: "barberia" | "spa";
+  type: "barberia" | "spa" | "recepcionista";
   is_active: boolean;
   rotation_order?: number;
   employee_skills?: { service_id: string }[];
@@ -92,7 +92,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   const [loading, setLoading] = useState(true);
 
   // Filters for Tab 1 (Employees list)
-  const [filterType, setFilterType] = useState<"all" | "barberia" | "spa">("all");
+  const [filterType, setFilterType] = useState<"all" | "barberia" | "spa" | "recepcionista">("all");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filters for Tab 2 (Assigned Services & Bookings)
@@ -113,7 +113,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   // Form states - Employee
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [type, setType] = useState<"barberia" | "spa">("spa");
+  const [type, setType] = useState<"barberia" | "spa" | "recepcionista">("spa");
   const [isActive, setIsActive] = useState(true);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [savingEmp, setSavingEmp] = useState(false);
@@ -354,6 +354,11 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
         service_ids: type === "spa" ? selectedSkills : [],
       };
 
+      // Los recepcionistas no tienen habilidades de servicio
+      if (type === "recepcionista") {
+        payload.service_ids = [];
+      }
+
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -567,6 +572,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   const totalEmployees = employees.length;
   const spaCount = employees.filter((e) => e.type === "spa").length;
   const barberiaCount = employees.filter((e) => e.type === "barberia").length;
+  const recepcionCount = employees.filter((e) => e.type === "recepcionista").length;
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60 }}>
@@ -710,6 +716,14 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                 {barberiaCount}
               </p>
             </div>
+            <div className="card" style={{ padding: 16, textAlign: "center" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                🛎️ Recepción
+              </span>
+              <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#2dd4bf" }}>
+                {recepcionCount}
+              </p>
+            </div>
           </div>
 
           {/* Filters & Search */}
@@ -724,7 +738,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             }}
           >
             <div style={{ display: "flex", gap: 8 }}>
-              {(["all", "spa", "barberia"] as const).map((t) => (
+              {(["all", "spa", "barberia", "recepcionista"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setFilterType(t)}
@@ -737,8 +751,10 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                     <>
                       <img src="/LogoSpa.svg" alt="Spa" style={{ width: 14, height: 14, display: "inline-block" }} /> Spa
                     </>
-                  ) : (
+                  ) : t === "barberia" ? (
                     "💈 Barbería"
+                  ) : (
+                    "🛎️ Recepción"
                   )}
                 </button>
               ))}
@@ -789,7 +805,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                       justifyContent: "space-between",
                       padding: 20,
                       borderLeft: `4px solid ${
-                        emp.type === "barberia" ? "#38bdf8" : "#e879f9"
+                        emp.type === "barberia" ? "#38bdf8" : emp.type === "recepcionista" ? "#2dd4bf" : "#e879f9"
                       }`,
                     }}
                   >
@@ -809,12 +825,14 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                           </h3>
                           <span
                             className={`badge ${
-                              emp.type === "barberia" ? "badge-info" : "badge-secondary"
+                              emp.type === "barberia" ? "badge-info" : emp.type === "recepcionista" ? "badge-success" : "badge-secondary"
                             }`}
                             style={{ fontSize: "0.75rem", display: "inline-flex", alignItems: "center", gap: 4 }}
                           >
                             {emp.type === "barberia" ? (
                               "💈 Barbería"
+                            ) : emp.type === "recepcionista" ? (
+                              "🛎️ Recepción"
                             ) : (
                               <>
                                 <img src="/LogoSpa.svg" alt="Spa" style={{ width: 12, height: 12, display: "inline-block" }} /> Spa
@@ -853,7 +871,11 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                         >
                           Especialidades Habilitadas ({empServices.length})
                         </p>
-                        {emp.type === "barberia" ? (
+                        {emp.type === "recepcionista" ? (
+                          <span className="badge badge-outline" style={{ fontSize: "0.75rem" }}>
+                            🛎️ Sin carga de servicios (Recepción)
+                          </span>
+                        ) : emp.type === "barberia" ? (
                           <span className="badge badge-outline" style={{ fontSize: "0.75rem" }}>
                             ✂️ Todos los servicios de Barbería
                           </span>
@@ -951,29 +973,31 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
 
                     {/* Actions & Link to assigned appointments */}
                     <div style={{ paddingTop: 12, borderTop: "1px solid var(--color-border)", marginTop: 12 }}>
-                      <button
-                        type="button"
-                        onClick={() => viewEmployeeAssignments(emp.id)}
-                        className="btn btn-sm"
-                        style={{
-                          width: "100%",
-                          marginBottom: 8,
-                          background: "rgba(200,164,92,0.12)",
-                          color: "var(--color-primary)",
-                          border: "1px solid var(--color-primary-border)",
-                          fontWeight: 700,
-                          fontSize: "0.8125rem",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 6,
-                        }}
-                      >
-                        <span>📋 Ver Citas Asignadas</span>
-                        <span className="badge badge-gold" style={{ fontSize: "0.6875rem" }}>
-                          {assignedCount}
-                        </span>
-                      </button>
+                      {emp.type !== "recepcionista" && (
+                        <button
+                          type="button"
+                          onClick={() => viewEmployeeAssignments(emp.id)}
+                          className="btn btn-sm"
+                          style={{
+                            width: "100%",
+                            marginBottom: 8,
+                            background: "rgba(200,164,92,0.12)",
+                            color: "var(--color-primary)",
+                            border: "1px solid var(--color-primary-border)",
+                            fontWeight: 700,
+                            fontSize: "0.8125rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span>📋 Ver Citas Asignadas</span>
+                          <span className="badge badge-gold" style={{ fontSize: "0.6875rem" }}>
+                            {assignedCount}
+                          </span>
+                        </button>
+                      )}
 
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <button
@@ -1576,7 +1600,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                           }
                         >
                           <option value="">⚠️ Sin asignar</option>
-                          {employees.map((emp) => (
+                          {employees.filter((emp) => emp.type !== "recepcionista").map((emp) => (
                             <option key={emp.id} value={emp.id}>
                               {emp.type === "barberia" ? "💈" : "Spa:"} {emp.first_name}{" "}
                               {emp.last_name}
@@ -1709,11 +1733,12 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                   <label className="label">Tipo de Personal *</label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value as "barberia" | "spa")}
+                    onChange={(e) => setType(e.target.value as "barberia" | "spa" | "recepcionista")}
                     className="input"
                   >
                     <option value="spa">Spa</option>
                     <option value="barberia">Barbería</option>
+                    <option value="recepcionista">Recepción</option>
                   </select>
                 </div>
                 <div>

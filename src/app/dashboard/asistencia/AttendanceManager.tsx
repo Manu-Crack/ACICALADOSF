@@ -9,7 +9,7 @@ interface Employee {
   id: string;
   first_name: string;
   last_name: string;
-  type: "spa" | "barberia";
+  type: "spa" | "barberia" | "recepcionista";
   is_active: boolean;
 }
 
@@ -28,7 +28,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
   const canEditOrDelete = userRole === "admin";
 
   // Filters
-  const [typeFilter, setTypeFilter] = useState<"all" | "spa" | "barberia">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "spa" | "barberia" | "recepcionista">("all");
   const [rangeMode, setRangeMode] = useState<"day" | "week" | "month" | "year">("day");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -335,7 +335,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
               {employees.length}
             </span>
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              ({employees.filter((e) => e.type === "spa").length} Spa · {employees.filter((e) => e.type === "barberia").length} Barb.)
+              ({employees.filter((e) => e.type === "spa").length} Spa · {employees.filter((e) => e.type === "barberia").length} Barb. · {employees.filter((e) => e.type === "recepcionista").length} Rec.)
             </span>
           </div>
         </div>
@@ -355,7 +355,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
           {/* Specialty Filter: Todos / Spa / Barbería */}
           <div style={{ display: "flex", gap: 8 }}>
-            {(["all", "barberia", "spa"] as const).map((f) => (
+            {(["all", "barberia", "spa", "recepcionista"] as const).map((f) => (
               <button
                 key={f}
                 type="button"
@@ -369,7 +369,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                 {f === "spa" && (
                   <img src="/LogoSpa.svg" alt="Spa" style={{ height: 14, width: "auto" }} />
                 )}
-                {f === "all" ? "Todos" : f === "barberia" ? "Barbería" : "Spa"}
+                {f === "all" ? "Todos" : f === "barberia" ? "Barbería" : f === "spa" ? "Spa" : "🛎️ Recepción"}
               </button>
             ))}
           </div>
@@ -543,13 +543,13 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                               width: 34,
                               height: 34,
                               borderRadius: "50%",
-                              background: emp.type === "spa" ? "rgba(224, 98, 146, 0.15)" : "rgba(200, 164, 92, 0.15)",
+                              background: emp.type === "spa" ? "rgba(224, 98, 146, 0.15)" : emp.type === "recepcionista" ? "rgba(45, 212, 191, 0.15)" : "rgba(200, 164, 92, 0.15)",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
                               fontWeight: 700,
-                              color: emp.type === "spa" ? "#e06292" : "var(--color-primary)",
-                              border: `1px solid ${emp.type === "spa" ? "rgba(224, 98, 146, 0.3)" : "rgba(200, 164, 92, 0.3)"}`,
+                              color: emp.type === "spa" ? "#e06292" : emp.type === "recepcionista" ? "#2dd4bf" : "var(--color-primary)",
+                              border: `1px solid ${emp.type === "spa" ? "rgba(224, 98, 146, 0.3)" : emp.type === "recepcionista" ? "rgba(45, 212, 191, 0.3)" : "rgba(200, 164, 92, 0.3)"}`,
                             }}
                           >
                             {emp.first_name.charAt(0)}
@@ -570,10 +570,10 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                       {/* Specialty */}
                       <td style={{ padding: "14px 16px" }}>
                         <span
-                          className={`badge ${emp.type === "spa" ? "badge-gold" : "badge-neutral"}`}
+                          className={`badge ${emp.type === "spa" ? "badge-gold" : emp.type === "recepcionista" ? "badge-success" : "badge-neutral"}`}
                           style={{ fontSize: "0.6875rem" }}
                         >
-                          {emp.type === "spa" ? "Spa" : "Barbería"}
+                          {emp.type === "spa" ? "Spa" : emp.type === "recepcionista" ? "🛎️ Recepción" : "Barbería"}
                         </span>
                       </td>
 

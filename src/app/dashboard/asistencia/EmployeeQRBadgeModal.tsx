@@ -7,7 +7,7 @@ interface Employee {
   id: string;
   first_name: string;
   last_name: string;
-  type: "spa" | "barberia";
+  type: "spa" | "barberia" | "recepcionista";
   is_active: boolean;
 }
 
@@ -24,8 +24,9 @@ export function EmployeeQRBadgeModal({ employee, onClose }: EmployeeQRBadgeModal
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const isSpa = employee.type === "spa";
-  const typeLabel = isSpa ? "Personal de Spa" : "Personal de Barbería";
-  const typeColor = isSpa ? "#e06292" : "#C8A45C";
+  const isRecepcion = employee.type === "recepcionista";
+  const typeLabel = isRecepcion ? "Personal de Recepción" : isSpa ? "Personal de Spa" : "Personal de Barbería";
+  const typeColor = isRecepcion ? "#2dd4bf" : isSpa ? "#e06292" : "#C8A45C";
 
   // 1. Generate QR data and draw high-resolution Badge Card Canvas
   useEffect(() => {
@@ -105,24 +106,24 @@ export function EmployeeQRBadgeModal({ employee, onClose }: EmployeeQRBadgeModal
           ctx.fillText(employee.last_name, 400, 300);
 
           // Specialty Pill Background
-          const pillWidth = isSpa ? 260 : 310;
+          const pillWidth = isRecepcion ? 330 : isSpa ? 260 : 310;
           const pillHeight = 44;
           const pillX = (800 - pillWidth) / 2;
           const pillY = 335;
 
-          ctx.fillStyle = isSpa ? "rgba(224, 98, 146, 0.15)" : "rgba(200, 164, 92, 0.15)";
+          ctx.fillStyle = isRecepcion ? "rgba(45, 212, 191, 0.15)" : isSpa ? "rgba(224, 98, 146, 0.15)" : "rgba(200, 164, 92, 0.15)";
           ctx.beginPath();
           ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 22);
           ctx.fill();
 
-          ctx.strokeStyle = isSpa ? "#e06292" : "#C8A45C";
+          ctx.strokeStyle = typeColor;
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 22);
           ctx.stroke();
 
           // Specialty Text
-          ctx.fillStyle = isSpa ? "#ff80ab" : "#C8A45C";
+          ctx.fillStyle = typeColor;
           ctx.font = "bold 20px 'DM Sans', sans-serif";
           ctx.fillText(typeLabel.toUpperCase(), 400, 364);
 

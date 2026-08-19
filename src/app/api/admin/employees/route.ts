@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest) {
     if (typeof last_name === "string" && last_name.trim()) {
       updatePayload.last_name = last_name.trim();
     }
-    if (type === "barberia" || type === "spa") {
+    if (type === "barberia" || type === "spa" || type === "recepcionista") {
       updatePayload.type = type;
     }
     if (typeof is_active === "boolean") {
