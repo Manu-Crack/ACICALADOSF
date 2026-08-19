@@ -98,17 +98,17 @@ export function EmployeeQRBadgeModal({ employee, onClose }: EmployeeQRBadgeModal
           ctx.lineTo(580, 190);
           ctx.stroke();
 
-          // Employee Full Name
+          // Employee Name — First Name on line 1, Last Name on line 2
           ctx.fillStyle = "#FFFFFF";
           ctx.font = "bold 42px 'Playfair Display', Georgia, serif";
-          const fullName = `${employee.first_name} ${employee.last_name}`;
-          ctx.fillText(fullName, 400, 260);
+          ctx.fillText(employee.first_name, 400, 250);
+          ctx.fillText(employee.last_name, 400, 300);
 
           // Specialty Pill Background
           const pillWidth = isSpa ? 260 : 310;
           const pillHeight = 44;
           const pillX = (800 - pillWidth) / 2;
-          const pillY = 295;
+          const pillY = 335;
 
           ctx.fillStyle = isSpa ? "rgba(224, 98, 146, 0.15)" : "rgba(200, 164, 92, 0.15)";
           ctx.beginPath();
@@ -124,12 +124,12 @@ export function EmployeeQRBadgeModal({ employee, onClose }: EmployeeQRBadgeModal
           // Specialty Text
           ctx.fillStyle = isSpa ? "#ff80ab" : "#C8A45C";
           ctx.font = "bold 20px 'DM Sans', sans-serif";
-          ctx.fillText(typeLabel.toUpperCase(), 400, 324);
+          ctx.fillText(typeLabel.toUpperCase(), 400, 364);
 
           // QR Code Background Box
-          const qrBoxSize = 460;
+          const qrBoxSize = 440;
           const qrBoxX = (800 - qrBoxSize) / 2;
-          const qrBoxY = 380;
+          const qrBoxY = 410;
 
           ctx.fillStyle = "#FFFFFF";
           ctx.beginPath();
@@ -148,15 +148,15 @@ export function EmployeeQRBadgeModal({ employee, onClose }: EmployeeQRBadgeModal
           // Bottom Instruction
           ctx.fillStyle = "#E0D5BE";
           ctx.font = "600 22px 'DM Sans', sans-serif";
-          ctx.fillText("CARNET OFICIAL DE ASISTENCIA", 400, 900);
+          ctx.fillText("CARNET OFICIAL DE ASISTENCIA", 400, 910);
 
           ctx.fillStyle = "#8C8273";
           ctx.font = "18px monospace";
-          ctx.fillText(`ID: ${employee.id}`, 400, 940);
+          ctx.fillText(`ID: ${employee.id}`, 400, 950);
 
           ctx.fillStyle = "rgba(200, 164, 92, 0.6)";
           ctx.font = "16px 'DM Sans', sans-serif";
-          ctx.fillText("Válido para marcación de entrada y salida diaria", 400, 980);
+          ctx.fillText("Válido para marcación de entrada y salida diaria", 400, 990);
 
           const fullBadgeDataUrl = canvas.toDataURL("image/png");
           setBadgeImageUrl(fullBadgeDataUrl);
