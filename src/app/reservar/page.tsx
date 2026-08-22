@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCart, CartService } from "@/components/cart/CartProvider";
 import { formatDuration } from "@/lib/utils/format";
 import { generateWhatsAppBookingUrl } from "@/lib/utils/whatsapp";
+import { PaymentQRWidget } from "@/components/payment/PaymentQRWidget";
 
 type Service = CartService;
 type Step = "type" | "services" | "datetime" | "contact" | "success";
@@ -41,6 +42,10 @@ export default function ReservarPage() {
     start_time: string;
     total_price_cents: number;
     total_price_soles: string;
+    advance_percentage?: number;
+    advance_required_cents?: number;
+    advance_required_soles?: string;
+    balance_soles?: string;
     services: string[];
     whatsapp_url: string;
   } | null>(null);
@@ -1210,20 +1215,44 @@ export default function ReservarPage() {
                   borderTop: "1px solid var(--color-border)",
                   marginTop: 12,
                   paddingTop: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
                 }}
               >
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    fontWeight: 700,
-                    fontSize: "1.0625rem",
+                    fontSize: "0.9rem",
+                    color: "var(--color-text-muted)",
                   }}
                 >
-                  <span>Total a pagar en local:</span>
-                  <span style={{ color: "var(--color-primary)" }}>
-                    S/ {totalPriceSoles}
-                  </span>
+                  <span>Total del servicio:</span>
+                  <strong>S/ {totalPriceSoles}</strong>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "1rem",
+                    fontWeight: 700,
+                    color: "#F59E0B",
+                  }}
+                >
+                  <span>Adelanto requerido (25%):</span>
+                  <span>S/ {(Math.ceil(totalCents * 0.25) / 100).toFixed(2)}</span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "0.85rem",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  <span>Saldo a pagar en local:</span>
+                  <span>S/ {((totalCents - Math.ceil(totalCents * 0.25)) / 100).toFixed(2)}</span>
                 </div>
               </div>
               <p
@@ -1243,16 +1272,16 @@ export default function ReservarPage() {
               <div
                 style={{
                   marginTop: 10,
-                  padding: "8px 12px",
-                  background: "rgba(37, 211, 102, 0.08)",
+                  padding: "10px 12px",
+                  background: "rgba(200, 164, 92, 0.08)",
                   borderRadius: "var(--radius-sm)",
-                  border: "1px solid rgba(37, 211, 102, 0.2)",
+                  border: "1px solid rgba(200, 164, 92, 0.25)",
                   fontSize: "0.8125rem",
-                  color: "rgba(255, 255, 255, 0.9)",
+                  color: "var(--color-text)",
+                  lineHeight: 1.4,
                 }}
               >
-                📍 <strong>Pago presencial:</strong> Paga en efectivo, Yape o
-                tarjeta directamente en nuestro local al momento de tu cita.
+                💜 <strong>Adelanto de confirmación:</strong> Al enviar tu solicitud, transferirás el 25% (S/ {(Math.ceil(totalCents * 0.25) / 100).toFixed(2)}) por Yape y adjuntarás el comprobante para confirmar tu turno.
               </div>
             </div>
 
@@ -1320,103 +1349,22 @@ export default function ReservarPage() {
             </p>
 
             {bookingResult && (
-              <div
-                className="card card-gold"
-                style={{
-                  margin: "0 auto 28px",
-                  padding: "20px 24px",
-                  maxWidth: 480,
-                  textAlign: "left",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: 12,
-                    borderBottom: "1px solid var(--color-border)",
-                    paddingBottom: 10,
-                  }}
-                >
-                  <span className="text-muted" style={{ fontSize: "0.875rem" }}>
-                    Código de cita:
-                  </span>
-                  <strong
-                    className="text-gold"
-                    style={{ fontSize: "1.125rem", letterSpacing: "0.05em" }}
-                  >
-                    {bookingResult.booking_code}
-                  </strong>
-                </div>
-
-                <div style={{ fontSize: "0.875rem", marginBottom: 8 }}>
-                  <span className="text-muted">Cliente: </span>
-                  <strong>{bookingResult.client_name}</strong>
-                </div>
-
-                <div style={{ fontSize: "0.875rem", marginBottom: 8 }}>
-                  <span className="text-muted">Fecha y Hora: </span>
-                  <strong>
-                    {bookingResult.booking_date} a las {bookingResult.start_time}
-                  </strong>
-                </div>
-
-                <div style={{ fontSize: "0.875rem", marginBottom: 12 }}>
-                  <span className="text-muted">Servicios: </span>
-                  <strong>{bookingResult.services.join(", ")}</strong>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    paddingTop: 10,
-                    borderTop: "1px solid var(--color-border)",
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                  }}
-                >
-                  <span>Total a pagar en local:</span>
-                  <span style={{ color: "var(--color-primary)", fontSize: "1.125rem" }}>
-                    S/ {bookingResult.total_price_soles}
-                  </span>
-                </div>
+              <div style={{ maxWidth: 520, margin: "0 auto 28px" }}>
+                <PaymentQRWidget
+                  bookingId={bookingResult.booking_id}
+                  bookingCode={bookingResult.booking_code}
+                  serviceNames={bookingResult.services}
+                  totalPriceCents={bookingResult.total_price_cents}
+                  advancePercentage={bookingResult.advance_percentage || 25}
+                  clientName={bookingResult.client_name}
+                  bookingDate={bookingResult.booking_date}
+                  startTime={bookingResult.start_time}
+                  messageType="advance"
+                  showUploadButton={true}
+                  showWhatsAppButton={true}
+                />
               </div>
             )}
-
-            {/* Mensaje de confirmación informativa */}
-            <div
-              style={{
-                margin: "0 auto 28px",
-                padding: "16px 20px",
-                background: "rgba(37, 211, 102, 0.08)",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid rgba(37, 211, 102, 0.25)",
-                maxWidth: 480,
-                textAlign: "center",
-              }}
-            >
-              <p
-                style={{
-                  fontWeight: 700,
-                  color: "#25D366",
-                  fontSize: "0.9375rem",
-                  marginBottom: 6,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                <img src="/Activo.svg" alt="Activo" style={{ width: 18, height: 18, display: "inline-block" }} /> Solicitud registrada y enviada a WhatsApp
-              </p>
-              <p
-                className="text-muted"
-                style={{ fontSize: "0.8125rem", lineHeight: 1.5 }}
-              >
-                Tu cita está en espera en nuestro panel. Quedará confirmada en el momento que se corrobore el pago en nuestro local.
-              </p>
-            </div>
 
             <div
               style={{

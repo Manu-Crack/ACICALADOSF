@@ -140,7 +140,13 @@ export async function POST(request: NextRequest) {
 
     const clientFullName = `${client_first_name} ${client_last_name}`.trim();
 
-    // 7. Insert booking with status 'pendiente' (Pago en local)
+    // 7. Insert booking with status 'pendiente' y adelanto del 25%
+    // El cliente deberá pagar mínimo el 25% para confirmar la reserva.
+    // advance_amount_cents y balance_cents son recalculados por trigger
+    // al registrar pagos en payment_logs.
+    const advancePercentage = 25;
+    const advanceAmountCents = Math.ceil(totalPriceCents * advancePercentage / 100);
+
     const { data: booking, error: bookingError } = await admin
       .from("bookings")
       .insert({
@@ -157,9 +163,9 @@ export async function POST(request: NextRequest) {
         end_time: endTime,
         total_duration_minutes: totalDuration,
         total_price_cents: totalPriceCents,
-        advance_percentage: 100,
-        advance_amount_cents: totalPriceCents,
-        balance_cents: 0,
+        advance_percentage: advancePercentage,  // 25% — adelanto requerido
+        advance_amount_cents: 0,                // Sin pago inicial aún
+        balance_cents: totalPriceCents,         // Saldo total pendiente
         status: "pendiente",
         payment_status: "sin_pago",
         slot_locked_at: new Date().toISOString(),
@@ -209,9 +215,13 @@ export async function POST(request: NextRequest) {
       start_time: booking.start_time,
       total_price_cents: booking.total_price_cents,
       total_price_soles: totalPriceSoles,
+      advance_percentage: advancePercentage,
+      advance_required_cents: advanceAmountCents,
+      advance_required_soles: (advanceAmountCents / 100).toFixed(2),
+      balance_soles: totalPriceSoles, // saldo = total ya que aún no hay pago
       services: serviceNames,
       whatsapp_url: whatsappUrl,
-      message: "Reserva registrada exitosamente. Confírmala por WhatsApp.",
+      message: `Reserva registrada exitosamente. Para confirmarla, realiza un adelanto mínimo del ${advancePercentage}% (S/ ${(advanceAmountCents / 100).toFixed(2)}) y confírmala por WhatsApp.`,
     });
   } catch (err) {
     console.error("Booking API error:", err);

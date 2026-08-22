@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
+import { PaymentModal } from "./PaymentModal";
+import { PaymentHistoryModal } from "./PaymentHistoryModal";
+import { PaymentSettingsModal } from "./PaymentSettingsModal";
+import { PaymentQRWidget } from "@/components/payment/PaymentQRWidget";
 
 type Booking = {
   id: string;
@@ -13,6 +17,7 @@ type Booking = {
   status: string;
   payment_status: string;
   total_price_cents: number;
+  advance_percentage: number;
   advance_amount_cents: number;
   balance_cents: number;
   service_type: string;
@@ -50,18 +55,33 @@ const statusColors: Record<string, string> = {
 };
 
 const paymentLabels: Record<string, string> = {
-  sin_pago: "Pendiente de cobro",
-  pendiente: "Pendiente de cobro",
-  parcial: "Parcial",
-  total: "Pagado en local",
+  sin_pago:  "Sin pago",
+  pendiente: "Sin pago",
+  parcial:   "Adelanto pagado",
+  total:     "Pagado completo",
 };
 
 const paymentColors: Record<string, string> = {
-  sin_pago: "badge-error",
+  sin_pago:  "badge-error",
   pendiente: "badge-error",
-  parcial: "badge-warning",
-  total: "badge-success",
+  parcial:   "badge-warning",
+  total:     "badge-success",
 };
+
+// Tipo para el modal de pago — resumen financiero de la reserva
+interface BookingSummaryForPayment {
+  id: string;
+  booking_code: string;
+  client_first_name: string;
+  client_last_name: string;
+  total_price_cents: number;
+  advance_percentage: number;
+  advance_required_cents: number;
+  amount_paid_cents: number;
+  balance_cents: number;
+  payment_status: string;
+  booking_status: string;
+}
 
 export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const isAdmin = userRole === "admin";
@@ -76,6 +96,11 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Estado de modales de pago
+  const [paymentModalBooking, setPaymentModalBooking] = useState<BookingSummaryForPayment | null>(null);
+  const [historyModalBooking, setHistoryModalBooking] = useState<{ id: string; code: string; clientName: string } | null>(null);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
   const supabase = useMemo(() => createClient(), []);
 
   const loadBookings = useCallback(
@@ -86,7 +111,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
         let query = supabase
           .from("bookings")
           .select(
-            "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
+            "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
           )
           .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
           .order("booking_date", { ascending: false })
@@ -399,17 +424,39 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const confirmedCount = bookings.filter((b) => b.status === "confirmada").length;
   const completedCount = bookings.filter((b) => b.status === "completada").length;
 
+  // Ingresos cobrados: suma de pagos verificados (advance_amount_cents) en reservas activas y completadas
+  // advance_amount_cents es recalculado por el trigger Postgres desde payment_logs verificados.
   const totalCollectedRevenue = bookings
-    .filter((b) => b.payment_status === "total" || b.status === "completada")
-    .reduce((sum, b) => sum + b.total_price_cents, 0);
+    .filter((b) => ["confirmada", "completada"].includes(b.status))
+    .reduce((sum, b) => sum + (b.advance_amount_cents || 0), 0);
 
+  // Saldo pendiente por cobrar en reservas activas con pago incompleto
   const pendingRevenueToCollect = bookings
     .filter(
       (b) =>
-        (b.status === "pendiente" || b.status === "confirmada") &&
+        ["pendiente", "confirmada"].includes(b.status) &&
         b.payment_status !== "total"
     )
-    .reduce((sum, b) => sum + b.total_price_cents, 0);
+    .reduce((sum, b) => sum + (b.balance_cents || 0), 0);
+
+  // Helper para abrir modal de pago
+  function openPaymentModal(b: Booking) {
+    const advancePct = b.advance_percentage || 25;
+    const advanceRequired = Math.ceil(b.total_price_cents * advancePct / 100);
+    setPaymentModalBooking({
+      id: b.id,
+      booking_code: b.booking_code,
+      client_first_name: b.client_first_name,
+      client_last_name: b.client_last_name,
+      total_price_cents: b.total_price_cents,
+      advance_percentage: advancePct,
+      advance_required_cents: advanceRequired,
+      amount_paid_cents: b.advance_amount_cents || 0,
+      balance_cents: b.balance_cents || b.total_price_cents,
+      payment_status: b.payment_status,
+      booking_status: b.status,
+    });
+  }
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60, width: "100%", minWidth: 0 }}>
@@ -454,15 +501,30 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => loadBookings(false)}
-          className="btn btn-ghost btn-sm"
-          style={{ fontSize: "0.75rem", padding: "3px 8px" }}
-          title="Forzar actualización manual de reservas"
-        >
-          🔄 Actualizar
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: "0.75rem", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}
+              title="Configurar titular, teléfono de Yape, QR y porcentaje de adelanto"
+              id="payment-settings-btn"
+            >
+              ⚙️ Ajustes de Cobro / QR
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => loadBookings(false)}
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: "0.75rem", padding: "4px 8px" }}
+            title="Forzar actualización manual de reservas"
+          >
+            🔄 Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Stats Strip */}
@@ -1089,7 +1151,52 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                             gap: 6,
                           }}
                         >
-                          {/* Quick Confirm button for WhatsApp Pending */}
+                          {/* Botón: Registrar Pago (admin + recepcionista) */}
+                          {b.status !== "cancelada" && b.status !== "completada" && b.payment_status !== "total" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openPaymentModal(b);
+                              }}
+                              disabled={actionLoading === b.id}
+                              className="btn btn-primary btn-sm"
+                              style={{
+                                padding: "4px 8px",
+                                fontSize: "0.73rem",
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                              title="Registrar pago (Yape / Efectivo / Mixto)"
+                              id={`pay-btn-${b.id}`}
+                            >
+                              💳 Pagar
+                            </button>
+                          )}
+
+                          {/* Botón: Ver Historial de Pagos */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHistoryModalBooking({
+                                id: b.id,
+                                code: b.booking_code,
+                                clientName: `${b.client_first_name} ${b.client_last_name}`,
+                              });
+                            }}
+                            disabled={actionLoading === b.id}
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: "4px 8px", fontSize: "0.73rem" }}
+                            title="Ver historial de pagos"
+                            id={`history-btn-${b.id}`}
+                          >
+                            🧾
+                          </button>
+
+                          {/* Botón: Confirmar (solo si tiene el adelanto pagado) */}
                           {b.status === "pendiente" && (
                             <button
                               type="button"
@@ -1100,44 +1207,34 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                               disabled={actionLoading === b.id}
                               className="btn btn-sm"
                               style={{
-                                background: "var(--color-success)",
-                                color: "#000000",
+                                background: (b.advance_amount_cents || 0) >= Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
+                                  ? "var(--color-success)"
+                                  : "rgba(106,153,78,0.2)",
+                                color: (b.advance_amount_cents || 0) >= Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
+                                  ? "#000000"
+                                  : "var(--color-text-muted)",
                                 fontWeight: 700,
                                 padding: "4px 8px",
-                                fontSize: "0.75rem",
+                                fontSize: "0.73rem",
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: 4,
+                                cursor: (b.advance_amount_cents || 0) < Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
+                                  ? "not-allowed"
+                                  : "pointer",
                               }}
-                              title="Confirmar Cita"
+                              title={
+                                (b.advance_amount_cents || 0) >= Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
+                                  ? "Confirmar reserva"
+                                  : `Falta adelanto mínimo del ${b.advance_percentage || 25}% (S/ ${(Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100) / 100).toFixed(2)})`
+                              }
+                              id={`confirm-btn-${b.id}`}
                             >
                               <img src="/Activo.svg" alt="Confirmar" style={{ width: 14, height: 14 }} /> Confirmar
                             </button>
                           )}
 
-                          {/* Quick Pay button if not total */}
-                          {b.payment_status !== "total" &&
-                            b.status !== "cancelada" && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateBooking(b.id, { mark_paid: true });
-                                }}
-                                disabled={actionLoading === b.id}
-                                className="btn btn-primary btn-sm"
-                                style={{
-                                  padding: "4px 8px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 700,
-                                }}
-                                title="Marcar como Cobrado en Local"
-                              >
-                                💰 Cobrar
-                              </button>
-                            )}
-
-                          {/* Quick Complete button if confirmed */}
+                          {/* Botón: Completar servicio */}
                           {b.status === "confirmada" && (
                             <button
                               type="button"
@@ -1147,16 +1244,15 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                               }}
                               disabled={actionLoading === b.id}
                               className="btn btn-secondary btn-sm"
-                              style={{
-                                padding: "4px 8px",
-                                fontSize: "0.75rem",
-                              }}
-                              title="Marcar Cita Completada"
+                              style={{ padding: "4px 8px", fontSize: "0.73rem" }}
+                              title="Marcar servicio como completado"
+                              id={`complete-btn-${b.id}`}
                             >
                               🏁
                             </button>
                           )}
 
+                          {/* Botón: Eliminar (solo admin) */}
                           {isAdmin && (
                             <button
                               type="button"
@@ -1173,6 +1269,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 borderColor: "rgba(184,59,46,0.3)",
                                 fontSize: "0.8125rem",
                               }}
+                              id={`delete-btn-${b.id}`}
                             >
                               🗑️
                             </button>
@@ -1365,7 +1462,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 </div>
                               </div>
 
-                              {/* Payment Info */}
+                              {/* Detalle Financiero y QR */}
                               <div>
                                 <p
                                   style={{
@@ -1377,52 +1474,24 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                     marginBottom: 8,
                                   }}
                                 >
-                                  Información de pago
-                                </p>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    marginBottom: 4,
-                                    fontSize: "0.8125rem",
-                                  }}
-                                >
-                                  <span className="text-muted">
-                                    Estado de pago:
-                                  </span>
-                                  <span
-                                    className={`badge ${
-                                      paymentColors[b.payment_status] ||
-                                      "badge-neutral"
-                                    }`}
-                                  >
-                                    {paymentLabels[b.payment_status] ||
-                                      b.payment_status}
-                                  </span>
+                                    Información de cobro y QR
+                                  </p>
+                                  <PaymentQRWidget
+                                    bookingId={b.id}
+                                    bookingCode={b.booking_code}
+                                    serviceNames={b.service_type === "barberia" ? "Barbería" : b.service_type === "spa" ? "Spa" : "Mixto"}
+                                    totalPriceCents={b.total_price_cents}
+                                    advancePercentage={b.advance_percentage || 25}
+                                    amountPaidCents={b.advance_amount_cents || 0}
+                                    balanceCents={b.balance_cents}
+                                    clientName={`${b.client_first_name} ${b.client_last_name}`}
+                                    bookingDate={b.booking_date}
+                                    startTime={b.start_time}
+                                    messageType={b.status === "pendiente" ? "advance" : "balance"}
+                                    compact={true}
+                                    onProofUploaded={() => loadBookings(true)}
+                                  />
                                 </div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    paddingTop: 8,
-                                    marginTop: 8,
-                                    borderTop: "1px solid var(--color-border)",
-                                    fontSize: "0.9375rem",
-                                  }}
-                                >
-                                  <span style={{ fontWeight: 700 }}>
-                                    Total del Servicio:
-                                  </span>
-                                  <span
-                                    style={{
-                                      fontWeight: 800,
-                                      color: "var(--color-primary)",
-                                    }}
-                                  >
-                                    S/ {(b.total_price_cents / 100).toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
 
                               {/* WhatsApp Contact */}
                               <div>
@@ -1668,6 +1737,42 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           </div>
         )}
       </div>
+
+      {/* Modal de registro de pago */}
+      {paymentModalBooking && (
+        <PaymentModal
+          booking={paymentModalBooking}
+          userRole={userRole}
+          onClose={() => setPaymentModalBooking(null)}
+          onSuccess={() => {
+            setPaymentModalBooking(null);
+            loadBookings(true);
+          }}
+        />
+      )}
+
+      {/* Modal de historial de pagos */}
+      {historyModalBooking && (
+        <PaymentHistoryModal
+          bookingId={historyModalBooking.id}
+          bookingCode={historyModalBooking.code}
+          clientName={historyModalBooking.clientName}
+          userRole={userRole}
+          onClose={() => setHistoryModalBooking(null)}
+          onPaymentVoided={() => loadBookings(true)}
+        />
+      )}
+
+      {/* Modal de configuración de pagos (solo admin) */}
+      {isSettingsModalOpen && (
+        <PaymentSettingsModal
+          onClose={() => setIsSettingsModalOpen(false)}
+          onSuccess={() => {
+            setIsSettingsModalOpen(false);
+            loadBookings(true);
+          }}
+        />
+      )}
     </div>
   );
 }

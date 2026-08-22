@@ -74,17 +74,19 @@ export async function findAvailableEmployeeForBooking(
 
   const employeeIds = activeEmployees.map((e) => e.id);
 
-  // 2. Filtrar ausencias y permisos (employee_blocks) para la fecha y franja horaria
+  // 2. Filtrar ausencias y permisos aprobados (employee_blocks) que cubran la fecha y franja horaria
   const { data: absences } = await admin
     .from("employee_blocks")
-    .select("employee_id, start_time, end_time")
-    .eq("block_date", bookingDate)
+    .select("employee_id, start_date, end_date, is_all_day, start_time, end_time, status")
+    .lte("start_date", bookingDate)
+    .gte("end_date", bookingDate)
+    .eq("status", "approved")
     .in("employee_id", employeeIds);
 
   const absentEmployeeIds = new Set<string>();
   if (absences?.length) {
     for (const b of absences) {
-      if (!b.start_time || !b.end_time) {
+      if (b.is_all_day || !b.start_time || !b.end_time) {
         // Ausencia/permiso de todo el día
         absentEmployeeIds.add(b.employee_id);
       } else if (hasTimeOverlap(b.start_time, b.end_time, startTime, endTime)) {
@@ -210,13 +212,14 @@ export async function getActiveStaffCountBySpecialty(
   const { data: employees } = await query;
   if (!employees?.length) return 1;
 
-  // Filtrar ausencias de todo el día para esa fecha
+  // Filtrar ausencias aprobadas de todo el día para esa fecha
   const { data: fullDayAbsences } = await admin
     .from("employee_blocks")
     .select("employee_id")
-    .eq("block_date", bookingDate)
-    .is("start_time", null)
-    .is("end_time", null)
+    .lte("start_date", bookingDate)
+    .gte("end_date", bookingDate)
+    .eq("status", "approved")
+    .or("is_all_day.eq.true,start_time.is.null")
     .in("employee_id", employees.map((e) => e.id));
 
   const absentSet = new Set(fullDayAbsences?.map((a) => a.employee_id) || []);

@@ -23,7 +23,9 @@ interface BlockRecord {
 
 interface EmployeeHistoryModalProps {
   employee: Employee;
+  userRole?: string;
   onClose: () => void;
+  onRefresh?: () => void;
 }
 
 export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModalProps) {
@@ -98,6 +100,8 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
   // Statistics calculation
   const totalPresents = attendances.filter((a) => a.check_in).length;
   const totalBlocks = blocks.length;
+  const totalBonusMinutes = attendances.reduce((acc, a) => acc + (a.bonus_minutes || 0), 0);
+  const totalBonusHours = (totalBonusMinutes / 60).toFixed(1);
 
   function formatTime(isoString: string | null) {
     if (!isoString) return "—";
@@ -283,6 +287,12 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
               <span style={{ fontSize: "0.6875rem", color: "var(--color-text-dim)", textTransform: "uppercase" }}>Permisos Justificados</span>
               <p style={{ margin: "2px 0 0 0", fontSize: "1.25rem", fontWeight: 800, color: "var(--color-primary)" }}>{totalBlocks}</p>
             </div>
+            <div style={{ padding: "10px 14px", background: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "var(--radius-md)", textAlign: "center" }}>
+              <span style={{ fontSize: "0.6875rem", color: "var(--color-text-dim)", textTransform: "uppercase" }}>Tiempo Bonificación</span>
+              <p style={{ margin: "2px 0 0 0", fontSize: "1.25rem", fontWeight: 800, color: "#22c55e" }}>
+                +{totalBonusMinutes} min <span style={{ fontSize: "0.75rem", fontWeight: 500 }}>({totalBonusHours}h)</span>
+              </p>
+            </div>
           </div>
         </div>
 
@@ -308,108 +318,54 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
                     <th style={{ padding: "10px 12px" }}>Estado</th>
                     <th style={{ padding: "10px 12px" }}>Entrada</th>
                     <th style={{ padding: "10px 12px" }}>Salida</th>
+                    <th style={{ padding: "10px 12px" }}>Bonificación</th>
                     <th style={{ padding: "10px 12px" }}>Tiempo</th>
                     <th style={{ padding: "10px 12px" }}>Notas / Permiso</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {attendances.map((att) => {
-                    const statusInfo = getAttendanceStatusInfo(
-                      att.status,
-                      att.entry_justification,
-                      att.exit_justification
-                    );
-                    const tooltipText = [
-                      att.entry_justification ? `Justif. Entrada: ${att.entry_justification}` : null,
-                      att.exit_justification ? `Justif. Salida: ${att.exit_justification}` : null,
-                      att.notes ? `Notas: ${att.notes}` : null,
-                    ].filter(Boolean).join(" | ");
-
-                    return (
-                      <tr key={att.id} style={{ borderBottom: "1px solid rgba(200, 164, 92, 0.1)" }}>
-                        <td style={{ padding: "12px", fontWeight: 600, color: "#ffffff" }}>
-                          {att.date}
-                        </td>
-                        <td style={{ padding: "12px" }}>
-                          <span className={`badge ${statusInfo.badgeClass}`} title={tooltipText || undefined}>
-                            {statusInfo.icon} {statusInfo.label}
+                  {attendances.map((att) => (
+                    <tr key={att.id} style={{ borderBottom: "1px solid rgba(200, 164, 92, 0.1)" }}>
+                      <td style={{ padding: "12px", fontWeight: 600, color: "#ffffff" }}>
+                        {att.date}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {(() => {
+                          const statusInfo = getAttendanceStatusInfo(att.status, att.entry_justification, att.exit_justification);
+                          return (
+                            <span className={`badge ${statusInfo.badgeClass}`}>
+                              {statusInfo.icon} {statusInfo.label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td style={{ padding: "12px", color: "var(--color-primary)" }}>
+                        {formatTime(att.check_in)}
+                        {att.check_in_justified && (
+                          <span className="badge badge-success" style={{ fontSize: "0.62rem", display: "block", marginTop: 2 }}>
+                            ✅ Entrada Justificada
                           </span>
-                        </td>
-                        <td style={{ padding: "12px", color: "var(--color-primary)" }}>
-                          <div>
-                            <span>{formatTime(att.check_in)}</span>
-                            {att.entry_justification && (
-                              <span
-                                style={{
-                                  display: "block",
-                                  fontSize: "0.6875rem",
-                                  color: "var(--color-text-dim)",
-                                  background: "rgba(200, 164, 92, 0.08)",
-                                  padding: "2px 5px",
-                                  borderRadius: 3,
-                                  marginTop: 2,
-                                  maxWidth: 130,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                                title={`Entrada justificada: ${att.entry_justification}`}
-                              >
-                                📝 {att.entry_justification}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td style={{ padding: "12px", color: att.check_out ? "var(--color-primary)" : "var(--color-text-dim)" }}>
-                          <div>
-                            <span>{formatTime(att.check_out)}</span>
-                            {att.exit_justification && (
-                              <span
-                                style={{
-                                  display: "block",
-                                  fontSize: "0.6875rem",
-                                  color: "var(--color-text-dim)",
-                                  background: "rgba(200, 164, 92, 0.08)",
-                                  padding: "2px 5px",
-                                  borderRadius: 3,
-                                  marginTop: 2,
-                                  maxWidth: 130,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                                title={`Salida justificada: ${att.exit_justification}`}
-                              >
-                                📝 {att.exit_justification}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td style={{ padding: "12px", color: "var(--color-text-muted)" }}>
-                          {calculateDuration(att.check_in, att.check_out)}
-                        </td>
-                        <td style={{ padding: "12px", color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
-                          {att.entry_justification || att.exit_justification ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                              {att.entry_justification && (
-                                <span style={{ color: "var(--color-primary)" }}>
-                                  <strong>Entrada:</strong> {att.entry_justification}
-                                </span>
-                              )}
-                              {att.exit_justification && (
-                                <span style={{ color: "var(--color-warning)" }}>
-                                  <strong>Salida:</strong> {att.exit_justification}
-                                </span>
-                              )}
-                              {att.notes && <span><strong>Obs:</strong> {att.notes}</span>}
-                            </div>
-                          ) : (
-                            att.notes || "—"
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        )}
+                      </td>
+                      <td style={{ padding: "12px", color: att.check_out ? "var(--color-primary)" : "var(--color-text-dim)" }}>
+                        {formatTime(att.check_out)}
+                        {att.check_out_justified && (
+                          <span className="badge badge-success" style={{ fontSize: "0.62rem", display: "block", marginTop: 2 }}>
+                            ✅ Salida Justificada
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px", color: (att.bonus_minutes || 0) > 0 ? "#22c55e" : "var(--color-text-dim)", fontWeight: (att.bonus_minutes || 0) > 0 ? 700 : 400 }}>
+                        {(att.bonus_minutes || 0) > 0 ? `+${att.bonus_minutes} min` : "—"}
+                      </td>
+                      <td style={{ padding: "12px", color: "var(--color-text-muted)" }}>
+                        {calculateDuration(att.check_in, att.check_out)}
+                      </td>
+                      <td style={{ padding: "12px", color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
+                        {att.notes || "—"}
+                      </td>
+                    </tr>
+                  ))}
 
                   {/* Render justification blocks not covered by check_ins */}
                   {blocks

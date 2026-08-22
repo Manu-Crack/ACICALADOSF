@@ -50,8 +50,9 @@ export default function LoginPage() {
           window.location.href = "/";
         }
       }
-    } catch (err: any) {
-      setError(err.message || "Error de conexión o configuración local.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error de conexión o configuración local.";
+      setError(msg);
       setLoading(false);
     }
   }

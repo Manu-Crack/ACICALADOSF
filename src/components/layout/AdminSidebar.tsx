@@ -61,7 +61,10 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
   // Exclusive Official Sections
   const navItems = [
     { href: "/dashboard", label: "Inicio", icon: "/iconsAdmi/Inicio.svg", show: true },
+    { href: "/dashboard/calendario", label: "Calendario", icon: "/iconsAdmi/Calendario.svg", show: isAdminOrRecep },
     { href: "/dashboard/reservas", label: "Reservas", icon: "/iconsAdmi/Reservas.svg", show: isAdminOrRecep },
+    { href: "/dashboard/reportes", label: "Reportes", icon: "/iconsAdmi/Reportes.svg", show: isAdminOrRecep },
+    { href: "/dashboard/egresos", label: "Egresos", icon: "/iconsAdmi/Egresos.svg", show: isAdminOrRecep },
     { href: "/dashboard/empleados", label: "Empleados", icon: "/iconsAdmi/Empleados.svg", show: isAdminOrRecep },
     { href: "/dashboard/asistencia", label: "Asistencia", icon: "/iconsAdmi/Asistencia.svg", show: isAdminOrRecep },
     { href: "/dashboard/servicios", label: "Servicios", icon: "/iconsAdmi/Servicios.svg", show: isAdminOrRecep },

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ATTENDANCE_STATUS, AttendanceStatus } from "@/lib/types/attendance";
+import { calculateBonusMinutes } from "@/lib/utils/bonus-calculator";
+import { DEFAULT_BONUS_RULES, type BonusRule } from "@/lib/types/bonus";
 
 /**
  * Verificar autenticación y rol admin o recepcionista (lectura).
@@ -137,12 +139,38 @@ export async function GET(request: NextRequest) {
     const { data: blocks, error: blockError } = await blockQuery;
     if (blockError) throw blockError;
 
+    // 4. Obtener justificaciones registradas en el rango
+    let justQuery = admin
+      .from("attendance_justifications")
+      .select(`
+        id,
+        attendance_id,
+        employee_id,
+        type,
+        reason,
+        observation,
+        evidence_url,
+        status,
+        registered_by,
+        approved_by,
+        approved_at,
+        created_at
+      `)
+      .order("created_at", { ascending: false });
+
+    if (employeeIdParam) {
+      justQuery = justQuery.eq("employee_id", employeeIdParam);
+    }
+
+    const { data: justifications } = await justQuery;
+
     return NextResponse.json({
       startDate,
       endDate,
       employees: employees || [],
       attendances: attendances || [],
       blocks: blocks || [],
+      justifications: justifications || [],
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -189,6 +217,19 @@ export async function POST(request: NextRequest) {
     const validStatus = normalizeAttendanceStatus(status);
     const admin = createAdminClient();
 
+    // Calcular bonificación si hay salida
+    let bonusMinutes = 0;
+    if (check_out) {
+      let bonusRules: BonusRule[] = DEFAULT_BONUS_RULES;
+      try {
+        const { data: dbRules } = await admin.from("bonus_settings").select("*");
+        if (dbRules && dbRules.length > 0) bonusRules = dbRules;
+      } catch (err) {
+        console.error("Error loading bonus rules:", err);
+      }
+      bonusMinutes = calculateBonusMinutes(check_out, date, bonusRules).bonus_minutes;
+    }
+
     // Upsert asistencia para ese empleado y fecha
     const { data, error } = await admin
       .from("employee_attendances")
@@ -199,6 +240,8 @@ export async function POST(request: NextRequest) {
           check_in,
           check_out: check_out || null,
           status: validStatus,
+          bonus_minutes: bonusMinutes,
+          bonus_calculation_type: "auto",
           notes: notes || null,
           entry_justification: entry_justification ? String(entry_justification).trim() || null : null,
           exit_justification: exit_justification ? String(exit_justification).trim() || null : null,
@@ -246,17 +289,44 @@ export async function PUT(request: NextRequest) {
     const validStatus = normalizeAttendanceStatus(status);
     const admin = createAdminClient();
 
+    const { data: existing } = await admin
+      .from("employee_attendances")
+      .select("date, bonus_calculation_type, bonus_minutes")
+      .eq("id", id)
+      .single();
+
+    const updatePayload: Record<string, unknown> = {
+      check_in,
+      check_out: check_out || null,
+      status: validStatus,
+      notes: notes || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Si la salida cambió y el cálculo es automático, recalcular bonificación
+    if (check_out && existing && existing.bonus_calculation_type !== "manual") {
+      let bonusRules: BonusRule[] = DEFAULT_BONUS_RULES;
+      try {
+        const { data: dbRules } = await admin.from("bonus_settings").select("*");
+        if (dbRules && dbRules.length > 0) bonusRules = dbRules;
+      } catch (err) {
+        console.error("Error loading bonus rules:", err);
+      }
+      updatePayload.bonus_minutes = calculateBonusMinutes(check_out, existing.date, bonusRules).bonus_minutes;
+    } else if (!check_out) {
+      updatePayload.bonus_minutes = 0;
+    }
+
+    if (entry_justification !== undefined) {
+      updatePayload.entry_justification = entry_justification ? String(entry_justification).trim() || null : null;
+    }
+    if (exit_justification !== undefined) {
+      updatePayload.exit_justification = exit_justification ? String(exit_justification).trim() || null : null;
+    }
+
     const { data, error } = await admin
       .from("employee_attendances")
-      .update({
-        check_in,
-        check_out: check_out || null,
-        status: validStatus,
-        notes: notes || null,
-        entry_justification: entry_justification !== undefined ? (entry_justification ? String(entry_justification).trim() || null : null) : undefined,
-        exit_justification: exit_justification !== undefined ? (exit_justification ? String(exit_justification).trim() || null : null) : undefined,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
