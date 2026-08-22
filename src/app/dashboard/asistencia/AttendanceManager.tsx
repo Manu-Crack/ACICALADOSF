@@ -58,8 +58,29 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
   const [manualDate, setManualDate] = useState<string>(selectedDate);
   const [manualCheckIn, setManualCheckIn] = useState<string>("09:00");
   const [manualCheckOut, setManualCheckOut] = useState<string>("18:00");
+  const [manualStatus, setManualStatus] = useState<string>("presente");
+  const [manualEntryJustification, setManualEntryJustification] = useState<string>("");
+  const [manualExitJustification, setManualExitJustification] = useState<string>("");
   const [manualNotes, setManualNotes] = useState<string>("");
   const [savingManual, setSavingManual] = useState(false);
+  const [showEntryJustifyInput, setShowEntryJustifyInput] = useState(false);
+  const [showExitJustifyInput, setShowExitJustifyInput] = useState(false);
+
+  // Helper to extract HH:mm in America/Lima timezone
+  function isoToPeruTime(isoString: string | null | undefined): string {
+    if (!isoString) return "";
+    try {
+      const d = new Date(isoString);
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: "America/Lima",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(d);
+    } catch {
+      return "";
+    }
+  }
 
   // Compute start/end dates
   const computeDates = useCallback(() => {
@@ -116,14 +137,41 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
     loadData();
   }, [loadData]);
 
-  // Open Manual Modal
+  // Open Manual Modal with existing data prefilled if available
   function handleOpenManualModal(emp: Employee) {
     if (!canEditOrDelete) return;
     setManualEmployee(emp);
-    setManualDate(selectedDate);
-    setManualCheckIn("09:00");
-    setManualCheckOut("18:00");
-    setManualNotes("Ajuste manual administrativo");
+    
+    // Check if there is an existing attendance for this employee on selectedDate
+    const existing = attendances.find(
+      (a) => a.employee_id === emp.id && (rangeMode === "day" ? a.date === selectedDate : true)
+    );
+
+    const targetDate = existing?.date || selectedDate;
+    setManualDate(targetDate);
+
+    if (existing) {
+      const inTime = isoToPeruTime(existing.check_in) || "09:00";
+      const outTime = isoToPeruTime(existing.check_out) || "";
+      setManualCheckIn(inTime);
+      setManualCheckOut(outTime);
+      setManualStatus(existing.status || "presente");
+      setManualEntryJustification(existing.entry_justification || "");
+      setManualExitJustification(existing.exit_justification || "");
+      setManualNotes(existing.notes || "");
+      setShowEntryJustifyInput(Boolean(existing.entry_justification || existing.status === "tardanza"));
+      setShowExitJustifyInput(Boolean(existing.exit_justification || existing.status === "salida_temprana"));
+    } else {
+      setManualCheckIn("09:00");
+      setManualCheckOut("18:00");
+      setManualStatus("presente");
+      setManualEntryJustification("");
+      setManualExitJustification("");
+      setManualNotes("Ajuste manual administrativo");
+      setShowEntryJustifyInput(false);
+      setShowExitJustifyInput(false);
+    }
+
     setShowManualModal(true);
   }
 
@@ -145,8 +193,10 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
           date: manualDate,
           check_in: checkInISO,
           check_out: checkOutISO,
-          status: "presente",
-          notes: manualNotes,
+          status: manualStatus,
+          entry_justification: manualEntryJustification.trim() || null,
+          exit_justification: manualExitJustification.trim() || null,
+          notes: manualNotes.trim() || null,
         }),
       });
 
@@ -511,9 +561,19 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                   );
 
                   if (empAttendance) {
-                    const statusInfo = getAttendanceStatusInfo(empAttendance.status);
+                    const statusInfo = getAttendanceStatusInfo(
+                      empAttendance.status,
+                      empAttendance.entry_justification,
+                      empAttendance.exit_justification
+                    );
+                    const tooltipText = [
+                      empAttendance.entry_justification ? `Entrada: ${empAttendance.entry_justification}` : null,
+                      empAttendance.exit_justification ? `Salida: ${empAttendance.exit_justification}` : null,
+                      empAttendance.notes ? `Notas: ${empAttendance.notes}` : null,
+                    ].filter(Boolean).join(" | ");
+
                     statusBadge = (
-                      <span className={`badge ${statusInfo.badgeClass}`}>
+                      <span className={`badge ${statusInfo.badgeClass}`} title={tooltipText || undefined}>
                         {statusInfo.icon} {statusInfo.label}
                       </span>
                     );
@@ -582,14 +642,76 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                         {statusBadge}
                       </td>
 
-                      {/* Check-In */}
-                      <td style={{ padding: "14px 16px", color: empAttendance ? "var(--color-primary)" : "var(--color-text-dim)", fontWeight: empAttendance ? 600 : 400 }}>
-                        {empAttendance ? formatTime(empAttendance.check_in) : "—"}
+                      {/* Check-In with Justification tag if present */}
+                      <td style={{ padding: "14px 16px" }}>
+                        {empAttendance ? (
+                          <div>
+                            <span style={{ color: "var(--color-primary)", fontWeight: 600, display: "block" }}>
+                              {formatTime(empAttendance.check_in)}
+                            </span>
+                            {empAttendance.entry_justification && (
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "var(--color-text-dim)",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  marginTop: 3,
+                                  background: "rgba(200, 164, 92, 0.1)",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  border: "1px solid rgba(200, 164, 92, 0.25)",
+                                  maxWidth: 150,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                                title={`Justificación Entrada: ${empAttendance.entry_justification}`}
+                              >
+                                📝 {empAttendance.entry_justification}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--color-text-dim)" }}>—</span>
+                        )}
                       </td>
 
-                      {/* Check-Out */}
-                      <td style={{ padding: "14px 16px", color: empAttendance?.check_out ? "var(--color-primary)" : "var(--color-text-dim)", fontWeight: empAttendance?.check_out ? 600 : 400 }}>
-                        {empAttendance?.check_out ? formatTime(empAttendance.check_out) : "—"}
+                      {/* Check-Out with Justification tag if present */}
+                      <td style={{ padding: "14px 16px" }}>
+                        {empAttendance?.check_out ? (
+                          <div>
+                            <span style={{ color: "var(--color-primary)", fontWeight: 600, display: "block" }}>
+                              {formatTime(empAttendance.check_out)}
+                            </span>
+                            {empAttendance.exit_justification && (
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "var(--color-text-dim)",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  marginTop: 3,
+                                  background: "rgba(200, 164, 92, 0.1)",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  border: "1px solid rgba(200, 164, 92, 0.25)",
+                                  maxWidth: 150,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                                title={`Justificación Salida: ${empAttendance.exit_justification}`}
+                              >
+                                📝 {empAttendance.exit_justification}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--color-text-dim)" }}>—</span>
+                        )}
                       </td>
 
                       {/* Duration */}
@@ -629,7 +751,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                               onClick={() => handleOpenManualModal(emp)}
                               className="btn btn-ghost btn-sm"
                               style={{ padding: "5px 8px", fontSize: "0.75rem" }}
-                              title="Ajuste manual de asistencia"
+                              title="Ajuste manual y justificaciones de asistencia"
                             >
                               ✏️
                             </button>
@@ -683,6 +805,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
             justifyContent: "center",
             zIndex: 9999,
             padding: 16,
+            animation: "fadeIn 0.2s ease-out",
           }}
           onClick={() => setShowManualModal(false)}
         >
@@ -692,16 +815,34 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
               border: "1px solid var(--color-primary-border)",
               borderRadius: "var(--radius-lg)",
               width: "100%",
-              maxWidth: 450,
+              maxWidth: 520,
+              maxHeight: "90vh",
               boxShadow: "var(--shadow-elevated)",
               overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontSize: "1.0625rem", color: "#ffffff", fontWeight: 700 }}>
-                Ajuste Manual: {manualEmployee.first_name} {manualEmployee.last_name}
-              </h3>
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--color-border)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "rgba(200, 164, 92, 0.05)",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.0625rem", color: "#ffffff", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>✏️</span> Ajuste Manual: {manualEmployee.first_name} {manualEmployee.last_name}
+                </h3>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>
+                  {manualEmployee.type === "spa" ? "Especialidad: Spa" : manualEmployee.type === "recepcionista" ? "Recepción" : "Especialidad: Barbería"}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowManualModal(false)}
@@ -711,21 +852,82 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
               </button>
             </div>
 
-            <form onSubmit={handleSaveManual} style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label className="label">Fecha</label>
-                <input
-                  type="date"
-                  value={manualDate}
-                  onChange={(e) => setManualDate(e.target.value)}
-                  className="input"
-                  required
-                />
-              </div>
-
+            {/* Modal Scrollable Form */}
+            <form
+              onSubmit={handleSaveManual}
+              style={{
+                padding: 20,
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+                overflowY: "auto",
+              }}
+            >
+              {/* Fecha y Estado General */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <label className="label">Hora Entrada</label>
+                  <label className="label" style={{ fontSize: "0.8125rem" }}>Fecha del Registro</label>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    className="input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label" style={{ fontSize: "0.8125rem" }}>Estado de Asistencia</label>
+                  <select
+                    value={manualStatus}
+                    onChange={(e) => setManualStatus(e.target.value)}
+                    className="select"
+                    style={{ width: "100%" }}
+                  >
+                    <option value="presente">🟢 Presente (A tiempo)</option>
+                    <option value="tardanza">🟡 Tardanza</option>
+                    <option value="salida_temprana">🟠 Salida Temprana</option>
+                    <option value="falta_justificada">🟡 Falta Justificada</option>
+                    <option value="falta_injustificada">🔴 Falta Injustificada</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* BLOQUE ENTRADA (CHECK-IN) & JUSTIFICACIÓN */}
+              <div
+                style={{
+                  background: "rgba(0, 0, 0, 0.25)",
+                  border: "1px solid rgba(200, 164, 92, 0.15)",
+                  borderRadius: "var(--radius-md)",
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#ffffff" }}>
+                      🟢 Entrada (Check-In)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEntryJustifyInput(!showEntryJustifyInput)}
+                    className="btn btn-ghost btn-sm"
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "3px 8px",
+                      color: showEntryJustifyInput || manualEntryJustification ? "var(--color-primary)" : "var(--color-text-dim)",
+                    }}
+                  >
+                    📝 {showEntryJustifyInput ? "Ocultar motivo" : manualEntryJustification ? "Editar justificación" : "+ Justificar Entrada"}
+                  </button>
+                </div>
+
+                <div>
+                  <label className="label" style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>
+                    Hora de Entrada
+                  </label>
                   <input
                     type="time"
                     value={manualCheckIn}
@@ -734,8 +936,96 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                     required
                   />
                 </div>
+
+                {(showEntryJustifyInput || manualEntryJustification) && (
+                  <div
+                    style={{
+                      background: "rgba(200, 164, 92, 0.05)",
+                      border: "1px dashed rgba(200, 164, 92, 0.3)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: 10,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <label className="label" style={{ fontSize: "0.75rem", color: "var(--color-primary)", margin: 0 }}>
+                      Motivo / Justificación de Entrada (Tardanza o Ajuste)
+                    </label>
+                    <input
+                      type="text"
+                      value={manualEntryJustification}
+                      onChange={(e) => setManualEntryJustification(e.target.value)}
+                      placeholder="Ej: Retraso por congestión vehicular severa en Av. Principal"
+                      className="input"
+                      style={{ fontSize: "0.8125rem", padding: "6px 10px" }}
+                    />
+                    {/* Quick suggestion chips */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {[
+                        "Tráfico / Transporte",
+                        "Cita médica autorizada",
+                        "Emergencia personal",
+                        "Autorización de gerencia",
+                      ].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => setManualEntryJustification(chip)}
+                          style={{
+                            border: "1px solid rgba(200, 164, 92, 0.2)",
+                            background: manualEntryJustification === chip ? "rgba(200, 164, 92, 0.2)" : "rgba(0, 0, 0, 0.3)",
+                            color: "var(--color-text-dim)",
+                            fontSize: "0.6875rem",
+                            padding: "3px 7px",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* BLOQUE SALIDA (CHECK-OUT) & JUSTIFICACIÓN */}
+              <div
+                style={{
+                  background: "rgba(0, 0, 0, 0.25)",
+                  border: "1px solid rgba(200, 164, 92, 0.15)",
+                  borderRadius: "var(--radius-md)",
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#ffffff" }}>
+                      🔴 Salida (Check-Out)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowExitJustifyInput(!showExitJustifyInput)}
+                    className="btn btn-ghost btn-sm"
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "3px 8px",
+                      color: showExitJustifyInput || manualExitJustification ? "var(--color-primary)" : "var(--color-text-dim)",
+                    }}
+                  >
+                    📝 {showExitJustifyInput ? "Ocultar motivo" : manualExitJustification ? "Editar justificación" : "+ Justificar Salida"}
+                  </button>
+                </div>
+
                 <div>
-                  <label className="label">Hora Salida</label>
+                  <label className="label" style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>
+                    Hora de Salida (Opcional si aún no sale)
+                  </label>
                   <input
                     type="time"
                     value={manualCheckOut}
@@ -743,20 +1033,74 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                     className="input"
                   />
                 </div>
+
+                {(showExitJustifyInput || manualExitJustification) && (
+                  <div
+                    style={{
+                      background: "rgba(200, 164, 92, 0.05)",
+                      border: "1px dashed rgba(200, 164, 92, 0.3)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: 10,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <label className="label" style={{ fontSize: "0.75rem", color: "var(--color-primary)", margin: 0 }}>
+                      Motivo / Justificación de Salida (Salida Temprana o Incidencia)
+                    </label>
+                    <input
+                      type="text"
+                      value={manualExitJustification}
+                      onChange={(e) => setManualExitJustification(e.target.value)}
+                      placeholder="Ej: Salida anticipada autorizada por urgencia familiar"
+                      className="input"
+                      style={{ fontSize: "0.8125rem", padding: "6px 10px" }}
+                    />
+                    {/* Quick suggestion chips */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {[
+                        "Salida temprana autorizada",
+                        "Urgencia familiar",
+                        "Cita médica",
+                        "Compensación de horas",
+                      ].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => setManualExitJustification(chip)}
+                          style={{
+                            border: "1px solid rgba(200, 164, 92, 0.2)",
+                            background: manualExitJustification === chip ? "rgba(200, 164, 92, 0.2)" : "rgba(0, 0, 0, 0.3)",
+                            color: "var(--color-text-dim)",
+                            fontSize: "0.6875rem",
+                            padding: "3px 7px",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
+              {/* Observaciones generales */}
               <div>
-                <label className="label">Notas / Motivo</label>
+                <label className="label" style={{ fontSize: "0.8125rem" }}>Observaciones Generales</label>
                 <input
                   type="text"
                   value={manualNotes}
                   onChange={(e) => setManualNotes(e.target.value)}
-                  placeholder="Ej: Registro manual por olvido de carnet"
+                  placeholder="Notas adicionales o comentarios del administrador"
                   className="input"
                 />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+              {/* Botones del formulario */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6, paddingTop: 10, borderTop: "1px solid var(--color-border)" }}>
                 <button
                   type="button"
                   onClick={() => setShowManualModal(false)}

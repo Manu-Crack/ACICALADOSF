@@ -313,35 +313,103 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
                   </tr>
                 </thead>
                 <tbody>
-                  {attendances.map((att) => (
-                    <tr key={att.id} style={{ borderBottom: "1px solid rgba(200, 164, 92, 0.1)" }}>
-                      <td style={{ padding: "12px", fontWeight: 600, color: "#ffffff" }}>
-                        {att.date}
-                      </td>
-                      <td style={{ padding: "12px" }}>
-                        {(() => {
-                          const statusInfo = getAttendanceStatusInfo(att.status);
-                          return (
-                            <span className={`badge ${statusInfo.badgeClass}`}>
-                              {statusInfo.icon} {statusInfo.label}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td style={{ padding: "12px", color: "var(--color-primary)" }}>
-                        {formatTime(att.check_in)}
-                      </td>
-                      <td style={{ padding: "12px", color: att.check_out ? "var(--color-primary)" : "var(--color-text-dim)" }}>
-                        {formatTime(att.check_out)}
-                      </td>
-                      <td style={{ padding: "12px", color: "var(--color-text-muted)" }}>
-                        {calculateDuration(att.check_in, att.check_out)}
-                      </td>
-                      <td style={{ padding: "12px", color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
-                        {att.notes || "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {attendances.map((att) => {
+                    const statusInfo = getAttendanceStatusInfo(
+                      att.status,
+                      att.entry_justification,
+                      att.exit_justification
+                    );
+                    const tooltipText = [
+                      att.entry_justification ? `Justif. Entrada: ${att.entry_justification}` : null,
+                      att.exit_justification ? `Justif. Salida: ${att.exit_justification}` : null,
+                      att.notes ? `Notas: ${att.notes}` : null,
+                    ].filter(Boolean).join(" | ");
+
+                    return (
+                      <tr key={att.id} style={{ borderBottom: "1px solid rgba(200, 164, 92, 0.1)" }}>
+                        <td style={{ padding: "12px", fontWeight: 600, color: "#ffffff" }}>
+                          {att.date}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          <span className={`badge ${statusInfo.badgeClass}`} title={tooltipText || undefined}>
+                            {statusInfo.icon} {statusInfo.label}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px", color: "var(--color-primary)" }}>
+                          <div>
+                            <span>{formatTime(att.check_in)}</span>
+                            {att.entry_justification && (
+                              <span
+                                style={{
+                                  display: "block",
+                                  fontSize: "0.6875rem",
+                                  color: "var(--color-text-dim)",
+                                  background: "rgba(200, 164, 92, 0.08)",
+                                  padding: "2px 5px",
+                                  borderRadius: 3,
+                                  marginTop: 2,
+                                  maxWidth: 130,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                                title={`Entrada justificada: ${att.entry_justification}`}
+                              >
+                                📝 {att.entry_justification}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: "12px", color: att.check_out ? "var(--color-primary)" : "var(--color-text-dim)" }}>
+                          <div>
+                            <span>{formatTime(att.check_out)}</span>
+                            {att.exit_justification && (
+                              <span
+                                style={{
+                                  display: "block",
+                                  fontSize: "0.6875rem",
+                                  color: "var(--color-text-dim)",
+                                  background: "rgba(200, 164, 92, 0.08)",
+                                  padding: "2px 5px",
+                                  borderRadius: 3,
+                                  marginTop: 2,
+                                  maxWidth: 130,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                                title={`Salida justificada: ${att.exit_justification}`}
+                              >
+                                📝 {att.exit_justification}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: "12px", color: "var(--color-text-muted)" }}>
+                          {calculateDuration(att.check_in, att.check_out)}
+                        </td>
+                        <td style={{ padding: "12px", color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
+                          {att.entry_justification || att.exit_justification ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                              {att.entry_justification && (
+                                <span style={{ color: "var(--color-primary)" }}>
+                                  <strong>Entrada:</strong> {att.entry_justification}
+                                </span>
+                              )}
+                              {att.exit_justification && (
+                                <span style={{ color: "var(--color-warning)" }}>
+                                  <strong>Salida:</strong> {att.exit_justification}
+                                </span>
+                              )}
+                              {att.notes && <span><strong>Obs:</strong> {att.notes}</span>}
+                            </div>
+                          ) : (
+                            att.notes || "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
 
                   {/* Render justification blocks not covered by check_ins */}
                   {blocks

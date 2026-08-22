@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { employee_id, date, check_in, check_out, status, notes } = body;
+    const { employee_id, date, check_in, check_out, status, notes, entry_justification, exit_justification } = body;
 
     if (!employee_id || !date || !check_in) {
       return NextResponse.json(
@@ -200,6 +200,8 @@ export async function POST(request: NextRequest) {
           check_out: check_out || null,
           status: validStatus,
           notes: notes || null,
+          entry_justification: entry_justification ? String(entry_justification).trim() || null : null,
+          exit_justification: exit_justification ? String(exit_justification).trim() || null : null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "employee_id,date" }
@@ -232,7 +234,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, check_in, check_out, status, notes } = body;
+    const { id, check_in, check_out, status, notes, entry_justification, exit_justification } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -251,6 +253,8 @@ export async function PUT(request: NextRequest) {
         check_out: check_out || null,
         status: validStatus,
         notes: notes || null,
+        entry_justification: entry_justification !== undefined ? (entry_justification ? String(entry_justification).trim() || null : null) : undefined,
+        exit_justification: exit_justification !== undefined ? (exit_justification ? String(exit_justification).trim() || null : null) : undefined,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
