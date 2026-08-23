@@ -27,6 +27,8 @@ interface NewBookingModalProps {
   employees?: EmployeeItem[];
 }
 
+export type WalkInPaymentMethod = "efectivo" | "yape" | "transferencia" | "sin_pago";
+
 export function NewBookingModal({
   isOpen,
   onClose,
@@ -40,8 +42,8 @@ export function NewBookingModal({
   const [employeesList, setEmployeesList] = useState<EmployeeItem[]>(initialEmployees);
   const [loadingInitial, setLoadingInitial] = useState(false);
 
-  // Filtro de rubro para seleccionar servicios rápidamente
-  const [selectedRubro, setSelectedRubro] = useState<"todos" | "barberia" | "spa">("barberia");
+  // Rubro exclusivo: Solo 'barberia' o 'spa' (sin botón 'todos')
+  const [selectedRubro, setSelectedRubro] = useState<"barberia" | "spa">("barberia");
 
   // Selección de servicios
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -49,9 +51,9 @@ export function NewBookingModal({
   // Datos del Cliente (Nombre obligatorio, resto opcional)
   const [clientFirstName, setClientFirstName] = useState("");
   const [clientLastName, setClientLastName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
+  const [clientPhone, setClientPhone] = useState(""); // Solo 9 dígitos
+  const [clientDni, setClientDni] = useState("");     // Solo 8 dígitos
   const [clientEmail, setClientEmail] = useState("");
-  const [clientDni, setClientDni] = useState("");
 
   // Empleado Asignado
   const [assignedEmployeeId, setAssignedEmployeeId] = useState<string>("");
@@ -76,7 +78,6 @@ export function NewBookingModal({
       }).format(now);
 
       const [h, m] = peruTime.split(":").map(Number);
-      // Redondear al siguiente bloque de 15 min
       const roundedM = Math.ceil(m / 15) * 15;
       const finalH = roundedM === 60 ? (h + 1) % 24 : h;
       const finalM = roundedM === 60 ? 0 : roundedM;
@@ -86,7 +87,8 @@ export function NewBookingModal({
     }
   });
 
-  const [notes, setNotes] = useState("");
+  // Método de Pago Presencial
+  const [paymentMethod, setPaymentMethod] = useState<WalkInPaymentMethod>("efectivo");
 
   // Feedback & Envío
   const [submitting, setSubmitting] = useState(false);
@@ -160,15 +162,13 @@ export function NewBookingModal({
     return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
   }, [startTime, totalDurationMinutes]);
 
-  // Filtrar servicios mostrados en el selector según la pestaña de rubro
+  // Filtrar servicios exclusivamente por el rubro seleccionado (barberia o spa)
   const visibleServices = useMemo(() => {
-    if (selectedRubro === "todos") return services;
     return services.filter((s) => s.type === selectedRubro);
   }, [services, selectedRubro]);
 
-  // Filtrar empleados según el rubro o mostrar todos
+  // Filtrar empleados según el rubro seleccionado o polivalentes
   const visibleEmployees = useMemo(() => {
-    if (selectedRubro === "todos") return employeesList;
     return employeesList.filter((e) => !e.type || e.type === selectedRubro || e.type === "ambos");
   }, [employeesList, selectedRubro]);
 
@@ -189,6 +189,18 @@ export function NewBookingModal({
 
     if (!clientFirstName.trim()) {
       setErrorMsg("Por favor, ingresa el nombre del cliente.");
+      return;
+    }
+
+    // Validar teléfono solo si fue ingresado: debe tener exactamente 9 dígitos
+    if (clientPhone.trim() && clientPhone.trim().length !== 9) {
+      setErrorMsg("El número de teléfono / WhatsApp debe tener exactamente 9 dígitos.");
+      return;
+    }
+
+    // Validar DNI solo si fue ingresado: debe tener exactamente 8 dígitos
+    if (clientDni.trim() && clientDni.trim().length !== 8) {
+      setErrorMsg("El número de DNI debe tener exactamente 8 dígitos.");
       return;
     }
 
@@ -214,13 +226,13 @@ export function NewBookingModal({
         client_first_name: clientFirstName.trim(),
         client_last_name: clientLastName.trim() || "Presencial",
         client_phone: clientPhone.trim() || null,
-        client_email: clientEmail.trim() || null,
         client_dni: clientDni.trim() || null,
+        client_email: clientEmail.trim() || null,
         service_ids: selectedServiceIds,
         assigned_employee_id: assignedEmployeeId || null,
         booking_date: bookingDate,
         start_time: startTime,
-        notes: notes.trim() || null,
+        payment_method: paymentMethod,
       };
 
       const res = await fetch("/api/admin/bookings", {
@@ -235,18 +247,22 @@ export function NewBookingModal({
         throw new Error(data.error || "Error al crear la reserva presencial");
       }
 
-      setSuccessMsg(`¡Reserva creada exitosamente con código ${data.booking?.booking_code || ""}!`);
+      setSuccessMsg(
+        paymentMethod !== "sin_pago"
+          ? `¡Reserva ${data.booking?.booking_code || ""} confirmada y cobrada con éxito!`
+          : `¡Reserva ${data.booking?.booking_code || ""} creada exitosamente!`
+      );
 
-      // Limpiar formulario
+      // Limpiar formulario y cerrar
       setTimeout(() => {
         setSelectedServiceIds([]);
         setClientFirstName("");
         setClientLastName("");
         setClientPhone("");
-        setClientEmail("");
         setClientDni("");
-        setNotes("");
+        setClientEmail("");
         setAssignedEmployeeId("");
+        setPaymentMethod("efectivo");
         onBookingCreated();
         onClose();
       }, 1000);
@@ -377,7 +393,7 @@ export function NewBookingModal({
               </div>
             )}
 
-            {/* SECCIÓN 1: DATOS DEL CLIENTE (Obligatorio Nombre, resto opcional) */}
+            {/* SECCIÓN 1: DATOS DEL CLIENTE */}
             <div>
               <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
                 1. Datos del Cliente
@@ -410,58 +426,102 @@ export function NewBookingModal({
                 </div>
                 <div>
                   <label className="label" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                    Teléfono / WhatsApp <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>(opcional)</span>
+                    Teléfono / WhatsApp <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>(9 dígitos)</span>
                   </label>
                   <input
                     className="input"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={9}
                     placeholder="Ej. 987654321"
                     value={clientPhone}
-                    onChange={(e) => setClientPhone(e.target.value)}
+                    onChange={(e) => {
+                      const numsOnly = e.target.value.replace(/\D/g, "").slice(0, 9);
+                      setClientPhone(numsOnly);
+                    }}
                     style={{ width: "100%" }}
                   />
                 </div>
                 <div>
                   <label className="label" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                    DNI / Documento <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>(opcional)</span>
+                    DNI / Documento <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>(8 dígitos)</span>
                   </label>
                   <input
                     className="input"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={8}
                     placeholder="Ej. 72345678"
                     value={clientDni}
-                    onChange={(e) => setClientDni(e.target.value)}
+                    onChange={(e) => {
+                      const numsOnly = e.target.value.replace(/\D/g, "").slice(0, 8);
+                      setClientDni(numsOnly);
+                    }}
                     style={{ width: "100%" }}
                   />
                 </div>
               </div>
             </div>
 
-            {/* SECCIÓN 2: SERVICIO(S) A REALIZAR */}
+            {/* SECCIÓN 2: SELECCIÓN DE SERVICIOS (Solo Barbería o Spa) */}
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
                 <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", margin: 0, letterSpacing: "0.05em" }}>
                   2. Selección de Servicio(s) <span style={{ color: "#ef4444" }}>*</span>
                 </h3>
-                {/* Tabs de Rubro */}
-                <div style={{ display: "flex", gap: 6 }}>
-                  {(["barberia", "spa", "todos"] as const).map((rubro) => (
-                    <button
-                      key={rubro}
-                      type="button"
-                      onClick={() => setSelectedRubro(rubro)}
-                      style={{
-                        padding: "3px 10px",
-                        fontSize: "0.72rem",
-                        borderRadius: "var(--radius-sm, 6px)",
-                        border: selectedRubro === rubro ? "1px solid var(--color-primary, #C8A45C)" : "1px solid var(--color-border, rgba(255,255,255,0.1))",
-                        background: selectedRubro === rubro ? "rgba(200, 164, 92, 0.15)" : "transparent",
-                        color: selectedRubro === rubro ? "var(--color-primary, #C8A45C)" : "var(--color-text-muted, #a1a1aa)",
-                        cursor: "pointer",
-                        fontWeight: selectedRubro === rubro ? 700 : 500,
-                      }}
-                    >
-                      {rubro === "barberia" ? "💈 Barbería" : rubro === "spa" ? "💆‍♀️ Spa" : "✂️ Todos"}
-                    </button>
-                  ))}
+                {/* Tabs Exclusivos: Barbería y Spa (sin botón Todos) */}
+                <div
+                  style={{
+                    display: "flex",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    padding: 3,
+                    borderRadius: "var(--radius-md, 8px)",
+                    border: "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                    gap: 4,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRubro("barberia")}
+                    style={{
+                      padding: "5px 14px",
+                      fontSize: "0.75rem",
+                      borderRadius: "var(--radius-sm, 6px)",
+                      border: "none",
+                      background: selectedRubro === "barberia" ? "var(--color-primary, #C8A45C)" : "transparent",
+                      color: selectedRubro === "barberia" ? "#000" : "var(--color-text-muted, #a1a1aa)",
+                      cursor: "pointer",
+                      fontWeight: selectedRubro === "barberia" ? 700 : 500,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span>💈</span>
+                    <span>Barbería</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRubro("spa")}
+                    style={{
+                      padding: "5px 14px",
+                      fontSize: "0.75rem",
+                      borderRadius: "var(--radius-sm, 6px)",
+                      border: "none",
+                      background: selectedRubro === "spa" ? "var(--color-primary, #C8A45C)" : "transparent",
+                      color: selectedRubro === "spa" ? "#000" : "var(--color-text-muted, #a1a1aa)",
+                      cursor: "pointer",
+                      fontWeight: selectedRubro === "spa" ? 700 : 500,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span>💆‍♀️</span>
+                    <span>Spa</span>
+                  </button>
                 </div>
               </div>
 
@@ -471,7 +531,7 @@ export function NewBookingModal({
                 </div>
               ) : visibleServices.length === 0 ? (
                 <div style={{ padding: 20, textAlign: "center", color: "var(--color-text-muted)" }}>
-                  No se encontraron servicios disponibles en este rubro.
+                  No se encontraron servicios disponibles en {selectedRubro === "barberia" ? "Barbería" : "Spa"}.
                 </div>
               ) : (
                 <div
@@ -510,7 +570,7 @@ export function NewBookingModal({
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => {}} // Manejado por div onClick
+                          onChange={() => {}}
                           style={{ marginTop: 2, cursor: "pointer" }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -531,10 +591,10 @@ export function NewBookingModal({
               )}
             </div>
 
-            {/* SECCIÓN 3: FECHA, HORA Y COLABORADOR ASIGNADO */}
+            {/* SECCIÓN 3: PROGRAMACIÓN Y COLABORADOR */}
             <div>
               <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
-                3. Programación y Asignación
+                3. Programación y Colaborador
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
                 <div>
@@ -584,7 +644,120 @@ export function NewBookingModal({
               </div>
             </div>
 
-            {/* SECCIÓN 4: RESUMEN FINANCIERO Y DE TIEMPO EN VIVO */}
+            {/* SECCIÓN 4: MÉTODO DE PAGO Y CONFIRMACIÓN INMEDIATA */}
+            <div>
+              <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
+                4. Método de Pago y Confirmación *
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                {/* Opción 1: Efectivo */}
+                <div
+                  onClick={() => setPaymentMethod("efectivo")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "var(--radius-md, 8px)",
+                    border: paymentMethod === "efectivo"
+                      ? "2px solid #22c55e"
+                      : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                    background: paymentMethod === "efectivo" ? "rgba(34, 197, 94, 0.12)" : "rgba(255,255,255,0.02)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "efectivo" ? "#22c55e" : "#fff" }}>
+                    <span>💵</span>
+                    <span>Efectivo</span>
+                  </div>
+                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                    Cobro físico en mostrador
+                  </p>
+                </div>
+
+                {/* Opción 2: Yape */}
+                <div
+                  onClick={() => setPaymentMethod("yape")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "var(--radius-md, 8px)",
+                    border: paymentMethod === "yape"
+                      ? "2px solid #a855f7"
+                      : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                    background: paymentMethod === "yape" ? "rgba(168, 85, 247, 0.12)" : "rgba(255,255,255,0.02)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "yape" ? "#c084fc" : "#fff" }}>
+                    <span>💜</span>
+                    <span>Yape</span>
+                  </div>
+                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                    Pago vía App / Código QR
+                  </p>
+                </div>
+
+                {/* Opción 3: Transferencia */}
+                <div
+                  onClick={() => setPaymentMethod("transferencia")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "var(--radius-md, 8px)",
+                    border: paymentMethod === "transferencia"
+                      ? "2px solid #3b82f6"
+                      : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                    background: paymentMethod === "transferencia" ? "rgba(59, 130, 246, 0.12)" : "rgba(255,255,255,0.02)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "transferencia" ? "#60a5fa" : "#fff" }}>
+                    <span>🏦</span>
+                    <span>Transferencia</span>
+                  </div>
+                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                    BCP, BBVA, Interbank, Plin
+                  </p>
+                </div>
+
+                {/* Opción 4: Sin Pago Inmediato */}
+                <div
+                  onClick={() => setPaymentMethod("sin_pago")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "var(--radius-md, 8px)",
+                    border: paymentMethod === "sin_pago"
+                      ? "2px solid #f59e0b"
+                      : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                    background: paymentMethod === "sin_pago" ? "rgba(245, 158, 11, 0.12)" : "rgba(255,255,255,0.02)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "sin_pago" ? "#f59e0b" : "#fff" }}>
+                    <span>⏳</span>
+                    <span>Sin pago</span>
+                  </div>
+                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                    Cobrar luego en caja
+                  </p>
+                </div>
+              </div>
+
+              {/* Mensaje de confirmación del método */}
+              <div style={{ marginTop: 8, fontSize: "0.75rem", color: paymentMethod !== "sin_pago" ? "#22c55e" : "#f59e0b" }}>
+                {paymentMethod !== "sin_pago" ? (
+                  <span>
+                    ✓ Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {(totalPriceCents / 100).toFixed(2)})</strong> con comprobante de cobro registrado.
+                  </span>
+                ) : (
+                  <span>
+                    ℹ️ Al guardar, la reserva quedará en agenda con <strong>SALDO PENDIENTE (S/ {(totalPriceCents / 100).toFixed(2)})</strong> lista para ser cobrada desde la tabla principal.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* SECCIÓN 5: RESUMEN FINANCIERO Y DE TIEMPO EN VIVO */}
             <div
               style={{
                 background: "rgba(200, 164, 92, 0.08)",
@@ -612,13 +785,13 @@ export function NewBookingModal({
                   Servicios Elegidos
                 </span>
                 <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--color-primary, #C8A45C)" }}>
-                  {selectedServices.length} {selectedServices.length === 1 ? "servicio" : "servicios"}
+                  {selectedServices.length} {selectedServices.length === 1 ? "servicio" : "servicios"} ({selectedRubro === "barberia" ? "Barbería" : "Spa"})
                 </span>
               </div>
 
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block" }}>
-                  Total a Pagar en Caja
+                  {paymentMethod !== "sin_pago" ? "Monto a Cobrar" : "Saldo Pendiente"}
                 </span>
                 <span style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--color-success, #22c55e)" }}>
                   S/ {(totalPriceCents / 100).toFixed(2)}
@@ -667,7 +840,7 @@ export function NewBookingModal({
                 </>
               ) : (
                 <>
-                  <span>💾 Guardar Reserva</span>
+                  <span>💾 Guardar y Confirmar Reserva</span>
                 </>
               )}
             </button>

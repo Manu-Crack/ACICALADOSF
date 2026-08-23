@@ -454,10 +454,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6. Insertar registro principal de reserva en tabla 'bookings'
+    // 6. Determinar método de pago inicial si fue cobrado en el mostrador
+    const reqMethod = (body.payment_method || "").toLowerCase();
+    const hasImmediatePayment = reqMethod && reqMethod !== "sin_pago" && reqMethod !== "none";
+
+    let normalizedMethod: "cash" | "yape" | "transfer" | null = null;
+    let dbPaymentMethodLabel: string | null = null;
+
+    if (hasImmediatePayment) {
+      if (reqMethod === "efectivo" || reqMethod === "cash") {
+        normalizedMethod = "cash";
+        dbPaymentMethodLabel = "efectivo";
+      } else if (reqMethod === "yape") {
+        normalizedMethod = "yape";
+        dbPaymentMethodLabel = "yape";
+      } else if (reqMethod === "transferencia" || reqMethod === "transfer") {
+        normalizedMethod = "transfer";
+        dbPaymentMethodLabel = "transferencia";
+      }
+    }
+
     const advancePercentage = 25;
     const finalLastName = client_last_name?.trim() || "Presencial";
+    const initialPaymentStatus = normalizedMethod ? "total" : "sin_pago";
+    const initialAdvanceAmount = normalizedMethod ? totalPriceCents : 0;
+    const initialBalance = normalizedMethod ? 0 : totalPriceCents;
 
+    // 7. Insertar registro principal de reserva en tabla 'bookings'
     const { data: newBooking, error: bookingError } = await admin
       .from("bookings")
       .insert({
@@ -474,10 +497,11 @@ export async function POST(request: NextRequest) {
         total_duration_minutes: totalDuration,
         total_price_cents: totalPriceCents,
         advance_percentage: advancePercentage,
-        advance_amount_cents: 0,
-        balance_cents: totalPriceCents,
+        advance_amount_cents: initialAdvanceAmount,
+        balance_cents: initialBalance,
         status: "confirmada",
-        payment_status: "sin_pago",
+        payment_status: initialPaymentStatus,
+        payment_method: dbPaymentMethodLabel,
         confirmed_at: new Date().toISOString(),
       })
       .select()
@@ -491,7 +515,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. Insertar detalle de servicios en 'booking_services'
+    // 8. Insertar detalle de servicios en 'booking_services'
     const bookingServices = services.map((s) => ({
       booking_id: newBooking.id,
       service_id: s.id,
@@ -505,11 +529,36 @@ export async function POST(request: NextRequest) {
       console.error("Error al insertar booking_services:", bsError);
     }
 
+    // 9. Si se cobró inmediatamente en el mostrador, registrar en 'payment_logs'
+    if (normalizedMethod) {
+      const nowIso = new Date().toISOString();
+      const { error: payLogErr } = await admin.from("payment_logs").insert({
+        booking_id: newBooking.id,
+        amount_cents: totalPriceCents,
+        payment_method: normalizedMethod,
+        payment_type: "full",
+        status: "verified",
+        yape_amount_cents: normalizedMethod === "yape" ? totalPriceCents : 0,
+        cash_amount_cents: normalizedMethod === "cash" ? totalPriceCents : 0,
+        notes: `Cobro total presencial en mostrador (${dbPaymentMethodLabel})`,
+        paid_at: nowIso,
+        registered_by: auth.user.id,
+        verified_at: nowIso,
+        verified_by: auth.user.id,
+      });
+
+      if (payLogErr) {
+        console.error("Error al registrar payment_log de reserva manual:", payLogErr);
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
         booking: newBooking,
-        message: `Reserva ${newBooking.booking_code} creada exitosamente.`,
+        message: normalizedMethod
+          ? `Reserva ${newBooking.booking_code} creada y confirmada con cobro en ${dbPaymentMethodLabel} exitosamente.`
+          : `Reserva ${newBooking.booking_code} creada exitosamente.`,
       },
       { status: 201 }
     );
