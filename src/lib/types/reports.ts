@@ -23,6 +23,12 @@ export interface FinancialSummary {
   completed_bookings: number;
   cancelled_bookings: number;
 
+  // Segmentación por rubro operativo (Spa vs Barbería)
+  spa_collected_cents: number;
+  barberia_collected_cents: number;
+  spa_bookings_count: number;
+  barberia_bookings_count: number;
+
   // 1. Valor contratado de reservas (Pactado)
   total_services_value_cents: number;
 
@@ -30,6 +36,7 @@ export interface FinancialSummary {
   total_collected_cents: number;
   yape_collected_cents: number;
   cash_collected_cents: number;
+  transfer_collected_cents: number;
   mixed_collected_cents: number;
   culqi_collected_cents: number; // Pagos históricos verificados de Culqi
 
@@ -112,6 +119,23 @@ export interface EmployeePerformanceItem {
   total_revenue_collected_cents: number;
 }
 
+export interface CompletedServiceAuditItem {
+  id: string;
+  booking_id: string;
+  booking_code: string;
+  client_name: string;
+  service_name: string;
+  service_type: "spa" | "barberia" | "mixto" | string;
+  price_cents: number;
+  employee_name: string;
+  date_exact: string;
+  booking_date: string;
+  start_time: string;
+  payment_method: string | null;
+  payment_status: string;
+  status: string;
+}
+
 export interface FullReportData {
   filters: ReportFilterParams;
   generated_at: string;
@@ -122,4 +146,5 @@ export interface FullReportData {
   services_breakdown: ServicePerformanceItem[];
   employees_breakdown: EmployeePerformanceItem[];
   expenses: Expense[];
+  completed_services_audit?: CompletedServiceAuditItem[];
 }
