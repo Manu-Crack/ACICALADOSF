@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type Profile = {
@@ -19,7 +19,9 @@ type AdminSidebarProps = {
 export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const supabase = createClient();
 
   // Resolve user display name with fallbacks
@@ -29,9 +31,10 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
       ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
       : "Administrador");
 
-  // Close drawer on path change or resize above 768px
+  // Close drawer and clear navigating state on path change or resize above 768px
   useEffect(() => {
     setIsMobileOpen(false);
+    setNavigatingTo(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -77,6 +80,34 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
 
   const sidebarContent = (
     <>
+      <style>{`
+        @keyframes adminSidebarSpin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes adminTopProgress {
+          0% { background-position: 100% 0; }
+          100% { background-position: -100% 0; }
+        }
+      `}</style>
+
+      {/* Top Global Navigation Bar when route changing */}
+      {navigatingTo && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--color-primary, #C8A45C) 0%, #FFFFFF 50%, var(--color-primary, #C8A45C) 100%)",
+            backgroundSize: "200% 100%",
+            zIndex: 99999,
+            animation: "adminTopProgress 0.8s linear infinite",
+            boxShadow: "0 0 12px rgba(200, 164, 92, 0.8)",
+          }}
+        />
+      )}
+
       {/* Brand Header */}
       <div style={{ padding: "0 20px", marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
@@ -129,39 +160,87 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {filteredNav.map((item) => {
             const isActive = pathname === item.href;
+            const isNavigating = navigatingTo === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => setIsMobileOpen(false)}
+                prefetch={true}
+                onMouseEnter={() => {
+                  try {
+                    router.prefetch(item.href);
+                  } catch {}
+                }}
+                onFocus={() => {
+                  try {
+                    router.prefetch(item.href);
+                  } catch {}
+                }}
+                onTouchStart={() => {
+                  try {
+                    router.prefetch(item.href);
+                  } catch {}
+                }}
+                onClick={() => {
+                  setIsMobileOpen(false);
+                  if (pathname !== item.href) {
+                    setNavigatingTo(item.href);
+                  }
+                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "space-between",
                   gap: 12,
                   padding: "12px 14px",
                   borderRadius: "var(--radius-md)",
                   fontSize: "0.9rem",
-                  fontWeight: isActive ? 700 : 500,
-                  color: isActive ? "var(--color-primary)" : "var(--color-text-muted)",
-                  background: isActive ? "var(--color-primary-glow)" : "transparent",
-                  border: isActive ? "1px solid var(--color-primary-border)" : "1px solid transparent",
+                  fontWeight: isActive || isNavigating ? 700 : 500,
+                  color: isActive || isNavigating ? "var(--color-primary)" : "var(--color-text-muted)",
+                  background: isActive
+                    ? "var(--color-primary-glow)"
+                    : isNavigating
+                    ? "rgba(200, 164, 92, 0.12)"
+                    : "transparent",
+                  border: isActive
+                    ? "1px solid var(--color-primary-border)"
+                    : isNavigating
+                    ? "1px dashed rgba(200, 164, 92, 0.45)"
+                    : "1px solid transparent",
                   transition: "all var(--transition-fast)",
                   textDecoration: "none",
+                  position: "relative",
                 }}
               >
-                <img
-                  src={item.icon}
-                  alt={item.label}
-                  style={{
-                    width: 20,
-                    height: 20,
-                    objectFit: "contain",
-                    opacity: isActive ? 1 : 0.75,
-                    filter: isActive ? "brightness(1.15)" : "none",
-                    transition: "all var(--transition-fast)",
-                  }}
-                />
-                <span>{item.label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <img
+                    src={item.icon}
+                    alt={item.label}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      objectFit: "contain",
+                      opacity: isActive || isNavigating ? 1 : 0.75,
+                      filter: isActive || isNavigating ? "brightness(1.15)" : "none",
+                      transition: "all var(--transition-fast)",
+                    }}
+                  />
+                  <span>{item.label}</span>
+                </div>
+
+                {isNavigating && !isActive && (
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      border: "2px solid rgba(200, 164, 92, 0.3)",
+                      borderTopColor: "var(--color-primary)",
+                      borderRadius: "50%",
+                      display: "inline-block",
+                      animation: "adminSidebarSpin 0.6s linear infinite",
+                    }}
+                  />
+                )}
               </Link>
             );
           })}
