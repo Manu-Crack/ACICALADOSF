@@ -267,16 +267,6 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
             ))}
           </select>
 
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setShowPermissionModal(true)}
-              className="btn btn-primary btn-sm"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
-            >
-              ➕ Nuevo Permiso
-            </button>
-          )}
         </div>
       </div>
 
