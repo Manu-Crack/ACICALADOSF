@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 import { PaymentModal } from "./PaymentModal";
 import { PaymentSettingsModal } from "./PaymentSettingsModal";
-import { PaymentQRWidget } from "@/components/payment/PaymentQRWidget";
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHOD_ICONS,
@@ -1423,37 +1422,6 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                   </select>
                                 </div>
                               </div>
-
-                              {/* Detalle Financiero y QR */}
-                              <div>
-                                <p
-                                  style={{
-                                    fontSize: "0.6875rem",
-                                    fontWeight: 700,
-                                    color: "var(--color-text-muted)",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                    Información de cobro y QR
-                                  </p>
-                                  <PaymentQRWidget
-                                    bookingId={b.id}
-                                    bookingCode={b.booking_code}
-                                    serviceNames={b.service_type === "barberia" ? "Barbería" : b.service_type === "spa" ? "Spa" : "Mixto"}
-                                    totalPriceCents={b.total_price_cents}
-                                    advancePercentage={b.advance_percentage || 25}
-                                    amountPaidCents={b.advance_amount_cents || 0}
-                                    balanceCents={b.balance_cents}
-                                    clientName={`${b.client_first_name} ${b.client_last_name}`}
-                                    bookingDate={b.booking_date}
-                                    startTime={b.start_time}
-                                    messageType={b.status === "pendiente" ? "advance" : "balance"}
-                                    compact={true}
-                                    onProofUploaded={() => loadBookings(true)}
-                                  />
-                                </div>
 
                               {/* WhatsApp Contact */}
                               <div>
