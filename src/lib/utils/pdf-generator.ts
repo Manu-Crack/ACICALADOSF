@@ -122,20 +122,42 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
   doc.setTextColor(...DARK_BG);
   doc.text("Detalle de Reservas del Periodo", 14, yPos);
 
-  const bookingsRows = data.bookings.map((b) => [
-    b.booking_code,
-    b.client_name,
-    b.client_phone || "—",
-    b.booking_date,
-    `${b.start_time?.slice(0, 5)} - ${b.end_time?.slice(0, 5)}`,
-    b.employee_name || "Sin asignar",
-    b.service_names,
-    fmtSoles(b.total_price_cents),
-    fmtSoles(b.advance_amount_cents),
-    fmtSoles(b.balance_cents),
-    b.payment_status,
-    b.booking_status,
-  ]);
+  const bookingsRows = data.bookings.map((b) => {
+    const isNoPayment = b.payment_status === "sin_pago" || (b.advance_amount_cents || 0) === 0;
+    const methodKey = (b.last_payment_method || "").toLowerCase();
+    const methodLabel = methodKey === "yape"
+      ? "Yape"
+      : methodKey === "cash" || methodKey === "efectivo"
+      ? "Efectivo"
+      : methodKey === "transfer" || methodKey === "transferencia"
+      ? "Transferencia"
+      : methodKey === "mixed" || methodKey === "mixto"
+      ? "Mixto"
+      : methodKey === "culqi_legacy"
+      ? "Tarjeta (Culqi)"
+      : b.last_payment_method || "";
+
+    const combinedPay = isNoPayment
+      ? "Sin pago"
+      : b.payment_status === "parcial"
+      ? methodLabel ? `Adelanto - ${methodLabel}` : "Adelanto"
+      : methodLabel ? `Total - ${methodLabel}` : "Total";
+
+    return [
+      b.booking_code,
+      b.client_name,
+      b.client_phone || "—",
+      b.booking_date,
+      `${b.start_time?.slice(0, 5)} - ${b.end_time?.slice(0, 5)}`,
+      b.employee_name || "Sin asignar",
+      b.service_names,
+      fmtSoles(b.total_price_cents),
+      fmtSoles(b.advance_amount_cents),
+      fmtSoles(b.balance_cents),
+      combinedPay,
+      b.booking_status,
+    ];
+  });
 
   autoTable(doc, {
     startY: yPos + 3,
@@ -151,7 +173,7 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
         "Total (S/)",
         "Pagado",
         "Saldo",
-        "Pago",
+        "Pago (Método)",
         "Estado",
       ],
     ],
@@ -170,16 +192,16 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     columnStyles: {
       0: { fontStyle: "bold", cellWidth: 16 },
       1: { cellWidth: 26 },
-      2: { cellWidth: 20 },
-      3: { cellWidth: 18 },
-      4: { cellWidth: 18 },
-      5: { cellWidth: 24 },
-      6: { cellWidth: 44 },
-      7: { halign: "right", cellWidth: 18 },
-      8: { halign: "right", cellWidth: 18 },
-      9: { halign: "right", cellWidth: 18 },
-      10: { cellWidth: 18 },
-      11: { cellWidth: 18 },
+      2: { cellWidth: 18 },
+      3: { cellWidth: 16 },
+      4: { cellWidth: 16 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 38 },
+      7: { halign: "right", cellWidth: 16 },
+      8: { halign: "right", cellWidth: 16 },
+      9: { halign: "right", cellWidth: 16 },
+      10: { cellWidth: 26 },
+      11: { cellWidth: 16 },
     },
     margin: { left: 14, right: 14 },
   });
@@ -217,7 +239,14 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     theme: "striped",
     headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
     bodyStyles: { fontSize: 7 },
-    margin: { left: 14, right: 155 },
+    columnStyles: {
+      0: { cellWidth: 42 },
+      1: { cellWidth: 18 },
+      2: { halign: "right", cellWidth: 22 },
+      3: { halign: "center", cellWidth: 20 },
+      4: { halign: "right", cellWidth: 26 },
+    },
+    margin: { left: 14, right: 152 },
   });
 
   const employeeRows = data.employees_breakdown.map((e) => [
@@ -235,7 +264,14 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     theme: "striped",
     headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
     bodyStyles: { fontSize: 7 },
-    margin: { left: 155, right: 14 },
+    columnStyles: {
+      0: { cellWidth: 38 },
+      1: { cellWidth: 22 },
+      2: { halign: "center", cellWidth: 20 },
+      3: { halign: "center", cellWidth: 22 },
+      4: { halign: "right", cellWidth: 26 },
+    },
+    margin: { left: 150, right: 14 },
   });
 
   // =========================================================================

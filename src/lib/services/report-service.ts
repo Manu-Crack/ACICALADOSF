@@ -532,6 +532,12 @@ export async function buildFullReportData(
       employeesMap[empId].total_revenue_collected_cents += b.advance_amount_cents || 0;
     }
 
+    // Resolver método de pago efectivo
+    const bookingVerifiedPayment = ((rawPayments || []) as unknown as RawPaymentRow[]).find(
+      (p) => p.booking_id === b.id && p.status === "verified" && p.payment_method
+    );
+    const effectivePaymentMethod = b.payment_method || bookingVerifiedPayment?.payment_method || null;
+
     bookingsList.push({
       id: b.id,
       booking_code: b.booking_code,
@@ -552,7 +558,7 @@ export async function buildFullReportData(
       booking_status: b.status,
       payment_status: b.payment_status,
       confirmed_at: b.confirmed_at,
-      last_payment_method: b.payment_method || null,
+      last_payment_method: effectivePaymentMethod,
       yape_paid_cents: 0,
       cash_paid_cents: 0,
       verified_by_name: null,

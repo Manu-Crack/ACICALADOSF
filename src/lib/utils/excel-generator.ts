@@ -146,7 +146,8 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
     { header: "Adelanto Pag. (S/)", key: "adv_paid", width: 18 },
     { header: "Total Pagado (S/)", key: "paid", width: 18 },
     { header: "Saldo Pend. (S/)", key: "balance", width: 18 },
-    { header: "Estado Pago", key: "payment_status", width: 16 },
+    { header: "Estado Pago", key: "payment_status", width: 22 },
+    { header: "Método de Pago", key: "payment_method", width: 18 },
     { header: "Estado Reserva", key: "status", width: 16 },
     { header: "Fecha Confirm.", key: "confirmed_at", width: 18 },
     { header: "Verificado Por", key: "verified_by", width: 20 },
@@ -158,6 +159,26 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
   headerRow2.height = 24;
 
   data.bookings.forEach((b) => {
+    const isNoPayment = b.payment_status === "sin_pago" || (b.advance_amount_cents || 0) === 0;
+    const methodKey = (b.last_payment_method || "").toLowerCase();
+    const methodLabel = methodKey === "yape"
+      ? "Yape"
+      : methodKey === "cash" || methodKey === "efectivo"
+      ? "Efectivo"
+      : methodKey === "transfer" || methodKey === "transferencia"
+      ? "Transferencia"
+      : methodKey === "mixed" || methodKey === "mixto"
+      ? "Mixto"
+      : methodKey === "culqi_legacy"
+      ? "Tarjeta (Culqi)"
+      : b.last_payment_method || "—";
+
+    const combinedStatus = isNoPayment
+      ? "Sin pago"
+      : b.payment_status === "parcial"
+      ? methodLabel !== "—" ? `Adelanto - ${methodLabel}` : "Adelanto"
+      : methodLabel !== "—" ? `Total - ${methodLabel}` : "Total";
+
     const row = wsReservas.addRow({
       code: sanitizeForExcel(b.booking_code),
       client: sanitizeForExcel(b.client_name),
@@ -172,7 +193,8 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
       adv_paid: b.advance_amount_cents / 100,
       paid: (b.yape_paid_cents + b.cash_paid_cents) / 100 || b.advance_amount_cents / 100,
       balance: b.balance_cents / 100,
-      payment_status: b.payment_status,
+      payment_status: combinedStatus,
+      payment_method: isNoPayment ? "-" : methodLabel,
       status: b.booking_status,
       confirmed_at: b.confirmed_at ? new Date(b.confirmed_at).toLocaleString("es-PE", { timeZone: "America/Lima" }) : "—",
       verified_by: sanitizeForExcel(b.verified_by_name || "—"),
@@ -183,7 +205,7 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
     });
   });
 
-  wsReservas.autoFilter = "A1:Q1";
+  wsReservas.autoFilter = "A1:R1";
 
   // =========================================================================
   // HOJA 3: MOVIMIENTOS DE PAGO
@@ -199,7 +221,6 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
     { header: "Método", key: "method", width: 14 },
     { header: "Monto Yape (S/)", key: "yape", width: 16 },
     { header: "Monto Efect. (S/)", key: "cash", width: 16 },
-    { header: "Tipo Movimiento", key: "type", width: 16 },
     { header: "Estado", key: "status", width: 14 },
     { header: "Fecha y Hora", key: "date", width: 20 },
     { header: "Registrado Por", key: "registered_by", width: 20 },
@@ -220,7 +241,6 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
       method: p.payment_method,
       yape: p.yape_amount_cents / 100,
       cash: p.cash_amount_cents / 100,
-      type: p.payment_type,
       status: p.status,
       date: p.paid_at ? new Date(p.paid_at).toLocaleString("es-PE", { timeZone: "America/Lima" }) : "—",
       registered_by: sanitizeForExcel(p.registered_by_name || "—"),
@@ -237,7 +257,7 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
     }
   });
 
-  wsPagos.autoFilter = "A1:L1";
+  wsPagos.autoFilter = "A1:K1";
 
   // =========================================================================
   // HOJA 4: SERVICIOS

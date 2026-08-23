@@ -1420,47 +1420,103 @@ export function ReportsManager() {
                       <th style={{ padding: "10px 12px", textAlign: "right" }}>Total</th>
                       <th style={{ padding: "10px 12px", textAlign: "right" }}>Cobrado</th>
                       <th style={{ padding: "10px 12px", textAlign: "right" }}>Saldo</th>
+                      <th style={{ padding: "10px 12px" }}>Pago (Método)</th>
                       <th style={{ padding: "10px 12px" }}>Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.bookings.map((b) => (
-                      <tr key={b.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                        <td style={{ padding: "10px 12px", fontWeight: 700, color: "var(--color-primary)" }}>{b.booking_code}</td>
-                        <td style={{ padding: "10px 12px" }}>
-                          <div>{b.client_name}</div>
-                          {b.client_phone && <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>{b.client_phone}</span>}
-                        </td>
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          {b.booking_date} · {b.start_time?.slice(0, 5)}
-                        </td>
-                        <td style={{ padding: "10px 12px" }}>{b.employee_name}</td>
-                        <td style={{ padding: "10px 12px" }}>{b.service_names}</td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700 }}>
-                          S/ {(b.total_price_cents / 100).toFixed(2)}
-                        </td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", color: "var(--color-success)" }}>
-                          S/ {(b.advance_amount_cents / 100).toFixed(2)}
-                        </td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", color: b.balance_cents > 0 ? "#f59e0b" : "var(--color-success)" }}>
-                          S/ {(b.balance_cents / 100).toFixed(2)}
-                        </td>
-                        <td style={{ padding: "10px 12px" }}>
-                          <span
-                            className={`badge ${
-                              b.booking_status === "confirmada"
-                                ? "badge-success"
-                                : b.booking_status === "completada"
-                                ? "badge-gold"
-                                : "badge-warning"
-                            }`}
-                            style={{ fontSize: "0.68rem" }}
-                          >
-                            {b.booking_status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {reportData.bookings.map((b) => {
+                      const isNoPayment = b.payment_status === "sin_pago" || (b.advance_amount_cents || 0) === 0;
+                      const methodKey = (b.last_payment_method || "").toLowerCase();
+                      const methodIcon =
+                        PAYMENT_METHOD_ICONS[methodKey as keyof typeof PAYMENT_METHOD_ICONS] ||
+                        (methodKey === "cash" || methodKey === "efectivo"
+                          ? "💵"
+                          : methodKey === "yape"
+                          ? "💜"
+                          : methodKey === "mixed" || methodKey === "mixto"
+                          ? "🔄"
+                          : methodKey === "transfer" || methodKey === "transferencia"
+                          ? "🏦"
+                          : "");
+
+                      const methodLabel =
+                        PAYMENT_METHOD_LABELS[methodKey as keyof typeof PAYMENT_METHOD_LABELS] ||
+                        (methodKey === "cash" || methodKey === "efectivo"
+                          ? "Efectivo"
+                          : methodKey === "yape"
+                          ? "Yape"
+                          : methodKey === "mixed" || methodKey === "mixto"
+                          ? "Mixto"
+                          : methodKey === "transfer" || methodKey === "transferencia"
+                          ? "Transferencia"
+                          : b.last_payment_method || "");
+
+                      const combinedPayText = isNoPayment
+                        ? "SIN PAGO"
+                        : b.payment_status === "parcial"
+                        ? methodLabel ? `Adelanto - ${methodLabel}` : "Adelanto"
+                        : methodLabel ? `Total - ${methodLabel}` : "Total";
+
+                      return (
+                        <tr key={b.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                          <td style={{ padding: "10px 12px", fontWeight: 700, color: "var(--color-primary)" }}>{b.booking_code}</td>
+                          <td style={{ padding: "10px 12px" }}>
+                            <div>{b.client_name}</div>
+                            {b.client_phone && <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>{b.client_phone}</span>}
+                          </td>
+                          <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                            {b.booking_date} · {b.start_time?.slice(0, 5)}
+                          </td>
+                          <td style={{ padding: "10px 12px" }}>{b.employee_name}</td>
+                          <td style={{ padding: "10px 12px" }}>{b.service_names}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700 }}>
+                            S/ {(b.total_price_cents / 100).toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: "var(--color-success)" }}>
+                            S/ {(b.advance_amount_cents / 100).toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: b.balance_cents > 0 ? "#f59e0b" : "var(--color-success)" }}>
+                            S/ {(b.balance_cents / 100).toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px" }}>
+                            <span
+                              className={`badge ${
+                                isNoPayment
+                                  ? "badge-error"
+                                  : b.payment_status === "total"
+                                  ? "badge-success"
+                                  : "badge-warning"
+                              }`}
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              {!isNoPayment && methodIcon && <span>{methodIcon}</span>}
+                              <span>{combinedPayText}</span>
+                            </span>
+                          </td>
+                          <td style={{ padding: "10px 12px" }}>
+                            <span
+                              className={`badge ${
+                                b.booking_status === "confirmada"
+                                  ? "badge-success"
+                                  : b.booking_status === "completada"
+                                  ? "badge-gold"
+                                  : "badge-warning"
+                              }`}
+                              style={{ fontSize: "0.68rem" }}
+                            >
+                              {b.booking_status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1478,7 +1534,6 @@ export function ReportsManager() {
                       <th style={{ padding: "10px 12px" }}>Cliente</th>
                       <th style={{ padding: "10px 12px", textAlign: "right" }}>Monto</th>
                       <th style={{ padding: "10px 12px" }}>Canal</th>
-                      <th style={{ padding: "10px 12px" }}>Tipo</th>
                       <th style={{ padding: "10px 12px" }}>Estado</th>
                       <th style={{ padding: "10px 12px" }}>Fecha</th>
                       <th style={{ padding: "10px 12px" }}>Detalle</th>
@@ -1497,7 +1552,6 @@ export function ReportsManager() {
                           <td style={{ padding: "10px 12px" }}>
                             {p.payment_method === "yape" ? "💜 Yape" : p.payment_method === "cash" || p.payment_method === "efectivo" ? "💵 Efectivo" : p.payment_method === "transfer" || p.payment_method === "transferencia" ? "🏦 Transferencia" : "🔄 Mixto"}
                           </td>
-                          <td style={{ padding: "10px 12px" }}>{p.payment_type}</td>
                           <td style={{ padding: "10px 12px" }}>
                             <span className={`badge ${isVoided ? "badge-error" : "badge-success"}`} style={{ fontSize: "0.68rem" }}>
                               {isVoided ? "Anulado" : "Verificado"}
