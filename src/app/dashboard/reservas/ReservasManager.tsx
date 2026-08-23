@@ -59,17 +59,17 @@ const statusColors: Record<string, string> = {
 };
 
 const paymentLabels: Record<string, string> = {
-  sin_pago:  "Sin pago",
-  pendiente: "Sin pago",
-  parcial:   "Adelanto pagado",
-  total:     "Pagado completo",
+  sin_pago:  "SIN PAGO",
+  pendiente: "SIN PAGO",
+  parcial:   "SALDO PENDIENTE",
+  total:     "PAGADO COMPLETO",
 };
 
 const paymentColors: Record<string, string> = {
-  sin_pago:  "badge-error",
-  pendiente: "badge-error",
-  parcial:   "badge-warning",
-  total:     "badge-success",
+  sin_pago:  "badge-error",   // ROJO
+  pendiente: "badge-error",   // ROJO
+  parcial:   "badge-warning", // AMARILLO
+  total:     "badge-success", // VERDE
 };
 
 // Tipo para el modal de pago — resumen financiero de la reserva
@@ -1083,11 +1083,41 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                       <td style={{ padding: "14px 16px" }}>
                         <span
                           className={`badge ${
-                            paymentColors[b.payment_status] || "badge-neutral"
+                            b.payment_status === "total"
+                              ? "badge-success"
+                              : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                              ? "badge-warning"
+                              : "badge-error"
                           }`}
+                          style={{
+                            fontWeight: 700,
+                            letterSpacing: "0.03em",
+                            fontSize: "0.72rem",
+                          }}
                         >
-                          {paymentLabels[b.payment_status] || b.payment_status}
+                          {b.payment_status === "total"
+                            ? "PAGADO COMPLETO"
+                            : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                            ? "SALDO PENDIENTE"
+                            : "SIN PAGO"}
                         </span>
+
+                        {/* Si es SALDO PENDIENTE, mostrar monto restante */}
+                        {(b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)) && (
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "0.7rem",
+                              color: "var(--color-warning, #f59e0b)",
+                              marginTop: 4,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Resta: S/ {((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)}
+                          </span>
+                        )}
+
+                        {/* Si es PAGADO COMPLETO, mostrar método de pago */}
                         {b.payment_method && b.payment_status === "total" && (
                           <span
                             style={{
@@ -1183,6 +1213,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                               className={`btn btn-sm ${
                                 b.payment_status === "total"
                                   ? "btn-secondary"
+                                  : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                  ? "btn-secondary"
                                   : "btn-primary"
                               }`}
                               style={{
@@ -1198,16 +1230,28 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                       color: "var(--color-success)",
                                       borderColor: "rgba(106, 153, 78, 0.35)",
                                     }
+                                  : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                  ? {
+                                      background: "rgba(245, 158, 11, 0.15)",
+                                      color: "var(--color-warning, #f59e0b)",
+                                      borderColor: "rgba(245, 158, 11, 0.4)",
+                                    }
                                   : {}),
                               }}
                               title={
                                 b.payment_status === "total"
-                                  ? "Ver o actualizar cobro"
-                                  : "Registrar cobro de la reserva (Yape / Efectivo / Transferencia / Mixto)"
+                                  ? "Ver pago registrado"
+                                  : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                  ? `Completar saldo pendiente (S/ ${((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)})`
+                                  : "Registrar pago de adelanto o total"
                               }
                               id={`pay-btn-${b.id}`}
                             >
-                              {b.payment_status === "total" ? "✅ Pagado" : "💳 Pagar"}
+                              {b.payment_status === "total"
+                                ? "✅ Pagado"
+                                : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                ? "💳 Pagar Saldo"
+                                : "💳 Pagar"}
                             </button>
                           )}
 
@@ -1502,37 +1546,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 alignItems: "center",
                               }}
                             >
-                              {/* Action 1: Confirm appointment */}
-                              {b.status === "pendiente" && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateBooking(b.id, { status: "confirmada" });
-                                  }}
-                                  disabled={actionLoading === b.id}
-                                  className="btn btn-sm"
-                                  style={{
-                                    background: "var(--color-success)",
-                                    color: "#000000",
-                                    fontWeight: 700,
-                                    padding: "8px 16px",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                  }}
-                                >
-                                  {actionLoading === b.id ? (
-                                    "Actualizando..."
-                                  ) : (
-                                    <>
-                                      <img src="/Activo.svg" alt="Confirmar" style={{ width: 16, height: 16 }} /> Confirmar Cita
-                                    </>
-                                  )}
-                                </button>
-                              )}
-
-                              {/* Action 2: Complete appointment */}
+                              {/* Action 1: Complete appointment */}
                               {b.status === "confirmada" && (
                                 <button
                                   type="button"
