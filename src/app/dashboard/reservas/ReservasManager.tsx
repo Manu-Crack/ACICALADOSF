@@ -4,9 +4,13 @@ import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "rea
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 import { PaymentModal } from "./PaymentModal";
-import { PaymentHistoryModal } from "./PaymentHistoryModal";
 import { PaymentSettingsModal } from "./PaymentSettingsModal";
 import { PaymentQRWidget } from "@/components/payment/PaymentQRWidget";
+import {
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_METHOD_ICONS,
+  type PaymentMethod,
+} from "@/lib/types/payments";
 
 type Booking = {
   id: string;
@@ -16,6 +20,7 @@ type Booking = {
   end_time: string;
   status: string;
   payment_status: string;
+  payment_method?: string | null;
   total_price_cents: number;
   advance_percentage: number;
   advance_amount_cents: number;
@@ -75,12 +80,13 @@ interface BookingSummaryForPayment {
   client_first_name: string;
   client_last_name: string;
   total_price_cents: number;
-  advance_percentage: number;
-  advance_required_cents: number;
-  amount_paid_cents: number;
-  balance_cents: number;
-  payment_status: string;
-  booking_status: string;
+  advance_percentage?: number;
+  advance_required_cents?: number;
+  amount_paid_cents?: number;
+  balance_cents?: number;
+  payment_status?: string;
+  booking_status?: string;
+  payment_method?: string | null;
 }
 
 export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
@@ -98,7 +104,6 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
 
   // Estado de modales de pago
   const [paymentModalBooking, setPaymentModalBooking] = useState<BookingSummaryForPayment | null>(null);
-  const [historyModalBooking, setHistoryModalBooking] = useState<{ id: string; code: string; clientName: string } | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
@@ -111,7 +116,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
         let query = supabase
           .from("bookings")
           .select(
-            "id, booking_code, booking_date, start_time, end_time, status, payment_status, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
+            "id, booking_code, booking_date, start_time, end_time, status, payment_status, payment_method, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
           )
           .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
           .order("booking_date", { ascending: false })
@@ -452,9 +457,10 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
       advance_percentage: advancePct,
       advance_required_cents: advanceRequired,
       amount_paid_cents: b.advance_amount_cents || 0,
-      balance_cents: b.balance_cents || b.total_price_cents,
+      balance_cents: b.balance_cents !== undefined ? b.balance_cents : b.total_price_cents,
       payment_status: b.payment_status,
       booking_status: b.status,
+      payment_method: b.payment_method,
     });
   }
 
@@ -1083,6 +1089,20 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                         >
                           {paymentLabels[b.payment_status] || b.payment_status}
                         </span>
+                        {b.payment_method && b.payment_status === "total" && (
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "0.7rem",
+                              color: "var(--color-text-muted)",
+                              marginTop: 4,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {PAYMENT_METHOD_ICONS[b.payment_method as PaymentMethod] || "💳"}{" "}
+                            {PAYMENT_METHOD_LABELS[b.payment_method as PaymentMethod] || b.payment_method}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: "14px 16px" }}>
                         {b.client_phone ? (
@@ -1148,11 +1168,12 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
+                            justifyContent: "center",
                             gap: 6,
                           }}
                         >
-                          {/* Botón: Registrar Pago (admin + recepcionista) */}
-                          {b.status !== "cancelada" && b.status !== "completada" && b.payment_status !== "total" && (
+                          {/* Botón: Pagar (admin + recepcionista) */}
+                          {b.status !== "cancelada" && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1160,99 +1181,38 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 openPaymentModal(b);
                               }}
                               disabled={actionLoading === b.id}
-                              className="btn btn-primary btn-sm"
+                              className={`btn btn-sm ${
+                                b.payment_status === "total"
+                                  ? "btn-secondary"
+                                  : "btn-primary"
+                              }`}
                               style={{
-                                padding: "4px 8px",
+                                padding: "4px 9px",
                                 fontSize: "0.73rem",
                                 fontWeight: 700,
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: 4,
-                              }}
-                              title="Registrar pago (Yape / Efectivo / Mixto)"
-                              id={`pay-btn-${b.id}`}
-                            >
-                              💳 Pagar
-                            </button>
-                          )}
-
-                          {/* Botón: Ver Historial de Pagos */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setHistoryModalBooking({
-                                id: b.id,
-                                code: b.booking_code,
-                                clientName: `${b.client_first_name} ${b.client_last_name}`,
-                              });
-                            }}
-                            disabled={actionLoading === b.id}
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: "4px 8px", fontSize: "0.73rem" }}
-                            title="Ver historial de pagos"
-                            id={`history-btn-${b.id}`}
-                          >
-                            🧾
-                          </button>
-
-                          {/* Botón: Confirmar (solo si tiene el adelanto pagado) */}
-                          {b.status === "pendiente" && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateBooking(b.id, { status: "confirmada" });
-                              }}
-                              disabled={actionLoading === b.id}
-                              className="btn btn-sm"
-                              style={{
-                                background: (b.advance_amount_cents || 0) >= Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
-                                  ? "var(--color-success)"
-                                  : "rgba(106,153,78,0.2)",
-                                color: (b.advance_amount_cents || 0) >= Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
-                                  ? "#000000"
-                                  : "var(--color-text-muted)",
-                                fontWeight: 700,
-                                padding: "4px 8px",
-                                fontSize: "0.73rem",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                                cursor: (b.advance_amount_cents || 0) < Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
-                                  ? "not-allowed"
-                                  : "pointer",
+                                ...(b.payment_status === "total"
+                                  ? {
+                                      background: "rgba(106, 153, 78, 0.15)",
+                                      color: "var(--color-success)",
+                                      borderColor: "rgba(106, 153, 78, 0.35)",
+                                    }
+                                  : {}),
                               }}
                               title={
-                                (b.advance_amount_cents || 0) >= Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100)
-                                  ? "Confirmar reserva"
-                                  : `Falta adelanto mínimo del ${b.advance_percentage || 25}% (S/ ${(Math.ceil(b.total_price_cents * (b.advance_percentage || 25) / 100) / 100).toFixed(2)})`
+                                b.payment_status === "total"
+                                  ? "Ver o actualizar cobro"
+                                  : "Registrar cobro de la reserva (Yape / Efectivo / Transferencia / Mixto)"
                               }
-                              id={`confirm-btn-${b.id}`}
+                              id={`pay-btn-${b.id}`}
                             >
-                              <img src="/Activo.svg" alt="Confirmar" style={{ width: 14, height: 14 }} /> Confirmar
+                              {b.payment_status === "total" ? "✅ Pagado" : "💳 Pagar"}
                             </button>
                           )}
 
-                          {/* Botón: Completar servicio */}
-                          {b.status === "confirmada" && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateBooking(b.id, { status: "completada" });
-                              }}
-                              disabled={actionLoading === b.id}
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: "4px 8px", fontSize: "0.73rem" }}
-                              title="Marcar servicio como completado"
-                              id={`complete-btn-${b.id}`}
-                            >
-                              🏁
-                            </button>
-                          )}
-
-                          {/* Botón: Eliminar (solo admin) */}
+                          {/* Botón: Eliminar (solo admin, el recepcionista no lo ve) */}
                           {isAdmin && (
                             <button
                               type="button"
@@ -1264,7 +1224,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                               className="btn btn-ghost btn-sm"
                               title="Eliminar reserva definitivamente"
                               style={{
-                                padding: "4px 8px",
+                                padding: "4px 7px",
                                 color: "var(--color-error)",
                                 borderColor: "rgba(184,59,46,0.3)",
                                 fontSize: "0.8125rem",
@@ -1278,14 +1238,16 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                           <span
                             style={{
                               color: "var(--color-text-muted)",
-                              fontSize: "0.8125rem",
+                              fontSize: "0.75rem",
                               transition: "transform var(--transition-fast)",
                               display: "inline-block",
                               transform:
                                 expandedId === b.id
                                   ? "rotate(180deg)"
                                   : "rotate(0deg)",
+                              marginLeft: 2,
                             }}
+                            title="Ver detalles de la reserva"
                           >
                             ▼
                           </span>
@@ -1602,31 +1564,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 </button>
                               )}
 
-                              {/* Action 2: Mark as paid in cash/pos */}
-                              {b.payment_status !== "total" &&
-                                b.status !== "cancelada" && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      updateBooking(b.id, { mark_paid: true });
-                                    }}
-                                    disabled={actionLoading === b.id}
-                                    className="btn btn-primary btn-sm"
-                                    style={{
-                                      padding: "8px 16px",
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    {actionLoading === b.id
-                                      ? "Procesando..."
-                                      : `💰 Marcar como Pagado en Local (S/ ${(
-                                          b.total_price_cents / 100
-                                        ).toFixed(2)})`}
-                                  </button>
-                                )}
-
-                              {/* Action 3: Complete appointment */}
+                              {/* Action 2: Complete appointment */}
                               {b.status === "confirmada" && (
                                 <button
                                   type="button"
@@ -1646,7 +1584,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 </button>
                               )}
 
-                              {/* Action 4: Cancel appointment */}
+                              {/* Action 3: Cancel appointment */}
                               {b.status !== "cancelada" &&
                                 b.status !== "completada" && (
                                   <button
@@ -1683,7 +1621,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 </span>
                               )}
 
-                              {/* Action 5: Delete Permanently */}
+                              {/* Action 4: Delete Permanently */}
                               {isAdmin && (
                                 <button
                                   type="button"
@@ -1748,18 +1686,6 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
             setPaymentModalBooking(null);
             loadBookings(true);
           }}
-        />
-      )}
-
-      {/* Modal de historial de pagos */}
-      {historyModalBooking && (
-        <PaymentHistoryModal
-          bookingId={historyModalBooking.id}
-          bookingCode={historyModalBooking.code}
-          clientName={historyModalBooking.clientName}
-          userRole={userRole}
-          onClose={() => setHistoryModalBooking(null)}
-          onPaymentVoided={() => loadBookings(true)}
         />
       )}
 

@@ -7,7 +7,14 @@
 // Enumeraciones de dominio
 // ---------------------------------------------------------------------------
 
-export type PaymentMethod = "yape" | "cash" | "mixed" | "culqi_legacy";
+export type PaymentMethod =
+  | "yape"
+  | "efectivo"
+  | "cash"
+  | "transferencia"
+  | "mixto"
+  | "mixed"
+  | "culqi_legacy";
 
 export type PaymentType =
   | "advance"   // Adelanto (mínimo 25%)
@@ -104,17 +111,23 @@ export interface BookingFinancialSummary {
 // ---------------------------------------------------------------------------
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  yape:         "Yape",
-  cash:         "Efectivo",
-  mixed:        "Mixto (Yape + Efectivo)",
-  culqi_legacy: "Culqi Histórico",
+  yape:          "Yape",
+  efectivo:      "Efectivo",
+  cash:          "Efectivo",
+  transferencia: "Transferencia",
+  mixto:         "Mixto (Yape + Efectivo)",
+  mixed:         "Mixto (Yape + Efectivo)",
+  culqi_legacy:  "Culqi Histórico",
 };
 
 export const PAYMENT_METHOD_ICONS: Record<PaymentMethod, string> = {
-  yape:         "💜",
-  cash:         "💵",
-  mixed:        "💜💵",
-  culqi_legacy: "💳",
+  yape:          "💜",
+  efectivo:      "💵",
+  cash:          "💵",
+  transferencia: "🏦",
+  mixto:         "🔄",
+  mixed:         "🔄",
+  culqi_legacy:  "💳",
 };
 
 export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {

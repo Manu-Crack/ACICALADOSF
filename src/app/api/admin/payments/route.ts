@@ -58,14 +58,16 @@ function validatePaymentAmounts(
   }
 
   if (payment_method === "yape") {
-    if (yape_amount_cents !== amount_cents || cash_amount_cents !== 0) {
-      return "Para pago por Yape, el monto Yape debe ser igual al total y el efectivo debe ser cero";
+    if (cash_amount_cents > 0) {
+      return "Para pago por Yape, el monto en efectivo debe ser cero";
     }
-  } else if (payment_method === "cash") {
-    if (cash_amount_cents !== amount_cents || yape_amount_cents !== 0) {
-      return "Para pago en efectivo, el monto efectivo debe ser igual al total y Yape debe ser cero";
+  } else if (payment_method === "efectivo" || payment_method === "cash") {
+    if (yape_amount_cents > 0) {
+      return "Para pago en efectivo, el monto en Yape debe ser cero";
     }
-  } else if (payment_method === "mixed") {
+  } else if (payment_method === "transferencia") {
+    // Transferencia bancaria directa
+  } else if (payment_method === "mixto" || payment_method === "mixed") {
     if (yape_amount_cents + cash_amount_cents !== amount_cents) {
       return `Para pago mixto, la suma de Yape (S/ ${(yape_amount_cents / 100).toFixed(2)}) + Efectivo (S/ ${(cash_amount_cents / 100).toFixed(2)}) debe ser igual al total (S/ ${(amount_cents / 100).toFixed(2)})`;
     }
@@ -257,7 +259,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Validar valores de enumeración
-    const validMethods: PaymentMethod[] = ["yape", "cash", "mixed", "culqi_legacy"];
+    const validMethods: PaymentMethod[] = [
+      "yape",
+      "efectivo",
+      "cash",
+      "transferencia",
+      "mixto",
+      "mixed",
+      "culqi_legacy",
+    ];
     const validTypes: PaymentType[] = ["advance", "partial", "balance", "full", "total", "refund", "legacy"];
 
     if (!validMethods.includes(payment_method as PaymentMethod)) {
@@ -386,10 +396,17 @@ export async function POST(request: NextRequest) {
       throw insertError;
     }
 
-    // 9. Leer estado actualizado de la reserva (recalculado por el trigger)
+    // 9. Actualizar método de pago en booking y leer estado actualizado
+    await admin
+      .from("bookings")
+      .update({
+        payment_method: payment_method,
+      })
+      .eq("id", booking_id);
+
     const { data: updatedBooking } = await admin
       .from("bookings")
-      .select("id, booking_code, advance_amount_cents, balance_cents, payment_status, status, confirmed_at")
+      .select("id, booking_code, advance_amount_cents, balance_cents, payment_status, payment_method, status, confirmed_at")
       .eq("id", booking_id)
       .single();
 
