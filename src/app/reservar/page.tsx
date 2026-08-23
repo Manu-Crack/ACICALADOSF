@@ -1348,23 +1348,7 @@ export default function ReservarPage() {
               WhatsApp para asegurar tu atención inmediata.
             </p>
 
-            {bookingResult && (
-              <div style={{ maxWidth: 520, margin: "0 auto 28px" }}>
-                <PaymentQRWidget
-                  bookingId={bookingResult.booking_id}
-                  bookingCode={bookingResult.booking_code}
-                  serviceNames={bookingResult.services}
-                  totalPriceCents={bookingResult.total_price_cents}
-                  advancePercentage={bookingResult.advance_percentage || 25}
-                  clientName={bookingResult.client_name}
-                  bookingDate={bookingResult.booking_date}
-                  startTime={bookingResult.start_time}
-                  messageType="advance"
-                  showUploadButton={true}
-                  showWhatsAppButton={true}
-                />
-              </div>
-            )}
+
 
             <div
               style={{
