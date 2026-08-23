@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import { AttendanceQRScannerModal } from "./AttendanceQRScannerModal";
 import { EmployeeQRBadgeModal } from "./EmployeeQRBadgeModal";
 import { EmployeeHistoryModal } from "./EmployeeHistoryModal";
+import { JustificationModal } from "./JustificationModal";
+import { JustificationHistoryModal } from "./JustificationHistoryModal";
+import { BonusSettingsModal } from "./BonusSettingsModal";
+import { BonusAdjustmentModal } from "./BonusAdjustmentModal";
 
 interface Employee {
   id: string;
@@ -14,6 +18,7 @@ interface Employee {
 }
 
 import { AttendanceRecord, getAttendanceStatusInfo } from "@/lib/types/attendance";
+import type { JustificationType } from "@/lib/types/bonus";
 
 interface BlockRecord {
   id: string;
@@ -25,7 +30,8 @@ interface BlockRecord {
 }
 
 export function AttendanceManager({ userRole = "admin" }: { userRole?: string }) {
-  const canEditOrDelete = userRole === "admin";
+  const isAdmin = userRole === "admin";
+  const canEditOrDelete = isAdmin;
 
   // Filters
   const [typeFilter, setTypeFilter] = useState<"all" | "spa" | "barberia" | "recepcionista">("all");
@@ -51,6 +57,25 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [selectedQrEmployee, setSelectedQrEmployee] = useState<Employee | null>(null);
   const [selectedHistoryEmployee, setSelectedHistoryEmployee] = useState<Employee | null>(null);
+  const [showBonusSettingsModal, setShowBonusSettingsModal] = useState(false);
+  const [justificationModalData, setJustificationModalData] = useState<{
+    attendanceId?: string | null;
+    employeeId: string;
+    employeeName: string;
+    initialType: JustificationType;
+    dateStr: string;
+  } | null>(null);
+  const [historyJustificationsData, setHistoryJustificationsData] = useState<{
+    employeeId?: string;
+    attendanceId?: string;
+    employeeName?: string;
+  } | null>(null);
+  const [bonusAdjustmentData, setBonusAdjustmentData] = useState<{
+    attendanceId: string;
+    employeeName: string;
+    dateStr: string;
+    currentMinutes: number;
+  } | null>(null);
 
   // Manual attendance edit modal state
   const [showManualModal, setShowManualModal] = useState(false);
@@ -284,13 +309,38 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowBonusSettingsModal(true)}
+              className="btn btn-secondary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: "0.85rem",
+              }}
+              title="Configurar horarios de inicio de bonificación"
+              id="bonus-settings-btn"
+            >
+              ⚙️ Reglas de Bonificación
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setShowScannerModal(true)}
             className="btn btn-primary"
-            style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 4px 16px rgba(200, 164, 92, 0.3)",
+              fontSize: "0.95rem",
+              fontWeight: 700,
+            }}
           >
-            <span>📷</span> Abrir Escáner QR
+            📸 Escanear QR
           </button>
         </div>
       </div>
@@ -528,25 +578,17 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden", width: "100%" }}>
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", width: "100%" }}>
-            <table style={{ width: "100%", minWidth: "860px", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
+            <table style={{ width: "100%", minWidth: "1000px", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
               <thead>
-                <tr
-                  style={{
-                    background: "rgba(200, 164, 92, 0.06)",
-                    borderBottom: "1px solid var(--color-border)",
-                    color: "var(--color-text-dim)",
-                    fontSize: "0.75rem",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}
-                >
-                  <th style={{ padding: "14px 16px" }}>Trabajador</th>
-                  <th style={{ padding: "14px 16px" }}>Especialidad</th>
-                  <th style={{ padding: "14px 16px" }}>Estado Asistencia</th>
-                  <th style={{ padding: "14px 16px" }}>Entrada (Check-In)</th>
-                  <th style={{ padding: "14px 16px" }}>Salida (Check-Out)</th>
-                  <th style={{ padding: "14px 16px" }}>Tiempo Trabajado</th>
-                  <th style={{ padding: "14px 16px", textAlign: "right" }}>Acciones</th>
+                <tr style={{ background: "rgba(200, 164, 92, 0.05)", textAlign: "left", fontSize: "0.78rem" }}>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Trabajador</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Especialidad</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Estado</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Entrada</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Salida</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Bonificación</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700 }}>Duración</th>
+                  <th style={{ padding: "14px 16px", color: "var(--color-primary)", fontWeight: 700, textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -584,6 +626,10 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                       </span>
                     );
                   }
+
+                  const isCheckInTardy = empAttendance?.status === "tardanza";
+                  const isCheckOutEarly = empAttendance?.status === "salida_temprana";
+                  const bonusMinutes = empAttendance?.bonus_minutes || 0;
 
                   return (
                     <tr
@@ -642,86 +688,148 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                         {statusBadge}
                       </td>
 
-                      {/* Check-In with Justification tag if present */}
-                      <td style={{ padding: "14px 16px" }}>
+                      {/* Check-In con Justificación Independiente */}
+                      <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
                         {empAttendance ? (
                           <div>
-                            <span style={{ color: "var(--color-primary)", fontWeight: 600, display: "block" }}>
+                            <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>
                               {formatTime(empAttendance.check_in)}
                             </span>
-                            {empAttendance.entry_justification && (
-                              <span
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  color: "var(--color-text-dim)",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  marginTop: 3,
-                                  background: "rgba(200, 164, 92, 0.1)",
-                                  padding: "2px 6px",
-                                  borderRadius: 4,
-                                  border: "1px solid rgba(200, 164, 92, 0.25)",
-                                  maxWidth: 150,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                                title={`Justificación Entrada: ${empAttendance.entry_justification}`}
-                              >
-                                📝 {empAttendance.entry_justification}
+                            {empAttendance.check_in_justified ? (
+                              <span className="badge badge-success" style={{ display: "block", fontSize: "0.65rem", marginTop: 4 }}>
+                                ✅ Entrada Justificada
                               </span>
-                            )}
+                            ) : isCheckInTardy ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setJustificationModalData({
+                                    attendanceId: empAttendance.id,
+                                    employeeId: emp.id,
+                                    employeeName: `${emp.first_name} ${emp.last_name}`,
+                                    initialType: "check_in",
+                                    dateStr: empAttendance.date || selectedDate,
+                                  })
+                                }
+                                className="btn btn-ghost btn-sm"
+                                style={{ display: "block", fontSize: "0.68rem", padding: "2px 6px", marginTop: 4, color: "#f59e0b" }}
+                              >
+                                📝 Justificar Entrada
+                              </button>
+                            ) : null}
                           </div>
                         ) : (
-                          <span style={{ color: "var(--color-text-dim)" }}>—</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setJustificationModalData({
+                                employeeId: emp.id,
+                                employeeName: `${emp.first_name} ${emp.last_name}`,
+                                initialType: "absence",
+                                dateStr: selectedDate,
+                              })
+                            }
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: "0.68rem", padding: "2px 6px", color: "var(--color-text-muted)" }}
+                          >
+                            📝 Justificar Falta
+                          </button>
                         )}
                       </td>
 
-                      {/* Check-Out with Justification tag if present */}
-                      <td style={{ padding: "14px 16px" }}>
+                      {/* Check-Out con Justificación Independiente */}
+                      <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
                         {empAttendance?.check_out ? (
                           <div>
-                            <span style={{ color: "var(--color-primary)", fontWeight: 600, display: "block" }}>
+                            <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>
                               {formatTime(empAttendance.check_out)}
                             </span>
-                            {empAttendance.exit_justification && (
-                              <span
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  color: "var(--color-text-dim)",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  marginTop: 3,
-                                  background: "rgba(200, 164, 92, 0.1)",
-                                  padding: "2px 6px",
-                                  borderRadius: 4,
-                                  border: "1px solid rgba(200, 164, 92, 0.25)",
-                                  maxWidth: 150,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                                title={`Justificación Salida: ${empAttendance.exit_justification}`}
-                              >
-                                📝 {empAttendance.exit_justification}
+                            {empAttendance.check_out_justified ? (
+                              <span className="badge badge-success" style={{ display: "block", fontSize: "0.65rem", marginTop: 4 }}>
+                                ✅ Salida Justificada
                               </span>
+                            ) : isCheckOutEarly ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setJustificationModalData({
+                                    attendanceId: empAttendance.id,
+                                    employeeId: emp.id,
+                                    employeeName: `${emp.first_name} ${emp.last_name}`,
+                                    initialType: "check_out",
+                                    dateStr: empAttendance.date || selectedDate,
+                                  })
+                                }
+                                className="btn btn-ghost btn-sm"
+                                style={{ display: "block", fontSize: "0.68rem", padding: "2px 6px", marginTop: 4, color: "#f59e0b" }}
+                              >
+                                📝 Justificar Salida
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+
+                      {/* Tiempo de Bonificación */}
+                      <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                        {bonusMinutes > 0 ? (
+                          <div>
+                            <span style={{ color: "#22c55e", fontWeight: 800, fontSize: "0.88rem" }}>
+                              +{bonusMinutes} min
+                            </span>
+                            <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", display: "block" }}>
+                              ({(bonusMinutes / 60).toFixed(2)} hrs) · {empAttendance?.bonus_calculation_type === "manual" ? "Manual" : "Auto"}
+                            </span>
+                            {isAdmin && empAttendance && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setBonusAdjustmentData({
+                                    attendanceId: empAttendance.id,
+                                    employeeName: `${emp.first_name} ${emp.last_name}`,
+                                    dateStr: empAttendance.date || selectedDate,
+                                    currentMinutes: bonusMinutes,
+                                  })
+                                }
+                                className="btn btn-ghost btn-sm"
+                                style={{ fontSize: "0.65rem", padding: "1px 5px", marginTop: 2 }}
+                              >
+                                ⏱️ Ajustar
+                              </button>
                             )}
                           </div>
                         ) : (
-                          <span style={{ color: "var(--color-text-dim)" }}>—</span>
+                          <span style={{ color: "var(--color-text-dim)", fontSize: "0.78rem" }}>0 min</span>
                         )}
                       </td>
 
                       {/* Duration */}
-                      <td style={{ padding: "14px 16px", color: "var(--color-text-muted)" }}>
+                      <td style={{ padding: "14px 16px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
                         {empAttendance ? calculateDuration(empAttendance.check_in, empAttendance.check_out) : "—"}
                       </td>
 
                       {/* Actions */}
                       <td style={{ padding: "14px 16px", textAlign: "right" }}>
                         <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          {/* Botón Justificaciones */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHistoryJustificationsData({
+                                employeeId: emp.id,
+                                attendanceId: empAttendance?.id,
+                                employeeName: `${emp.first_name} ${emp.last_name}`,
+                              })
+                            }
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: "5px 8px", fontSize: "0.75rem" }}
+                            title="Ver justificaciones del trabajador"
+                          >
+                            📜 Justif.
+                          </button>
+
                           {/* QR Badge Button */}
                           <button
                             type="button"
@@ -783,11 +891,67 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
         />
       )}
 
-      {/* Employee Individual History Modal */}
+      {/* Employee History Modal */}
       {selectedHistoryEmployee && (
         <EmployeeHistoryModal
           employee={selectedHistoryEmployee}
+          userRole={userRole}
           onClose={() => setSelectedHistoryEmployee(null)}
+          onRefresh={loadData}
+        />
+      )}
+
+      {/* Justification Modal */}
+      {justificationModalData && (
+        <JustificationModal
+          attendanceId={justificationModalData.attendanceId}
+          employeeId={justificationModalData.employeeId}
+          employeeName={justificationModalData.employeeName}
+          initialType={justificationModalData.initialType}
+          dateStr={justificationModalData.dateStr}
+          onClose={() => setJustificationModalData(null)}
+          onSuccess={() => {
+            setJustificationModalData(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Justifications History Modal */}
+      {historyJustificationsData && (
+        <JustificationHistoryModal
+          employeeId={historyJustificationsData.employeeId}
+          attendanceId={historyJustificationsData.attendanceId}
+          employeeName={historyJustificationsData.employeeName}
+          userRole={userRole}
+          onClose={() => setHistoryJustificationsData(null)}
+          onStatusChanged={loadData}
+        />
+      )}
+
+      {/* Bonus Settings Modal */}
+      {showBonusSettingsModal && (
+        <BonusSettingsModal
+          onClose={() => setShowBonusSettingsModal(false)}
+          onSuccess={() => {
+            setShowBonusSettingsModal(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Bonus Adjustment Modal */}
+      {bonusAdjustmentData && (
+        <BonusAdjustmentModal
+          attendanceId={bonusAdjustmentData.attendanceId}
+          employeeName={bonusAdjustmentData.employeeName}
+          dateStr={bonusAdjustmentData.dateStr}
+          currentBonusMinutes={bonusAdjustmentData.currentMinutes}
+          onClose={() => setBonusAdjustmentData(null)}
+          onSuccess={() => {
+            setBonusAdjustmentData(null);
+            loadData();
+          }}
         />
       )}
 

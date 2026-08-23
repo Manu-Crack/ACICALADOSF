@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 import { EmployeeQRBadgeModal } from "@/app/dashboard/asistencia/EmployeeQRBadgeModal";
+import { EmployeeAbsenceRangeModal } from "./EmployeeAbsenceRangeModal";
 
 type Service = {
   id: string;
@@ -17,6 +18,9 @@ type EmployeeBlock = {
   id: string;
   employee_id: string;
   block_date: string;
+  start_date?: string;
+  end_date?: string;
+  is_all_day?: boolean;
   reason: string;
   start_time: string | null;
   end_time: string | null;
@@ -947,7 +951,9 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                                 }}
                               >
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                  <img src="/calendario.svg" alt="Fecha" style={{ width: 13, height: 13, display: "inline-block" }} /> {b.block_date} — {b.reason}
+                                  <img src="/calendario.svg" alt="Fecha" style={{ width: 13, height: 13, display: "inline-block" }} />{" "}
+                                  {b.start_date || b.block_date}
+                                  {b.end_date && b.end_date !== (b.start_date || b.block_date) ? ` al ${b.end_date}` : ""} — {b.reason}
                                 </span>
                                 {isAdmin && (
                                   <button
@@ -1843,70 +1849,13 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
         </div>
       )}
 
-      {/* MODAL REGISTRAR AUSENCIA */}
+      {/* MODAL REGISTRAR AUSENCIA / PERMISO POR RANGO */}
       {showAbsenceModal && absenceEmp && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.75)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 999,
-            padding: 16,
-          }}
-        >
-          <div className="card" style={{ width: "100%", maxWidth: 450, padding: 24 }}>
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-              <img src="/calendario.svg" alt="Permiso" style={{ width: 18, height: 18, display: "inline-block" }} /> Registrar Permiso / Ausencia
-            </h2>
-            <p style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", marginBottom: 16 }}>
-              Para: <strong>{absenceEmp.first_name} {absenceEmp.last_name}</strong>
-            </p>
-
-            <form onSubmit={handleSaveAbsence}>
-              <div style={{ marginBottom: 12 }}>
-                <label className="label">Fecha de Ausencia *</label>
-                <input
-                  type="date"
-                  required
-                  value={blockDate}
-                  onChange={(e) => setBlockDate(e.target.value)}
-                  className="input"
-                />
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label className="label">Motivo</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Permiso médico, Vacaciones"
-                  value={blockReason}
-                  onChange={(e) => setBlockReason(e.target.value)}
-                  className="input"
-                />
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAbsenceModal(false)}
-                  className="btn btn-ghost"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingAbsence}
-                  className="btn btn-primary"
-                >
-                  {savingAbsence ? "Guardando..." : "Registrar Permiso"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <EmployeeAbsenceRangeModal
+          employee={absenceEmp}
+          onClose={() => setShowAbsenceModal(false)}
+          onSuccess={loadData}
+        />
       )}
 
       {/* Employee QR Badge Modal */}

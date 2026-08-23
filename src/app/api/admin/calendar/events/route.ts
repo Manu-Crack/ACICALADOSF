@@ -1,0 +1,348 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  CALENDAR_EVENT_CONFIG,
+  type CalendarEvent,
+  type CalendarEventType,
+} from "@/lib/types/calendar";
+import { getAttendanceStatusInfo } from "@/lib/types/attendance";
+import {
+  PERMISSION_TYPE_LABELS,
+  PERMISSION_STATUS_LABELS,
+  type PermissionType,
+  type PermissionStatus,
+} from "@/lib/types/permissions";
+
+/**
+ * GET /api/admin/calendar/events
+ * Retorna todos los eventos consolidados para el calendario por empleado:
+ * - Reservas
+ * - Permisos y Ausencias (employee_blocks)
+ * - Asistencias (employee_attendances)
+ * - Bonificaciones
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+
+    if (authErr || !user) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "recepcionista"].includes(profile.role)) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get("start_date") || new Date().toISOString().slice(0, 10);
+    const endDate = searchParams.get("end_date") || startDate;
+    const employeeId = searchParams.get("employee_id");
+    const typesFilter = searchParams.get("types")?.split(",") || ["booking", "permission", "attendance", "bonus"];
+
+    const admin = createAdminClient();
+
+    // 1. Obtener empleados activos
+    let empQuery = admin
+      .from("employees")
+      .select("id, first_name, last_name, type, is_active, position")
+      .order("first_name");
+
+    if (employeeId && employeeId !== "all") {
+      empQuery = empQuery.eq("id", employeeId);
+    }
+
+    const { data: employees } = await empQuery;
+    const employeesList = employees || [];
+    const empMap = new Map(
+      employeesList.map((e) => [e.id, `${e.first_name || ""} ${e.last_name || ""}`.trim()])
+    );
+    const empSpecialtyMap = new Map(
+      employeesList.map((e) => [e.id, e.type === "spa" ? "Spa" : e.type === "recepcionista" ? "Recepción" : "Barbería"])
+    );
+
+    const events: CalendarEvent[] = [];
+
+    // 2. Cargar Reservas
+    if (typesFilter.includes("booking")) {
+      let bQuery = admin
+        .from("bookings")
+        .select(`
+          id,
+          booking_code,
+          client_first_name,
+          client_last_name,
+          client_phone,
+          booking_date,
+          start_time,
+          end_time,
+          status,
+          payment_status,
+          total_price_cents,
+          assigned_employee_id,
+          service_type,
+          booking_services (
+            services (name)
+          )
+        `)
+        .gte("booking_date", startDate)
+        .lte("booking_date", endDate);
+
+      if (employeeId && employeeId !== "all") {
+        bQuery = bQuery.eq("assigned_employee_id", employeeId);
+      }
+
+      const { data: bookings } = await bQuery;
+
+      interface RawBookingEvent {
+        id: string;
+        booking_code: string;
+        client_first_name: string | null;
+        client_last_name: string | null;
+        client_phone: string | null;
+        booking_date: string;
+        start_time: string;
+        end_time: string;
+        status: string;
+        payment_status: string;
+        total_price_cents: number;
+        assigned_employee_id: string | null;
+        service_type: string;
+        booking_services: Array<{ services: { name: string } | null }> | null;
+      }
+
+      ((bookings || []) as unknown as RawBookingEvent[]).forEach((b) => {
+        const empName = b.assigned_employee_id ? empMap.get(b.assigned_employee_id) || "Sin Asignar" : "Sin Asignar";
+        const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim();
+        const serviceNames = (b.booking_services || []).map((bs) => bs.services?.name || "Servicio");
+        const cfg = CALENDAR_EVENT_CONFIG.booking;
+
+        events.push({
+          id: `booking-${b.id}`,
+          type: "booking",
+          title: `Cita: ${clientName} (${serviceNames.slice(0, 2).join(", ")})`,
+          employee_id: b.assigned_employee_id || "unassigned",
+          employee_name: empName,
+          employee_specialty: b.assigned_employee_id ? empSpecialtyMap.get(b.assigned_employee_id) : undefined,
+          date: b.booking_date,
+          start_time: b.start_time,
+          end_time: b.end_time,
+          status: b.status,
+          status_label: b.status.toUpperCase(),
+          badge_class: b.status === "confirmada" ? "badge-success" : b.status === "pendiente" ? "badge-warning" : "badge-neutral",
+          icon: cfg.icon,
+          color: cfg.color,
+          bg_color: cfg.bgColor,
+          border_color: cfg.borderColor,
+          description: `Servicios: ${serviceNames.join(", ")} | Monto: S/ ${(b.total_price_cents / 100).toFixed(2)}`,
+          details: {
+            booking_code: b.booking_code,
+            client_name: clientName,
+            client_phone: b.client_phone || undefined,
+            services: serviceNames,
+            price_cents: b.total_price_cents,
+            payment_status: b.payment_status,
+          },
+        });
+      });
+    }
+
+    // 3. Cargar Permisos / Ausencias (employee_blocks)
+    if (typesFilter.includes("permission")) {
+      let pQuery = admin
+        .from("employee_blocks")
+        .select(`
+          id,
+          employee_id,
+          start_date,
+          end_date,
+          is_all_day,
+          start_time,
+          end_time,
+          permission_type,
+          reason,
+          observation,
+          evidence_url,
+          status
+        `)
+        .lte("start_date", endDate)
+        .gte("end_date", startDate);
+
+      if (employeeId && employeeId !== "all") {
+        pQuery = pQuery.eq("employee_id", employeeId);
+      }
+
+      const { data: blocks } = await pQuery;
+
+      interface RawBlockEvent {
+        id: string;
+        employee_id: string;
+        start_date: string;
+        end_date: string;
+        is_all_day: boolean;
+        start_time: string | null;
+        end_time: string | null;
+        permission_type: PermissionType;
+        reason: string;
+        observation: string | null;
+        evidence_url: string | null;
+        status: PermissionStatus;
+      }
+
+      ((blocks || []) as unknown as RawBlockEvent[]).forEach((p) => {
+        const empName = empMap.get(p.employee_id) || "Personal";
+        const permTypeInfo = PERMISSION_TYPE_LABELS[p.permission_type] || { label: "Permiso", icon: "🟡" };
+        const statusInfo = PERMISSION_STATUS_LABELS[p.status] || { label: p.status, badgeClass: "badge-neutral", icon: "⚪" };
+        const cfg = CALENDAR_EVENT_CONFIG.permission;
+
+        events.push({
+          id: `permission-${p.id}`,
+          type: "permission",
+          title: `${permTypeInfo.icon} Permiso: ${p.reason}`,
+          employee_id: p.employee_id,
+          employee_name: empName,
+          employee_specialty: empSpecialtyMap.get(p.employee_id),
+          date: p.start_date,
+          end_date: p.end_date,
+          start_time: p.is_all_day ? "00:00" : p.start_time,
+          end_time: p.is_all_day ? "23:59" : p.end_time,
+          status: p.status,
+          status_label: statusInfo.label,
+          badge_class: statusInfo.badgeClass,
+          icon: permTypeInfo.icon,
+          color: cfg.color,
+          bg_color: cfg.bgColor,
+          border_color: cfg.borderColor,
+          description: `Tipo: ${permTypeInfo.label} | Motivo: ${p.reason}`,
+          details: {
+            permission_type: permTypeInfo.label,
+            reason: p.reason,
+            observation: p.observation || undefined,
+            evidence_url: p.evidence_url,
+          },
+        });
+      });
+    }
+
+    // 4. Cargar Asistencias (employee_attendances)
+    if (typesFilter.includes("attendance") || typesFilter.includes("bonus")) {
+      let aQuery = admin
+        .from("employee_attendances")
+        .select(`
+          id,
+          employee_id,
+          date,
+          check_in,
+          check_out,
+          status,
+          bonus_minutes,
+          bonus_calculation_type,
+          check_in_justified,
+          check_out_justified,
+          notes
+        `)
+        .gte("date", startDate)
+        .lte("date", endDate);
+
+      if (employeeId && employeeId !== "all") {
+        aQuery = aQuery.eq("employee_id", employeeId);
+      }
+
+      const { data: attendances } = await aQuery;
+
+      interface RawAttendanceEvent {
+        id: string;
+        employee_id: string;
+        date: string;
+        check_in: string;
+        check_out: string | null;
+        status: string;
+        bonus_minutes: number | null;
+        bonus_calculation_type: string | null;
+        check_in_justified: boolean;
+        check_out_justified: boolean;
+        notes: string | null;
+      }
+
+      ((attendances || []) as unknown as RawAttendanceEvent[]).forEach((att) => {
+        const empName = empMap.get(att.employee_id) || "Personal";
+        const attInfo = getAttendanceStatusInfo(att.status);
+
+        if (typesFilter.includes("attendance")) {
+          const cfg = CALENDAR_EVENT_CONFIG.attendance;
+          events.push({
+            id: `attendance-${att.id}`,
+            type: "attendance",
+            title: `Asistencia: ${attInfo.label}`,
+            employee_id: att.employee_id,
+            employee_name: empName,
+            employee_specialty: empSpecialtyMap.get(att.employee_id),
+            date: att.date,
+            start_time: att.check_in ? new Date(att.check_in).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" }) : undefined,
+            end_time: att.check_out ? new Date(att.check_out).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" }) : undefined,
+            status: att.status,
+            status_label: attInfo.label,
+            badge_class: attInfo.badgeClass,
+            icon: attInfo.icon,
+            color: cfg.color,
+            bg_color: cfg.bgColor,
+            border_color: cfg.borderColor,
+            description: att.notes || `Entrada: ${att.check_in?.slice(11, 16)}`,
+            details: {
+              check_in: att.check_in,
+              check_out: att.check_out,
+              observation: att.notes || undefined,
+            },
+          });
+        }
+
+        // Evento de Bonificación
+        if (typesFilter.includes("bonus") && (att.bonus_minutes || 0) > 0) {
+          const cfg = CALENDAR_EVENT_CONFIG.bonus;
+          const mins = att.bonus_minutes || 0;
+          events.push({
+            id: `bonus-${att.id}`,
+            type: "bonus",
+            title: `⏱️ Bono: +${mins} min (${(mins / 60).toFixed(2)}h)`,
+            employee_id: att.employee_id,
+            employee_name: empName,
+            employee_specialty: empSpecialtyMap.get(att.employee_id),
+            date: att.date,
+            status: "bonificado",
+            status_label: `${mins} min`,
+            badge_class: "badge-gold",
+            icon: cfg.icon,
+            color: cfg.color,
+            bg_color: cfg.bgColor,
+            border_color: cfg.borderColor,
+            description: `Cálculo: ${att.bonus_calculation_type === "manual" ? "Manual" : "Automático"}`,
+            details: {
+              bonus_minutes: mins,
+              bonus_hours: Math.round((mins / 60) * 100) / 100,
+            },
+          });
+        }
+      });
+    }
+
+    return NextResponse.json({
+      events,
+      employees: employeesList,
+      startDate,
+      endDate,
+    });
+  } catch (error) {
+    console.error("GET /api/admin/calendar/events error:", error);
+    return NextResponse.json({ error: "Error al consultar eventos del calendario" }, { status: 500 });
+  }
+}

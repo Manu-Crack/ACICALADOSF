@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#C8A45C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
   <rect x="2" y="5" width="20" height="14" rx="2" stroke="#C8A45C" />
   <line x1="2" y1="10" x2="22" y2="10" stroke="#C8A45C" opacity="0.6" />
   <circle cx="7" cy="15" r="1.5" fill="#C8A45C" />
   <path d="M16 13l-3 3m0 0l3 3m-3-3h5" stroke="#C8A45C" stroke-width="2" />
+=======
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#C8A45C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="12" y1="1" x2="12" y2="23"></line>
+  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+>>>>>>> 3e5c1fddca66471c2c80b341c36806741db2e6ba
 </svg>

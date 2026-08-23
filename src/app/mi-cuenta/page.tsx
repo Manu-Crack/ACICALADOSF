@@ -5,6 +5,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { ProfileForm } from "./ProfileForm";
 import { formatDuration } from "@/lib/utils/format";
+import { PaymentQRWidget } from "@/components/payment/PaymentQRWidget";
 
 export const metadata = {
   title: "Mi Cuenta — Acicalados",
@@ -26,7 +27,9 @@ export default async function MiCuentaPage() {
 
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, service_type, total_duration_minutes")
+    .select(
+      "id, booking_code, booking_date, start_time, status, payment_status, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, total_duration_minutes, client_first_name, client_last_name"
+    )
     .eq("user_id", user.id)
     .in("status", ["pendiente", "confirmada", "completada"])
     .order("booking_date", { ascending: false })
@@ -40,10 +43,10 @@ export default async function MiCuentaPage() {
   };
 
   const paymentLabels: Record<string, string> = {
-    pendiente: "Pago en local",
-    sin_pago: "Pago en local",
-    parcial: "Parcial",
-    total: "Pagado en local",
+    pendiente: "Sin pago",
+    sin_pago:  "Sin pago",
+    parcial:   "Adelanto pagado (25%)",
+    total:     "Pagado completo",
   };
 
   const statusMessages: Record<string, Record<string, string>> = {
@@ -205,37 +208,34 @@ export default async function MiCuentaPage() {
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
                       <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                        Pago: <strong style={{ color: "var(--color-text)" }}>{paymentLabels[b.payment_status] || "Pago en local"}</strong>
+                        Pago: <strong style={{ color: "var(--color-text)" }}>{paymentLabels[b.payment_status] || b.payment_status}</strong>
                       </p>
-
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-sm"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 14px",
-                          fontSize: "0.8125rem",
-                          background: "#25D366",
-                          color: "#FFFFFF",
-                          border: "none",
-                          textDecoration: "none",
-                          borderRadius: "var(--radius-sm)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        <img src="/icons/whatsApp.svg" alt="WhatsApp" style={{ width: 16, height: 16 }} />
-                        <span>Chat WhatsApp</span>
-                      </a>
                     </div>
 
                     {message && (
-                      <p style={{ fontSize: "0.8125rem", marginTop: 10, padding: "8px 12px", background: "rgba(200,164,92,0.05)", borderRadius: "var(--radius-sm)", color: "var(--color-primary)" }}>
+                      <p style={{ fontSize: "0.8125rem", marginTop: 8, marginBottom: 12, padding: "8px 12px", background: "rgba(200,164,92,0.05)", borderRadius: "var(--radius-sm)", color: "var(--color-primary)" }}>
                         {message}
                       </p>
+                    )}
+
+                    {/* Widget de QR y Pago para reservas pendientes o con saldo */}
+                    {b.status !== "cancelada" && b.payment_status !== "total" && (
+                      <div style={{ marginTop: 12 }}>
+                        <PaymentQRWidget
+                          bookingId={b.id}
+                          bookingCode={b.booking_code}
+                          serviceNames={b.service_type === "barberia" ? "Barbería" : b.service_type === "spa" ? "Spa" : "Mixto"}
+                          totalPriceCents={b.total_price_cents}
+                          advancePercentage={b.advance_percentage || 25}
+                          amountPaidCents={b.advance_amount_cents || 0}
+                          balanceCents={b.balance_cents}
+                          clientName={`${b.client_first_name || profile?.first_name || ""} ${b.client_last_name || profile?.last_name || ""}`.trim()}
+                          bookingDate={b.booking_date}
+                          startTime={b.start_time}
+                          messageType={b.status === "pendiente" ? "advance" : "balance"}
+                          compact={true}
+                        />
+                      </div>
                     )}
                   </div>
                 );

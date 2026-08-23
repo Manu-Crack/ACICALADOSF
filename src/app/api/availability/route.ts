@@ -107,13 +107,15 @@ export async function GET(request: NextRequest) {
     const employeesList = activeEmployees || [];
     const empIds = employeesList.map((e) => e.id);
 
-    // 3. Obtener ausencias y permisos (employee_blocks) para la fecha
-    let absencesList: { employee_id: string; start_time: string | null; end_time: string | null }[] = [];
+    // 3. Obtener ausencias y permisos aprobados (employee_blocks) para la fecha
+    let absencesList: { employee_id: string; start_time: string | null; end_time: string | null; is_all_day?: boolean }[] = [];
     if (empIds.length > 0) {
       const { data: blocks } = await admin
         .from("employee_blocks")
-        .select("employee_id, start_time, end_time")
-        .eq("block_date", date)
+        .select("employee_id, start_time, end_time, is_all_day")
+        .lte("start_date", date)
+        .gte("end_date", date)
+        .eq("status", "approved")
         .in("employee_id", empIds);
       if (blocks) absencesList = blocks;
     }

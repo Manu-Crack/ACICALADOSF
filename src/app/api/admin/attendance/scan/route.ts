@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ATTENDANCE_STATUS, AttendanceStatus } from "@/lib/types/attendance";
+import { calculateBonusMinutes } from "@/lib/utils/bonus-calculator";
+import { type BonusRule, DEFAULT_BONUS_RULES } from "@/lib/types/bonus";
 
 async function verifyAdmin() {
   const supabase = await createClient();
@@ -260,11 +262,24 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Si confirmó la salida, registrar check_out
+      // Si confirmó la salida, calcular bonificación según reglas de día de semana
+      let bonusRules: BonusRule[] = DEFAULT_BONUS_RULES;
+      try {
+        const { data: dbRules } = await admin.from("bonus_settings").select("*");
+        if (dbRules && dbRules.length > 0) bonusRules = dbRules;
+      } catch (err) {
+        console.error("Error fetching bonus rules in scan:", err);
+      }
+
+      const bonusResult = calculateBonusMinutes(now.toISOString(), peruDate, bonusRules);
+
+      // Registrar check_out y bonus_minutes
       const { data: updatedAttendance, error: updateError } = await admin
         .from("employee_attendances")
         .update({
           check_out: now.toISOString(),
+          bonus_minutes: bonusResult.bonus_minutes,
+          bonus_calculation_type: "auto",
           updated_at: now.toISOString(),
         })
         .eq("id", attendanceRecord.id)
@@ -279,12 +294,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const bonusMessage = bonusResult.bonus_minutes > 0
+        ? ` (+${bonusResult.bonus_minutes} min bonificación)`
+        : "";
+
       return NextResponse.json({
         action: "check_out",
         status: "success",
-        message: `Salida registrada: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted}`,
+        message: `Salida registrada: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted}${bonusMessage}`,
         employee,
         attendance: updatedAttendance,
+        bonus_result: bonusResult,
         check_in_time: checkInFormatted,
         check_out_time: currentTimeFormatted,
         date: peruDate,

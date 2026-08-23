@@ -124,8 +124,13 @@ export async function DELETE(request: NextRequest) {
 
 /**
  * PATCH /api/admin/bookings
- * Permite al administrador actualizar estado (pendiente -> confirmada -> completada -> cancelada),
- * registrar cobro presencial (payment_status = total) y reasignar empleado.
+ * Permite a admin y recepcionista actualizar el estado de una reserva y reasignar empleado.
+ *
+ * REGLAS DE CONFIRMACIÓN:
+ * - Una reserva solo puede pasar a 'confirmada' si advance_amount_cents >= advance_required.
+ * - advance_required = ceil(total_price_cents * advance_percentage / 100).
+ * - Los pagos se registran en /api/admin/payments (trigger recalcula automáticamente).
+ * - mark_paid fue eliminado; usar el endpoint de pagos en su lugar.
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -135,7 +140,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, status, payment_status, assigned_employee_id, mark_paid } = body;
+    const { id, status, assigned_employee_id } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -146,14 +151,16 @@ export async function PATCH(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // 1. Obtener la reserva actual
-    const { data: booking, error: fetchError } = await admin
+    // 1. Obtener la reserva actual con todos los campos financieros
+    const { data: bookingData, error: fetchError } = await admin
       .from("bookings")
-      .select("id, booking_code, booking_date, start_time, end_time, total_price_cents, status, payment_status, confirmed_at")
+      .select(
+        "id, booking_code, booking_date, start_time, end_time, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, status, payment_status, confirmed_at"
+      )
       .eq("id", id)
       .single();
 
-    if (fetchError || !booking) {
+    if (fetchError || !bookingData) {
       return NextResponse.json(
         { error: "La reserva no existe" },
         { status: 404 }
@@ -162,58 +169,79 @@ export async function PATCH(request: NextRequest) {
 
     const updates: Record<string, unknown> = {};
 
+    // 2. Cambio de estado — con validaciones de negocio
     if (status) {
+      const validStatuses = ["pendiente", "confirmada", "completada", "cancelada"];
+      if (!validStatuses.includes(status)) {
+        return NextResponse.json(
+          { error: `Estado inválido. Valores permitidos: ${validStatuses.join(", ")}` },
+          { status: 422 }
+        );
+      }
+
+      // Validar transición de confirmación: requiere adelanto del 25% pagado
+      if (status === "confirmada" && bookingData.status === "pendiente") {
+        const advanceRequired = Math.ceil(
+          bookingData.total_price_cents * (bookingData.advance_percentage || 25) / 100
+        );
+        const amountPaid = bookingData.advance_amount_cents || 0;
+
+        if (amountPaid < advanceRequired) {
+          return NextResponse.json(
+            {
+              error: `No se puede confirmar la reserva. El adelanto mínimo requerido es S/ ${(advanceRequired / 100).toFixed(2)} (${bookingData.advance_percentage || 25}% de S/ ${(bookingData.total_price_cents / 100).toFixed(2)}). Actualmente pagado: S/ ${(amountPaid / 100).toFixed(2)}. Registra el pago en el módulo de pagos.`,
+              advance_required_cents: advanceRequired,
+              amount_paid_cents: amountPaid,
+            },
+            { status: 422 }
+          );
+        }
+      }
+
+      // No permitir volver a pendiente desde confirmada o completada
+      if (status === "pendiente" && ["confirmada", "completada"].includes(bookingData.status)) {
+        return NextResponse.json(
+          { error: "No se puede regresar una reserva confirmada o completada al estado pendiente" },
+          { status: 422 }
+        );
+      }
+
+      // No permitir modificar reservas canceladas excepto para admin
+      if (bookingData.status === "cancelada" && auth.profile.role !== "admin") {
+        return NextResponse.json(
+          { error: "Solo el administrador puede modificar reservas canceladas" },
+          { status: 403 }
+        );
+      }
+
       updates.status = status;
-      if (status === "confirmada" && !booking.confirmed_at) {
+
+      if (status === "confirmada" && !bookingData.confirmed_at) {
         updates.confirmed_at = new Date().toISOString();
       }
       if (status === "completada") {
         updates.completed_at = new Date().toISOString();
-        updates.payment_status = "total";
-        updates.advance_percentage = 100;
-        updates.advance_amount_cents = booking.total_price_cents;
-        updates.balance_cents = 0;
       }
       if (status === "cancelada") {
         updates.cancelled_at = new Date().toISOString();
       }
     }
 
-    if (payment_status) {
-      updates.payment_status = payment_status;
-      if (payment_status === "total") {
-        updates.advance_percentage = 100;
-        updates.advance_amount_cents = booking.total_price_cents;
-        updates.balance_cents = 0;
-      }
-    }
-
-    if (mark_paid) {
-      updates.payment_status = "total";
-      updates.advance_percentage = 100;
-      updates.advance_amount_cents = booking.total_price_cents;
-      updates.balance_cents = 0;
-      if (booking.status === "pendiente") {
-        updates.status = "confirmada";
-        updates.confirmed_at = booking.confirmed_at || new Date().toISOString();
-      }
-    }
-
+    // 3. Reasignación de empleado con validación de conflictos
     if (assigned_employee_id !== undefined) {
       const newEmpId = assigned_employee_id || null;
 
-      // Si se asigna un colaborador, verificar si ya tiene colisión con otra cita o permiso
       if (newEmpId) {
-        // Verificar ausencias / permisos
+        // Verificar ausencias / permisos del empleado
         const { data: absences } = await admin
           .from("employee_blocks")
           .select("id, start_time, end_time, reason")
           .eq("employee_id", newEmpId)
-          .eq("block_date", booking.booking_date);
+          .eq("block_date", bookingData.booking_date);
 
         const hasAbsence = (absences || []).some((b) => {
           if (!b.start_time || !b.end_time) return true;
-          return hasTimeOverlap(b.start_time, b.end_time, booking.start_time, booking.end_time);
+          return hasTimeOverlap(b.start_time, b.end_time, bookingData.start_time, bookingData.end_time);
         });
 
         if (hasAbsence) {
@@ -223,17 +251,17 @@ export async function PATCH(request: NextRequest) {
           );
         }
 
-        // Verificar choque con otra reserva activa
+        // Verificar choque con otra reserva activa del mismo empleado
         const { data: conflictingBookings } = await admin
           .from("bookings")
           .select("id, booking_code, start_time, end_time")
           .eq("assigned_employee_id", newEmpId)
-          .eq("booking_date", booking.booking_date)
-          .neq("id", booking.id)
+          .eq("booking_date", bookingData.booking_date)
+          .neq("id", bookingData.id)
           .not("status", "in", '("cancelada","expirada")');
 
         const conflict = (conflictingBookings || []).find((cb) => {
-          return hasTimeOverlap(cb.start_time, cb.end_time, booking.start_time, booking.end_time);
+          return hasTimeOverlap(cb.start_time, cb.end_time, bookingData.start_time, bookingData.end_time);
         });
 
         if (conflict) {
@@ -249,12 +277,22 @@ export async function PATCH(request: NextRequest) {
       updates.assigned_employee_id = newEmpId;
     }
 
+    // 4. Verificar que hay algo que actualizar
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: "No se proporcionaron campos válidos para actualizar" },
+        { status: 422 }
+      );
+    }
+
+    // 5. Aplicar la actualización
     const { data: updated, error: updateError } = await admin
       .from("bookings")
       .update(updates)
       .eq("id", id)
       .select()
       .single();
+
 
     if (updateError) {
       console.error("Error al actualizar reserva:", updateError);
@@ -267,7 +305,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       success: true,
       booking: updated,
-      message: `Reserva ${booking.booking_code} actualizada exitosamente.`,
+      message: `Reserva ${bookingData.booking_code} actualizada exitosamente.`,
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -278,4 +316,5 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
 

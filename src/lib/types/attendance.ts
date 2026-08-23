@@ -29,6 +29,13 @@ export interface AttendanceRecord {
   notes: string | null;
   entry_justification?: string | null;
   exit_justification?: string | null;
+  bonus_minutes?: number;
+  bonus_calculation_type?: "auto" | "manual";
+  bonus_adjusted_by?: string | null;
+  bonus_adjusted_at?: string | null;
+  bonus_adjustment_reason?: string | null;
+  check_in_justified?: boolean;
+  check_out_justified?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -68,5 +75,3 @@ export function getAttendanceStatusInfo(
       return { label: status || "Presente", badgeClass: "badge-success", icon: "🟢", isJustified: false };
   }
 }
-
-
