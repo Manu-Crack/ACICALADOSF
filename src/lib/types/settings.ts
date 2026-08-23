@@ -54,8 +54,8 @@ export interface DefaultPaymentSettings {
 }
 
 export const DEFAULT_PAYMENT_SETTINGS: DefaultPaymentSettings = {
-  recipient_name: "Jorjito",
-  yape_phone: "51997766828",
+  recipient_name: "Jorge Robert Huamani Azurza",
+  yape_phone: "991044301",
   advance_percentage: 25,
   base_message: "Hola Acicalados, adjunto mi comprobante de pago para mi reserva.",
   is_active: true,

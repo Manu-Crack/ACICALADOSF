@@ -58,6 +58,10 @@ export function PaymentQRWidget({
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
 
+  const effectiveRecipientName = settings.recipient_name || DEFAULT_PAYMENT_SETTINGS.recipient_name;
+  const effectiveYapePhone = settings.yape_phone || DEFAULT_PAYMENT_SETTINGS.yape_phone;
+  const effectiveQrImageUrl = settings.qr_image_url || "/qr-yape.png";
+
   // Cargar configuración de pago centralizada
   useEffect(() => {
     let isMounted = true;
@@ -91,8 +95,8 @@ export function PaymentQRWidget({
   const balanceSoles = (effectiveBalanceCents / 100).toFixed(2);
 
   const handleCopy = () => {
-    if (!settings.yape_phone) return;
-    navigator.clipboard.writeText(settings.yape_phone);
+    if (!effectiveYapePhone) return;
+    navigator.clipboard.writeText(effectiveYapePhone);
     setCopiedPhone(true);
     setTimeout(() => setCopiedPhone(false), 2000);
   };
@@ -108,7 +112,7 @@ export function PaymentQRWidget({
         totalPriceSoles: totalSoles,
         amountPaidSoles: paidSoles,
         balanceSoles: balanceSoles,
-        whatsappNumber: settings.yape_phone,
+        whatsappNumber: effectiveYapePhone,
       });
     }
 
@@ -118,7 +122,7 @@ export function PaymentQRWidget({
         clientName,
         services: servicesStr,
         totalPriceSoles: totalSoles,
-        whatsappNumber: settings.yape_phone,
+        whatsappNumber: effectiveYapePhone,
       });
     }
 
@@ -132,7 +136,7 @@ export function PaymentQRWidget({
       advancePercentage: effectiveAdvancePct,
       advanceAmountSoles: advanceSoles,
       balanceSoles: balanceSoles,
-      whatsappNumber: settings.yape_phone,
+      whatsappNumber: effectiveYapePhone,
     });
   }, [
     messageType,
@@ -149,7 +153,7 @@ export function PaymentQRWidget({
     amountPaidCents,
     totalPriceCents,
     effectiveBalanceCents,
-    settings.yape_phone,
+    effectiveYapePhone,
   ]);
 
   return (
@@ -182,7 +186,7 @@ export function PaymentQRWidget({
               Pago por Yape
             </h4>
             <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
-              Titular: <strong>{settings.recipient_name}</strong>
+              Titular: <strong>{effectiveRecipientName}</strong>
             </span>
           </div>
         </div>
@@ -233,19 +237,16 @@ export function PaymentQRWidget({
             }}
             title="Haz clic para ampliar el QR"
           >
-            {settings.qr_image_url ? (
-              <img
-                src={settings.qr_image_url}
-                alt="QR Yape"
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-              />
-            ) : (
-              <div style={{ textAlign: "center", color: "#4A154B" }}>
-                <span style={{ fontSize: "1.8rem" }}>💜</span>
-                <p style={{ fontSize: "0.65rem", fontWeight: 800, margin: 0, lineHeight: 1.1 }}>YAPE</p>
-                <p style={{ fontSize: "0.58rem", margin: 0, color: "#666" }}>Acicalados</p>
-              </div>
-            )}
+            <img
+              src={effectiveQrImageUrl}
+              alt="QR Yape"
+              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+              onError={(event) => {
+                const target = event.currentTarget as HTMLImageElement;
+                target.onerror = null;
+                target.src = "/qr-yape.png";
+              }}
+            />
           </div>
           <button
             type="button"
@@ -317,7 +318,7 @@ export function PaymentQRWidget({
             }}
           >
             <span style={{ color: "var(--color-text-muted)" }}>
-              Número Yape: <strong style={{ color: "var(--color-text)" }}>{settings.yape_phone}</strong>
+              Número Yape: <strong style={{ color: "var(--color-text)" }}>{effectiveYapePhone}</strong>
             </span>
             <button
               type="button"
@@ -327,6 +328,18 @@ export function PaymentQRWidget({
             >
               {copiedPhone ? "✅ Copiado" : "📋 Copiar"}
             </button>
+          </div>
+
+          <div
+            style={{
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              color: "var(--color-text)",
+              textAlign: "center",
+              padding: "8px 10px 0",
+            }}
+          >
+            {effectiveRecipientName}
           </div>
         </div>
       </div>
@@ -399,9 +412,9 @@ export function PaymentQRWidget({
       {/* Modals */}
       {lightboxOpen && (
         <QRLightboxModal
-          qrImageUrl={settings.qr_image_url}
-          recipientName={settings.recipient_name}
-          yapePhone={settings.yape_phone}
+          qrImageUrl={effectiveQrImageUrl}
+          recipientName={effectiveRecipientName}
+          yapePhone={effectiveYapePhone}
           onClose={() => setLightboxOpen(false)}
         />
       )}
