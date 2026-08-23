@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildFullReportData } from "@/lib/services/report-service";
 import { generatePdfReport } from "@/lib/utils/pdf-generator";
 import type { ReportFilterParams } from "@/lib/types/reports";
 
 /**
  * GET /api/admin/reports/export/pdf
- * Genera y descarga un archivo .pdf profesional del reporte operativo y financiero.
+ * Genera y descarga un archivo .pdf ejecutivo horizontal con membrete oficial y tablas financieras.
  * Autorizado para: admin, recepcionista.
  */
 export async function GET(request: Request) {
@@ -44,7 +45,8 @@ export async function GET(request: Request) {
     };
 
     const userName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || user.email || "Usuario";
-    const reportData = await buildFullReportData(supabase, filters, userName);
+    const admin = createAdminClient();
+    const reportData = await buildFullReportData(admin, filters, userName);
 
     const pdfBuffer = generatePdfReport(reportData);
 
@@ -58,8 +60,9 @@ export async function GET(request: Request) {
         "Cache-Control": "no-store",
       },
     });
-  } catch (error) {
-    console.error("GET /api/admin/reports/export/pdf exception:", error);
-    return NextResponse.json({ error: "Error al generar el archivo PDF" }, { status: 500 });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("GET /api/admin/reports/export/pdf exception:", msg);
+    return NextResponse.json({ error: "Error al generar el archivo PDF: " + msg }, { status: 500 });
   }
 }

@@ -158,7 +158,11 @@ export function ReportsManager() {
         const res = await fetch("/api/admin/employees");
         if (res.ok) {
           const data = await res.json();
-          if (data.employees) setEmployees(data.employees);
+          if (Array.isArray(data)) {
+            setEmployees(data);
+          } else if (data.employees && Array.isArray(data.employees)) {
+            setEmployees(data.employees);
+          }
         }
       } catch (err) {
         console.error("Error loading employees for reports:", err);

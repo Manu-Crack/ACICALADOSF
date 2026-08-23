@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildFullReportData } from "@/lib/services/report-service";
 import { generateExcelReport } from "@/lib/utils/excel-generator";
 import type { ReportFilterParams } from "@/lib/types/reports";
@@ -44,7 +45,8 @@ export async function GET(request: Request) {
     };
 
     const userName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || user.email || "Usuario";
-    const reportData = await buildFullReportData(supabase, filters, userName);
+    const admin = createAdminClient();
+    const reportData = await buildFullReportData(admin, filters, userName);
 
     const excelBuffer = await generateExcelReport(reportData);
 
@@ -58,8 +60,9 @@ export async function GET(request: Request) {
         "Cache-Control": "no-store",
       },
     });
-  } catch (error) {
-    console.error("GET /api/admin/reports/export/excel exception:", error);
-    return NextResponse.json({ error: "Error al generar el archivo Excel" }, { status: 500 });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("GET /api/admin/reports/export/excel exception:", msg);
+    return NextResponse.json({ error: "Error al generar el archivo Excel: " + msg }, { status: 500 });
   }
 }

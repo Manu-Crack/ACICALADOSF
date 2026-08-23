@@ -55,10 +55,11 @@ export async function buildFullReportData(
       confirmed_at,
       assigned_employee_id,
       created_at,
-      employees:assigned_employee_id (id, first_name, last_name, position),
+      employees:assigned_employee_id (id, first_name, last_name, type),
       booking_services (
         service_id,
-        price_cents,
+        service_name,
+        service_price_cents,
         duration_minutes,
         services:service_id (name, type)
       )
@@ -85,7 +86,7 @@ export async function buildFullReportData(
   const { data: rawBookings, error: bookingsErr } = await bookingsQuery;
   if (bookingsErr) {
     console.error("Error fetching bookings for report:", bookingsErr);
-    throw new Error("No se pudieron cargar las reservas para el reporte.");
+    throw new Error(`Error en consulta de reservas: ${bookingsErr.message || JSON.stringify(bookingsErr)}`);
   }
 
   // ---------------------------------------------------------------------------
@@ -150,7 +151,7 @@ export async function buildFullReportData(
       voided_by,
       void_reason,
       created_at,
-      employees:employee_id (first_name, last_name)
+      employees:employee_id (first_name, last_name, type)
     `)
     .order("expense_date", { ascending: false });
 
@@ -213,12 +214,14 @@ export async function buildFullReportData(
     employees: {
       first_name: string | null;
       last_name: string | null;
+      type: string | null;
     } | null;
   }
 
   interface RawBookingService {
     service_id: string;
-    price_cents: number;
+    service_name: string | null;
+    service_price_cents: number;
     duration_minutes: number;
     services: {
       name: string;
@@ -250,7 +253,7 @@ export async function buildFullReportData(
       id: string;
       first_name: string;
       last_name: string;
-      position: string;
+      type: string;
     } | null;
     booking_services: RawBookingService[] | null;
   }
@@ -412,8 +415,9 @@ export async function buildFullReportData(
       let barberiaSum = 0;
       bServices.forEach((bs) => {
         const type = bs.services?.type || "barberia";
-        if (type === "spa") spaSum += bs.price_cents || 0;
-        else barberiaSum += bs.price_cents || 0;
+        const price = bs.service_price_cents || 0;
+        if (type === "spa") spaSum += price;
+        else barberiaSum += price;
       });
       const sumTotal = spaSum + barberiaSum || 1;
       const spaRatio = spaSum / sumTotal;
@@ -427,42 +431,51 @@ export async function buildFullReportData(
       ? `${b.employees.first_name || ""} ${b.employees.last_name || ""}`.trim()
       : "Sin asignar";
 
+    const employeePos = b.employees?.type
+      ? b.employees.type === "barberia"
+        ? "Barbero"
+        : b.employees.type === "spa"
+        ? "Especialista Spa"
+        : b.employees.type
+      : "Especialista";
+
     // Nombres de servicios y desglose de servicios
     const serviceNamesArr: string[] = [];
     const bServices = b.booking_services || [];
 
     if (bServices.length > 0) {
       bServices.forEach((bs) => {
-        const sName = bs.services?.name || "Servicio";
+        const sName = bs.service_name || bs.services?.name || "Servicio";
         const sType = bs.services?.type || b.service_type || "barberia";
+        const sPrice = bs.service_price_cents || 0;
         serviceNamesArr.push(sName);
 
         // Desglose por servicio
         const key = bs.service_id || sName;
         if (!servicesMap[key]) {
           servicesMap[key] = {
-            service_id: bs.service_id,
+            service_id: bs.service_id || sName,
             service_name: sName,
             service_type: sType,
-            price_cents: bs.price_cents || 0,
+            price_cents: sPrice,
             duration_minutes: bs.duration_minutes || 30,
             times_booked: 0,
             total_revenue_cents: 0,
           };
         }
         servicesMap[key].times_booked += 1;
-        servicesMap[key].total_revenue_cents += bs.price_cents || 0;
+        servicesMap[key].total_revenue_cents += sPrice;
 
         // Agregar a la tabla de auditoría si la cita no está cancelada
         if (b.status !== "cancelada" && b.status !== "expirada") {
           completedServicesAuditList.push({
-            id: `${b.id}_${bs.service_id}`,
+            id: `${b.id}_${bs.service_id || Math.random().toString(36).substring(2, 7)}`,
             booking_id: b.id,
             booking_code: b.booking_code,
             client_name: clientName,
             service_name: sName,
             service_type: sType,
-            price_cents: bs.price_cents || b.total_price_cents,
+            price_cents: sPrice || b.total_price_cents,
             employee_name: employeeName,
             date_exact: `${b.booking_date} ${b.start_time ? b.start_time.slice(0, 5) : ""}`.trim(),
             booking_date: b.booking_date,
@@ -505,7 +518,7 @@ export async function buildFullReportData(
         employeesMap[empId] = {
           employee_id: empId,
           employee_name: employeeName,
-          position: b.employees?.position || "Especialista",
+          position: employeePos,
           bookings_count: 0,
           completed_count: 0,
           total_revenue_collected_cents: 0,
@@ -580,8 +593,12 @@ export async function buildFullReportData(
     summary,
     bookings: bookingsList,
     payments: paymentsList,
-    services_breakdown: Object.values(servicesMap).sort((a, b) => b.times_booked - a.times_booked || b.total_revenue_cents - a.total_revenue_cents),
-    employees_breakdown: Object.values(employeesMap).sort((a, b) => b.total_revenue_collected_cents - a.total_revenue_collected_cents),
+    services_breakdown: Object.values(servicesMap).sort(
+      (a, b) => b.times_booked - a.times_booked || b.total_revenue_cents - a.total_revenue_cents
+    ),
+    employees_breakdown: Object.values(employeesMap).sort(
+      (a, b) => b.total_revenue_collected_cents - a.total_revenue_collected_cents
+    ),
     expenses: expensesList,
     completed_services_audit: completedServicesAuditList,
   };
