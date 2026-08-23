@@ -8,6 +8,7 @@ import {
   type CalendarViewMode,
 } from "@/lib/types/calendar";
 import { CalendarEventModal } from "./CalendarEventModal";
+import { CalendarDayEventsModal } from "./CalendarDayEventsModal";
 import { EmployeeAbsenceRangeModal } from "@/app/dashboard/empleados/EmployeeAbsenceRangeModal";
 
 interface Employee {
@@ -38,6 +39,7 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [dayEventsModal, setDayEventsModal] = useState<{ dateStr: string; events: CalendarEvent[] } | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   // Calcular fechas de inicio y fin según el modo de visualización
@@ -343,7 +345,21 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                     minHeight: 110,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      cursor: dayEvents.length > 0 ? "pointer" : "default",
+                      padding: "2px 0",
+                    }}
+                    onClick={() => {
+                      if (dayEvents.length > 0) {
+                        setDayEventsModal({ dateStr: d.dateStr, events: dayEvents });
+                      }
+                    }}
+                    title={dayEvents.length > 0 ? `Ver los ${dayEvents.length} eventos del día` : undefined}
+                  >
                     <span
                       style={{
                         fontSize: "0.78rem",
@@ -365,7 +381,16 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                       {d.dayNum}
                     </span>
                     {dayEvents.length > 0 && (
-                      <span style={{ fontSize: "0.65rem", color: "var(--color-text-dim)" }}>
+                      <span
+                        style={{
+                          fontSize: "0.65rem",
+                          color: "var(--color-primary)",
+                          fontWeight: 700,
+                          background: "rgba(200, 164, 92, 0.12)",
+                          padding: "1px 5px",
+                          borderRadius: 10,
+                        }}
+                      >
                         {dayEvents.length} ev.
                       </span>
                     )}
@@ -377,7 +402,10 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                       <button
                         key={ev.id}
                         type="button"
-                        onClick={() => setSelectedEvent(ev)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEvent(ev);
+                        }}
                         style={{
                           textAlign: "left",
                           padding: "2px 5px",
@@ -403,9 +431,35 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                       </button>
                     ))}
                     {dayEvents.length > 3 && (
-                      <span style={{ fontSize: "0.65rem", color: "var(--color-primary)", textAlign: "center" }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setDayEventsModal({
+                            dateStr: d.dateStr,
+                            events: dayEvents,
+                          });
+                        }}
+                        className="btn btn-ghost btn-sm"
+                        style={{
+                          fontSize: "0.68rem",
+                          color: "var(--color-primary)",
+                          textAlign: "center",
+                          padding: "3px 6px",
+                          marginTop: 2,
+                          fontWeight: 700,
+                          width: "100%",
+                          borderRadius: 4,
+                          background: "rgba(200, 164, 92, 0.1)",
+                          border: "1px solid rgba(200, 164, 92, 0.25)",
+                          cursor: "pointer",
+                          lineHeight: 1.2,
+                        }}
+                        title={`Ver todos los ${dayEvents.length} eventos de este día`}
+                      >
                         +{dayEvents.length - 3} más
-                      </span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -532,6 +586,16 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal de Todos los Eventos del Día (In-place) */}
+      {dayEventsModal && (
+        <CalendarDayEventsModal
+          dateStr={dayEventsModal.dateStr}
+          events={dayEventsModal.events}
+          onClose={() => setDayEventsModal(null)}
+          onSelectEvent={(ev) => setSelectedEvent(ev)}
+        />
       )}
 
       {/* Modal de Detalle de Evento */}
