@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { DashboardHome, TodayBooking } from "./DashboardHome";
+import { DashboardHome, FinancialBooking } from "./DashboardHome";
+import { Egreso } from "@/lib/types/expense";
 
 export const metadata = {
   title: "Inicio — Panel Acicalados",
@@ -15,11 +16,14 @@ export default async function DashboardPage() {
   const day = String(now.getDate()).padStart(2, "0");
   const today = `${year}-${month}-${day}`;
 
-  // Cargar reservas del día de hoy
+  // Inicio de mes actual (para panel consolidado financiero inicial)
+  const monthStartStr = `${year}-${month}-01`;
+
+  // Cargar reservas del día de hoy (para agenda)
   const { data: todayBookings } = await supabase
     .from("bookings")
     .select(
-      "id, booking_code, client_first_name, client_last_name, start_time, status, payment_status, service_type, booking_date"
+      "id, booking_code, client_first_name, client_last_name, start_time, status, payment_status, service_type, booking_date, total_price_cents, advance_amount_cents, balance_cents, created_at"
     )
     .eq("booking_date", today)
     .in("status", ["confirmada", "completada", "pendiente"])
@@ -39,11 +43,28 @@ export default async function DashboardPage() {
     .gte("booking_date", weekStartStr)
     .in("status", ["confirmada", "completada"]);
 
+  // Cargar reservas de este mes para el consolidado financiero
+  const { data: monthBookings } = await supabase
+    .from("bookings")
+    .select(
+      "id, booking_code, client_first_name, client_last_name, start_time, status, payment_status, service_type, booking_date, total_price_cents, advance_amount_cents, balance_cents, created_at"
+    )
+    .gte("booking_date", monthStartStr)
+    .order("booking_date", { ascending: false });
+
+  // Cargar egresos de este mes para el consolidado financiero
+  const { data: monthEgresos } = await supabase
+    .from("egresos")
+    .select("*")
+    .gte("expense_date", monthStartStr)
+    .order("expense_date", { ascending: false });
+
   return (
     <DashboardHome
-      initialBookings={(todayBookings as unknown as TodayBooking[]) ?? []}
+      initialBookings={(todayBookings as unknown as FinancialBooking[]) ?? []}
       initialWeekCount={weekCount ?? 0}
+      initialFinancialBookings={(monthBookings as unknown as FinancialBooking[]) ?? []}
+      initialFinancialEgresos={(monthEgresos as unknown as Egreso[]) ?? []}
     />
   );
 }
-
