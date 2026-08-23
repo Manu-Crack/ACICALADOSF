@@ -151,7 +151,7 @@ export function DashboardHome({
     try {
       const { todayStr, mondayStr, monthStartStr } = dateBounds;
 
-      const [todayRes, weekRes, monthBookingsRes, monthEgresosRes] = await Promise.all([
+      const [todayRes, weekRes, monthBookingsRes, monthExpensesRes, monthEgresosRes] = await Promise.all([
         supabase
           .from("bookings")
           .select(
@@ -173,6 +173,11 @@ export function DashboardHome({
           .gte("booking_date", monthStartStr)
           .order("booking_date", { ascending: false }),
         supabase
+          .from("expenses")
+          .select("*")
+          .gte("expense_date", monthStartStr)
+          .order("expense_date", { ascending: false }),
+        supabase
           .from("egresos")
           .select("*")
           .gte("expense_date", monthStartStr)
@@ -188,9 +193,25 @@ export function DashboardHome({
       if (monthBookingsRes.data) {
         setFinancialBookings(monthBookingsRes.data as unknown as FinancialBooking[]);
       }
-      if (monthEgresosRes.data) {
-        setFinancialEgresos(monthEgresosRes.data as unknown as Egreso[]);
-      }
+
+      const rawExpenses = (monthExpensesRes.data || []).filter((e: { status?: string }) => e.status !== "voided").map((e: { id: string; description: string; category: string; amount_cents: number; expense_date: string; payment_method: string; receipt_url?: string; supplier?: string; notes?: string; created_at: string }) => ({
+        id: e.id,
+        description: e.description,
+        category: e.category,
+        amount_cents: e.amount_cents,
+        currency: "PEN",
+        expense_date: e.expense_date,
+        payment_method: e.payment_method,
+        receipt_type: e.receipt_url ? "comprobante" : "ninguno",
+        receipt_number: null,
+        supplier: e.supplier || null,
+        notes: e.notes || null,
+        created_at: e.created_at,
+        updated_at: e.created_at,
+      }));
+
+      const rawEgresos = (monthEgresosRes.data || []) as unknown as Egreso[];
+      setFinancialEgresos([...rawExpenses, ...rawEgresos]);
     } catch (err) {
       console.error("[DashboardHome] Error recargando datos:", err);
     }
@@ -233,6 +254,19 @@ export function DashboardHome({
               event: "*",
               schema: "public",
               table: "bookings",
+            },
+            () => {
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "expenses",
             },
             () => {
               if (loadDataRef.current) {

@@ -52,19 +52,65 @@ export default async function DashboardPage() {
     .gte("booking_date", monthStartStr)
     .order("booking_date", { ascending: false });
 
-  // Cargar egresos de este mes para el consolidado financiero
-  const { data: monthEgresos } = await supabase
-    .from("egresos")
-    .select("*")
-    .gte("expense_date", monthStartStr)
-    .order("expense_date", { ascending: false });
+  // Cargar egresos de este mes (consultando expenses y egresos)
+  const [expensesRes, egresosRes] = await Promise.all([
+    supabase
+      .from("expenses")
+      .select("*")
+      .gte("expense_date", monthStartStr)
+      .order("expense_date", { ascending: false }),
+    supabase
+      .from("egresos")
+      .select("*")
+      .gte("expense_date", monthStartStr)
+      .order("expense_date", { ascending: false }),
+  ]);
+
+  const rawExpenses = expensesRes.data || [];
+  const rawEgresos = egresosRes.data || [];
+
+  // Mapear y unificar egresos activos
+  const combinedEgresos: Egreso[] = [
+    ...rawExpenses
+      .filter((e) => e.status !== "voided")
+      .map((e) => ({
+        id: e.id,
+        description: e.description,
+        category: e.category,
+        amount_cents: e.amount_cents,
+        currency: "PEN",
+        expense_date: e.expense_date,
+        payment_method: e.payment_method,
+        receipt_type: e.receipt_url ? "comprobante" : "ninguno",
+        receipt_number: null,
+        supplier: e.supplier || null,
+        notes: e.notes || null,
+        created_at: e.created_at,
+        updated_at: e.created_at,
+      })),
+    ...rawEgresos.map((e) => ({
+      id: e.id,
+      description: e.description,
+      category: e.category,
+      amount_cents: e.amount_cents,
+      currency: e.currency || "PEN",
+      expense_date: e.expense_date,
+      payment_method: e.payment_method,
+      receipt_type: e.receipt_type,
+      receipt_number: e.receipt_number,
+      supplier: e.supplier,
+      notes: e.notes,
+      created_at: e.created_at,
+      updated_at: e.updated_at,
+    })),
+  ];
 
   return (
     <DashboardHome
       initialBookings={(todayBookings as unknown as FinancialBooking[]) ?? []}
       initialWeekCount={weekCount ?? 0}
       initialFinancialBookings={(monthBookings as unknown as FinancialBooking[]) ?? []}
-      initialFinancialEgresos={(monthEgresos as unknown as Egreso[]) ?? []}
+      initialFinancialEgresos={combinedEgresos}
     />
   );
 }
