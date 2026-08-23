@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 import { EmployeeQRBadgeModal } from "@/app/dashboard/asistencia/EmployeeQRBadgeModal";
 import { EmployeeAbsenceRangeModal } from "./EmployeeAbsenceRangeModal";
+import { generateEmployeeAgendaPdf } from "@/lib/utils/employee-agenda-pdf";
 
 type Service = {
   id: string;
@@ -577,6 +578,28 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   const spaCount = employees.filter((e) => e.type === "spa").length;
   const barberiaCount = employees.filter((e) => e.type === "barberia").length;
   const recepcionCount = employees.filter((e) => e.type === "recepcionista").length;
+
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportAgendaPdf = () => {
+    try {
+      setIsExportingPdf(true);
+      generateEmployeeAgendaPdf({
+        bookings: filteredAssignedBookings,
+        employees,
+        selectedEmployeeId: selectedEmpFilter,
+        dateFilter: assignmentDateFilter,
+        statusFilter: assignmentStatusFilter,
+        searchQuery: assignmentSearch,
+        generatedByName: isAdmin ? "Administrador" : "Recepción",
+      });
+    } catch (err) {
+      console.error("Error generando PDF de agenda:", err);
+      alert("No se pudo generar el documento PDF de la agenda.");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60 }}>
@@ -1315,6 +1338,23 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                 🪪 Ver Carnet QR
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={handleExportAgendaPdf}
+              disabled={isExportingPdf}
+              className="btn btn-primary btn-sm"
+              style={{
+                marginBottom: 2,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 700,
+              }}
+              title="Descargar agenda estructurada en formato PDF con los filtros activos"
+            >
+              <span>{isExportingPdf ? "⏳ Generando..." : "📄 Exportar PDF"}</span>
+            </button>
 
             <button
               type="button"
