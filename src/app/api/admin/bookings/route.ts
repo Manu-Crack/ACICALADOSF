@@ -317,4 +317,211 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
+/**
+ * POST /api/admin/bookings
+ * Creación manual y rápida de reservas presenciales (Walk-ins) desde el panel administrativo.
+ *
+ * REGLAS DE NEGOCIO:
+ * - Autorizado para roles 'admin' y 'recepcionista'.
+ * - Campos mínimos obligatorios: client_first_name, service_ids, booking_date, start_time.
+ * - Campos opcionales: client_last_name, assigned_employee_id, client_phone, client_email, client_dni, notes.
+ * - Estado inicial: 'confirmada' (ya que se toma presencialmente en el mostrador sin flujo de WhatsApp).
+ * - Estado de pago inicial: 'sin_pago' (saldo total pendiente listo para cobrar en caja).
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await verifyAdminAuth();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const body = await request.json();
+    const {
+      service_ids,
+      booking_date,
+      start_time,
+      client_first_name,
+      client_last_name,
+      assigned_employee_id,
+      client_phone,
+      client_email,
+      client_dni,
+    } = body;
+
+    // 1. Validar campos mínimos obligatorios
+    if (!service_ids || !Array.isArray(service_ids) || service_ids.length === 0) {
+      return NextResponse.json(
+        { error: "Debes seleccionar al menos un servicio a realizar" },
+        { status: 422 }
+      );
+    }
+
+    if (!booking_date) {
+      return NextResponse.json(
+        { error: "La fecha de la reserva es obligatoria" },
+        { status: 422 }
+      );
+    }
+
+    if (!start_time) {
+      return NextResponse.json(
+        { error: "La hora de inicio de la reserva es obligatoria" },
+        { status: 422 }
+      );
+    }
+
+    if (!client_first_name?.trim()) {
+      return NextResponse.json(
+        { error: "El nombre del cliente es obligatorio" },
+        { status: 422 }
+      );
+    }
+
+    const admin = createAdminClient();
+
+    // 2. Consultar servicios desde la BD
+    const { data: services, error: svcError } = await admin
+      .from("services")
+      .select("id, name, price_cents, duration_minutes, type, is_active")
+      .in("id", service_ids);
+
+    if (svcError || !services || services.length === 0) {
+      return NextResponse.json(
+        { error: "Los servicios seleccionados no existen o no fueron encontrados" },
+        { status: 422 }
+      );
+    }
+
+    // 3. Determinar rubro (barbería, spa o mixto) y calcular totales
+    const types = new Set(services.map((s) => s.type));
+    const serviceType = types.size > 1 ? "mixto" : services[0].type;
+
+    const totalPriceCents = services.reduce((sum, s) => sum + (s.price_cents || 0), 0);
+    const totalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 30), 0);
+
+    // 4. Calcular hora de finalización (end_time)
+    const timeParts = start_time.split(":");
+    const startHour = parseInt(timeParts[0], 10) || 0;
+    const startMin = parseInt(timeParts[1], 10) || 0;
+    const totalStartMinutes = startHour * 60 + startMin;
+    const totalEndMinutes = totalStartMinutes + totalDuration;
+    const endHour = Math.floor(totalEndMinutes / 60);
+    const endMin = totalEndMinutes % 60;
+    const formattedStartTime = `${String(startHour).padStart(2, "0")}:${String(startMin).padStart(2, "0")}:00`;
+    const formattedEndTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}:00`;
+
+    // 5. Validar disponibilidad del colaborador si se seleccionó uno específico
+    const empId = assigned_employee_id || null;
+    if (empId) {
+      // Verificar ausencias
+      const { data: absences } = await admin
+        .from("employee_blocks")
+        .select("id, start_time, end_time, reason")
+        .eq("employee_id", empId)
+        .eq("block_date", booking_date);
+
+      const hasAbsence = (absences || []).some((b) => {
+        if (!b.start_time || !b.end_time) return true;
+        return hasTimeOverlap(b.start_time, b.end_time, formattedStartTime, formattedEndTime);
+      });
+
+      if (hasAbsence) {
+        return NextResponse.json(
+          { error: "El colaborador seleccionado tiene un permiso o ausencia registrada en ese horario." },
+          { status: 409 }
+        );
+      }
+
+      // Verificar choque con otra reserva activa
+      const { data: conflictingBookings } = await admin
+        .from("bookings")
+        .select("id, booking_code, start_time, end_time")
+        .eq("assigned_employee_id", empId)
+        .eq("booking_date", booking_date)
+        .not("status", "in", '("cancelada","expirada")');
+
+      const conflict = (conflictingBookings || []).find((cb) => {
+        return hasTimeOverlap(cb.start_time, cb.end_time, formattedStartTime, formattedEndTime);
+      });
+
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: `El colaborador ya cuenta con la cita ${conflict.booking_code} asignada en ese horario (${conflict.start_time?.slice(0, 5)} - ${conflict.end_time?.slice(0, 5)}).`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // 6. Insertar registro principal de reserva en tabla 'bookings'
+    const advancePercentage = 25;
+    const finalLastName = client_last_name?.trim() || "Presencial";
+
+    const { data: newBooking, error: bookingError } = await admin
+      .from("bookings")
+      .insert({
+        client_first_name: client_first_name.trim(),
+        client_last_name: finalLastName,
+        client_phone: client_phone?.trim() || null,
+        client_email: client_email?.trim() || null,
+        client_dni: client_dni?.trim() || null,
+        service_type: serviceType,
+        assigned_employee_id: empId,
+        booking_date,
+        start_time: formattedStartTime,
+        end_time: formattedEndTime,
+        total_duration_minutes: totalDuration,
+        total_price_cents: totalPriceCents,
+        advance_percentage: advancePercentage,
+        advance_amount_cents: 0,
+        balance_cents: totalPriceCents,
+        status: "confirmada",
+        payment_status: "sin_pago",
+        confirmed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (bookingError || !newBooking) {
+      console.error("Error al registrar reserva manual:", bookingError);
+      return NextResponse.json(
+        { error: "Error al registrar la reserva: " + (bookingError?.message || "No se pudo insertar el registro") },
+        { status: 500 }
+      );
+    }
+
+    // 7. Insertar detalle de servicios en 'booking_services'
+    const bookingServices = services.map((s) => ({
+      booking_id: newBooking.id,
+      service_id: s.id,
+      service_name: s.name,
+      service_price_cents: s.price_cents,
+      duration_minutes: s.duration_minutes,
+    }));
+
+    const { error: bsError } = await admin.from("booking_services").insert(bookingServices);
+    if (bsError) {
+      console.error("Error al insertar booking_services:", bsError);
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        booking: newBooking,
+        message: `Reserva ${newBooking.booking_code} creada exitosamente.`,
+      },
+      { status: 201 }
+    );
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Admin booking POST exception:", errorMsg);
+    return NextResponse.json(
+      { error: "Error interno al registrar la reserva manual: " + errorMsg },
+      { status: 500 }
+    );
+  }
+}
+
+
 

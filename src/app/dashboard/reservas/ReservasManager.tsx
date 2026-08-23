@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/utils/format";
 import { PaymentModal } from "./PaymentModal";
 import { PaymentSettingsModal } from "./PaymentSettingsModal";
+import { NewBookingModal } from "./NewBookingModal";
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHOD_ICONS,
@@ -101,9 +102,10 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Estado de modales de pago
+  // Estado de modales
   const [paymentModalBooking, setPaymentModalBooking] = useState<BookingSummaryForPayment | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -506,7 +508,27 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {/* Botón Principal Nueva Reserva (Walk-in) */}
+          <button
+            type="button"
+            onClick={() => setIsNewBookingModalOpen(true)}
+            className="btn btn-primary btn-sm"
+            style={{
+              fontSize: "0.8rem",
+              padding: "6px 14px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 700,
+              boxShadow: "0 2px 8px rgba(200, 164, 92, 0.35)",
+            }}
+            title="Crear una nueva reserva presencial rápida (Walk-in)"
+            id="new-booking-btn"
+          >
+            ➕ Nueva Reserva
+          </button>
+
           {isAdmin && (
             <button
               type="button"
@@ -836,6 +858,14 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
             <p className="text-muted">
               No se encontraron reservas con los filtros aplicados.
             </p>
+            <button
+              type="button"
+              onClick={() => setIsNewBookingModalOpen(true)}
+              className="btn btn-primary btn-sm"
+              style={{ marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+            >
+              ➕ Crear Nueva Reserva
+            </button>
           </div>
         ) : (
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
@@ -1681,6 +1711,16 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           }}
         />
       )}
+
+      {/* Modal de creación de nueva reserva presencial (Walk-in) */}
+      <NewBookingModal
+        isOpen={isNewBookingModalOpen}
+        onClose={() => setIsNewBookingModalOpen(false)}
+        onBookingCreated={() => {
+          loadBookings(false);
+        }}
+        employees={employees}
+      />
     </div>
   );
 }
