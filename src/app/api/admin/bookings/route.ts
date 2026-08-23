@@ -456,21 +456,40 @@ export async function POST(request: NextRequest) {
 
     // 6. Determinar método de pago inicial si fue cobrado en el mostrador
     const reqMethod = (body.payment_method || "").toLowerCase();
-    const hasImmediatePayment = reqMethod && reqMethod !== "sin_pago" && reqMethod !== "none";
-
-    let normalizedMethod: "cash" | "yape" | "transfer" | null = null;
+    let normalizedMethod: "cash" | "yape" | "transfer" | "mixed" | null = null;
     let dbPaymentMethodLabel: string | null = null;
 
-    if (hasImmediatePayment) {
-      if (reqMethod === "efectivo" || reqMethod === "cash") {
-        normalizedMethod = "cash";
-        dbPaymentMethodLabel = "efectivo";
-      } else if (reqMethod === "yape") {
-        normalizedMethod = "yape";
-        dbPaymentMethodLabel = "yape";
-      } else if (reqMethod === "transferencia" || reqMethod === "transfer") {
-        normalizedMethod = "transfer";
-        dbPaymentMethodLabel = "transferencia";
+    let yapeAmountCents = 0;
+    let cashAmountCents = 0;
+
+    if (reqMethod === "efectivo" || reqMethod === "cash") {
+      normalizedMethod = "cash";
+      dbPaymentMethodLabel = "efectivo";
+      cashAmountCents = totalPriceCents;
+    } else if (reqMethod === "yape") {
+      normalizedMethod = "yape";
+      dbPaymentMethodLabel = "yape";
+      yapeAmountCents = totalPriceCents;
+    } else if (reqMethod === "transferencia" || reqMethod === "transfer") {
+      normalizedMethod = "transfer";
+      dbPaymentMethodLabel = "transferencia";
+    } else if (reqMethod === "mixto" || reqMethod === "mixed") {
+      normalizedMethod = "mixed";
+      dbPaymentMethodLabel = "mixto";
+      // Montos desglosados de Yape y Efectivo
+      const rawYape = parseInt(body.yape_amount_cents, 10);
+      const rawCash = parseInt(body.cash_amount_cents, 10);
+
+      if (!isNaN(rawYape) && rawYape >= 0 && rawYape <= totalPriceCents) {
+        yapeAmountCents = rawYape;
+        cashAmountCents = Math.max(0, totalPriceCents - yapeAmountCents);
+      } else if (!isNaN(rawCash) && rawCash >= 0 && rawCash <= totalPriceCents) {
+        cashAmountCents = rawCash;
+        yapeAmountCents = Math.max(0, totalPriceCents - cashAmountCents);
+      } else {
+        // Por defecto mitades si no se especificaron
+        yapeAmountCents = Math.round(totalPriceCents / 2);
+        cashAmountCents = totalPriceCents - yapeAmountCents;
       }
     }
 
@@ -532,15 +551,19 @@ export async function POST(request: NextRequest) {
     // 9. Si se cobró inmediatamente en el mostrador, registrar en 'payment_logs'
     if (normalizedMethod) {
       const nowIso = new Date().toISOString();
+      const notesMsg = normalizedMethod === "mixed"
+        ? `Cobro total presencial mixto (Yape: S/ ${(yapeAmountCents / 100).toFixed(2)} + Efectivo: S/ ${(cashAmountCents / 100).toFixed(2)})`
+        : `Cobro total presencial en mostrador (${dbPaymentMethodLabel})`;
+
       const { error: payLogErr } = await admin.from("payment_logs").insert({
         booking_id: newBooking.id,
         amount_cents: totalPriceCents,
         payment_method: normalizedMethod,
         payment_type: "full",
         status: "verified",
-        yape_amount_cents: normalizedMethod === "yape" ? totalPriceCents : 0,
-        cash_amount_cents: normalizedMethod === "cash" ? totalPriceCents : 0,
-        notes: `Cobro total presencial en mostrador (${dbPaymentMethodLabel})`,
+        yape_amount_cents: yapeAmountCents,
+        cash_amount_cents: cashAmountCents,
+        notes: notesMsg,
         paid_at: nowIso,
         registered_by: auth.user.id,
         verified_at: nowIso,
@@ -557,7 +580,7 @@ export async function POST(request: NextRequest) {
         success: true,
         booking: newBooking,
         message: normalizedMethod
-          ? `Reserva ${newBooking.booking_code} creada y confirmada con cobro en ${dbPaymentMethodLabel} exitosamente.`
+          ? `Reserva ${newBooking.booking_code} creada y confirmada con cobro (${dbPaymentMethodLabel}) exitosamente.`
           : `Reserva ${newBooking.booking_code} creada exitosamente.`,
       },
       { status: 201 }

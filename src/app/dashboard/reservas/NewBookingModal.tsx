@@ -27,7 +27,7 @@ interface NewBookingModalProps {
   employees?: EmployeeItem[];
 }
 
-export type WalkInPaymentMethod = "efectivo" | "yape" | "transferencia" | "sin_pago";
+export type WalkInPaymentMethod = "efectivo" | "yape" | "transferencia" | "mixto";
 
 export function NewBookingModal({
   isOpen,
@@ -87,8 +87,12 @@ export function NewBookingModal({
     }
   });
 
-  // Método de Pago Presencial
+  // Método de Pago Presencial: 4 Opciones (Efectivo, Yape, Transferencia, Mixto)
   const [paymentMethod, setPaymentMethod] = useState<WalkInPaymentMethod>("efectivo");
+
+  // Montos para Pago Mixto
+  const [yapeAmount, setYapeAmount] = useState<string>("");
+  const [cashAmount, setCashAmount] = useState<string>("");
 
   // Feedback & Envío
   const [submitting, setSubmitting] = useState(false);
@@ -149,6 +153,37 @@ export function NewBookingModal({
   const totalDurationMinutes = useMemo(() => {
     return selectedServices.reduce((sum, s) => sum + (s.duration_minutes || 30), 0);
   }, [selectedServices]);
+
+  const totalPriceSoles = (totalPriceCents / 100).toFixed(2);
+
+  // Sincronizar montos de pago mixto cuando cambie el total o se elija mixto
+  useEffect(() => {
+    if (paymentMethod === "mixto") {
+      const totalNum = totalPriceCents / 100;
+      const half = (totalNum / 2).toFixed(2);
+      const otherHalf = (totalNum - parseFloat(half)).toFixed(2);
+      setYapeAmount(half);
+      setCashAmount(otherHalf);
+    }
+  }, [paymentMethod, totalPriceCents]);
+
+  // Manejador bidireccional de Yape en Pago Mixto
+  const handleYapeChange = (val: string) => {
+    setYapeAmount(val);
+    const yNum = parseFloat(val) || 0;
+    const totalNum = totalPriceCents / 100;
+    const diff = Math.max(0, totalNum - yNum);
+    setCashAmount(diff.toFixed(2));
+  };
+
+  // Manejador bidireccional de Efectivo en Pago Mixto
+  const handleCashChange = (val: string) => {
+    setCashAmount(val);
+    const cNum = parseFloat(val) || 0;
+    const totalNum = totalPriceCents / 100;
+    const diff = Math.max(0, totalNum - cNum);
+    setYapeAmount(diff.toFixed(2));
+  };
 
   // Cálculo de hora fin estimada
   const estimatedEndTime = useMemo(() => {
@@ -219,6 +254,26 @@ export function NewBookingModal({
       return;
     }
 
+    // Validar montos en pago mixto
+    let yapeCents = 0;
+    let cashCents = 0;
+
+    if (paymentMethod === "mixto") {
+      const yNum = parseFloat(yapeAmount) || 0;
+      const cNum = parseFloat(cashAmount) || 0;
+      const sum = Math.round((yNum + cNum) * 100);
+
+      if (sum !== totalPriceCents) {
+        setErrorMsg(
+          `La suma de Yape (S/ ${yNum.toFixed(2)}) y Efectivo (S/ ${cNum.toFixed(2)}) debe ser exactamente igual al total de S/ ${totalPriceSoles}.`
+        );
+        return;
+      }
+
+      yapeCents = Math.round(yNum * 100);
+      cashCents = Math.round(cNum * 100);
+    }
+
     setSubmitting(true);
 
     try {
@@ -233,6 +288,8 @@ export function NewBookingModal({
         booking_date: bookingDate,
         start_time: startTime,
         payment_method: paymentMethod,
+        yape_amount_cents: yapeCents,
+        cash_amount_cents: cashCents,
       };
 
       const res = await fetch("/api/admin/bookings", {
@@ -247,11 +304,7 @@ export function NewBookingModal({
         throw new Error(data.error || "Error al crear la reserva presencial");
       }
 
-      setSuccessMsg(
-        paymentMethod !== "sin_pago"
-          ? `¡Reserva ${data.booking?.booking_code || ""} confirmada y cobrada con éxito!`
-          : `¡Reserva ${data.booking?.booking_code || ""} creada exitosamente!`
-      );
+      setSuccessMsg(`¡Reserva ${data.booking?.booking_code || ""} confirmada y cobrada con éxito!`);
 
       // Limpiar formulario y cerrar
       setTimeout(() => {
@@ -326,7 +379,7 @@ export function NewBookingModal({
               </h2>
             </div>
             <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-              Registro directo en mostrador para atención presencial inmediata o agendada
+              Registro directo en mostrador con cobro y confirmación automática inmediata
             </p>
           </div>
           <button
@@ -463,7 +516,7 @@ export function NewBookingModal({
               </div>
             </div>
 
-            {/* SECCIÓN 2: SELECCIÓN DE SERVICIOS (Solo Barbería o Spa) */}
+            {/* SECCIÓN 2: SELECCIÓN DE SERVICIOS (Exclusivamente Barbería o Spa) */}
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
                 <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", margin: 0, letterSpacing: "0.05em" }}>
@@ -644,7 +697,7 @@ export function NewBookingModal({
               </div>
             </div>
 
-            {/* SECCIÓN 4: MÉTODO DE PAGO Y CONFIRMACIÓN INMEDIATA */}
+            {/* SECCIÓN 4: MÉTODO DE PAGO Y CONFIRMACIÓN (4 Formas: Efectivo, Yape, Transferencia, Mixto) */}
             <div>
               <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
                 4. Método de Pago y Confirmación *
@@ -719,41 +772,93 @@ export function NewBookingModal({
                   </p>
                 </div>
 
-                {/* Opción 4: Sin Pago Inmediato */}
+                {/* Opción 4: Mixto (Yape + Efectivo) */}
                 <div
-                  onClick={() => setPaymentMethod("sin_pago")}
+                  onClick={() => setPaymentMethod("mixto")}
                   style={{
                     padding: "10px 12px",
                     borderRadius: "var(--radius-md, 8px)",
-                    border: paymentMethod === "sin_pago"
+                    border: paymentMethod === "mixto"
                       ? "2px solid #f59e0b"
                       : "1px solid var(--color-border, rgba(255,255,255,0.08))",
-                    background: paymentMethod === "sin_pago" ? "rgba(245, 158, 11, 0.12)" : "rgba(255,255,255,0.02)",
+                    background: paymentMethod === "mixto" ? "rgba(245, 158, 11, 0.12)" : "rgba(255,255,255,0.02)",
                     cursor: "pointer",
                     transition: "all 0.15s ease",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "sin_pago" ? "#f59e0b" : "#fff" }}>
-                    <span>⏳</span>
-                    <span>Sin pago</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "mixto" ? "#f59e0b" : "#fff" }}>
+                    <span>🔄</span>
+                    <span>Mixto</span>
                   </div>
                   <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-                    Cobrar luego en caja
+                    Yape + Efectivo combinado
                   </p>
                 </div>
               </div>
 
+              {/* Panel de desglose interactivo para Pago Mixto */}
+              {paymentMethod === "mixto" && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "14px 16px",
+                    borderRadius: "var(--radius-md, 8px)",
+                    background: "rgba(245, 158, 11, 0.08)",
+                    border: "1px solid rgba(245, 158, 11, 0.3)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>🔄</span>
+                    <span>Desglose de Pago Mixto (Total: S/ {totalPriceSoles})</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label className="label" style={{ fontSize: "0.72rem", fontWeight: 600, color: "#c084fc" }}>
+                        💜 Monto por Yape (S/)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.10"
+                        min="0"
+                        max={totalPriceSoles}
+                        className="input"
+                        placeholder="0.00"
+                        value={yapeAmount}
+                        onChange={(e) => handleYapeChange(e.target.value)}
+                        style={{ width: "100%", fontWeight: 700 }}
+                      />
+                    </div>
+                    <div>
+                      <label className="label" style={{ fontSize: "0.72rem", fontWeight: 600, color: "#22c55e" }}>
+                        💵 Monto en Efectivo (S/)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.10"
+                        min="0"
+                        max={totalPriceSoles}
+                        className="input"
+                        placeholder="0.00"
+                        value={cashAmount}
+                        onChange={(e) => handleCashChange(e.target.value)}
+                        style={{ width: "100%", fontWeight: 700 }}
+                      />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted, #a1a1aa)", margin: 0 }}>
+                    💡 Al ingresar el monto de uno de los métodos, el otro se calcula automáticamente para cuadrar con el total de S/ {totalPriceSoles}.
+                  </p>
+                </div>
+              )}
+
               {/* Mensaje de confirmación del método */}
-              <div style={{ marginTop: 8, fontSize: "0.75rem", color: paymentMethod !== "sin_pago" ? "#22c55e" : "#f59e0b" }}>
-                {paymentMethod !== "sin_pago" ? (
-                  <span>
-                    ✓ Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {(totalPriceCents / 100).toFixed(2)})</strong> con comprobante de cobro registrado.
-                  </span>
-                ) : (
-                  <span>
-                    ℹ️ Al guardar, la reserva quedará en agenda con <strong>SALDO PENDIENTE (S/ {(totalPriceCents / 100).toFixed(2)})</strong> lista para ser cobrada desde la tabla principal.
-                  </span>
-                )}
+              <div style={{ marginTop: 8, fontSize: "0.75rem", color: "#22c55e" }}>
+                <span>
+                  ✓ Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {totalPriceSoles})</strong> con comprobante de cobro registrado.
+                </span>
               </div>
             </div>
 
@@ -791,10 +896,10 @@ export function NewBookingModal({
 
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block" }}>
-                  {paymentMethod !== "sin_pago" ? "Monto a Cobrar" : "Saldo Pendiente"}
+                  Total a Cobrar
                 </span>
                 <span style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--color-success, #22c55e)" }}>
-                  S/ {(totalPriceCents / 100).toFixed(2)}
+                  S/ {totalPriceSoles}
                 </span>
               </div>
             </div>
