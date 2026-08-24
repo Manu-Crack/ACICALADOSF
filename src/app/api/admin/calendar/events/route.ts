@@ -52,18 +52,17 @@ export async function GET(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // 1. Obtener empleados activos
-    let empQuery = admin
+    // 1. Obtener lista completa de empleados para mapas y selector
+    const { data: allEmployees, error: empErr } = await admin
       .from("employees")
       .select("id, first_name, last_name, type, is_active, position")
       .order("first_name");
 
-    if (employeeId && employeeId !== "all") {
-      empQuery = empQuery.eq("id", employeeId);
+    if (empErr) {
+      console.error("[GET /api/admin/calendar/events] Error consultando empleados:", empErr);
     }
 
-    const { data: employees } = await empQuery;
-    const employeesList = employees || [];
+    const employeesList = allEmployees || [];
     const empMap = new Map(
       employeesList.map((e) => [e.id, `${e.first_name || ""} ${e.last_name || ""}`.trim()])
     );
@@ -91,6 +90,12 @@ export async function GET(request: NextRequest) {
           total_price_cents,
           assigned_employee_id,
           service_type,
+          employees:assigned_employee_id (
+            id,
+            first_name,
+            last_name,
+            type
+          ),
           booking_services (
             service_name,
             duration_minutes,
@@ -124,6 +129,12 @@ export async function GET(request: NextRequest) {
         total_price_cents: number;
         assigned_employee_id: string | null;
         service_type: string;
+        employees: {
+          id: string;
+          first_name: string | null;
+          last_name: string | null;
+          type: string | null;
+        } | null;
         booking_services: Array<{
           service_name: string;
           duration_minutes?: number;
@@ -148,7 +159,19 @@ export async function GET(request: NextRequest) {
       };
 
       ((bookings || []) as unknown as RawBookingEvent[]).forEach((b) => {
-        const empName = b.assigned_employee_id ? empMap.get(b.assigned_employee_id) || "Sin Asignar" : "Sin Asignar";
+        const assignedEmp = b.employees;
+        const empName = assignedEmp
+          ? `${assignedEmp.first_name || ""} ${assignedEmp.last_name || ""}`.trim()
+          : b.assigned_employee_id
+          ? empMap.get(b.assigned_employee_id) || "Sin Asignar"
+          : "Sin Asignar";
+
+        const empSpecialty = assignedEmp?.type
+          ? (assignedEmp.type === "spa" ? "Spa" : assignedEmp.type === "recepcionista" ? "Recepción" : "Barbería")
+          : b.assigned_employee_id
+          ? empSpecialtyMap.get(b.assigned_employee_id)
+          : undefined;
+
         const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim() || "Cliente";
         const serviceNames = (b.booking_services || [])
           .map((bs) => bs.service_name || "Servicio")
@@ -163,7 +186,7 @@ export async function GET(request: NextRequest) {
           title: `Cita: ${clientName} (${displayServices.slice(0, 2).join(", ")})`,
           employee_id: b.assigned_employee_id || "unassigned",
           employee_name: empName,
-          employee_specialty: b.assigned_employee_id ? empSpecialtyMap.get(b.assigned_employee_id) : undefined,
+          employee_specialty: empSpecialty,
           date: b.booking_date,
           start_time: b.start_time,
           end_time: b.end_time,

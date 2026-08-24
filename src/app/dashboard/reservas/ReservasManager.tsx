@@ -1597,7 +1597,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                               )}
 
                               {/* Action 3: Cancel appointment */}
-                              {b.status !== "cancelada" &&
+                              {isAdmin &&
+                                b.status !== "cancelada" &&
                                 b.status !== "completada" && (
                                   <button
                                     type="button"

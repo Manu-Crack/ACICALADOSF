@@ -1029,14 +1029,16 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                       )}
 
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button
-                          onClick={() => setSelectedQrEmp(emp)}
-                          className="btn btn-secondary btn-sm"
-                          style={{ flex: "1 1 80px", padding: "6px 10px", fontSize: "0.75rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-                          title="Ver, descargar o compartir Carnet QR por WhatsApp"
-                        >
-                          🪪 Carnet QR
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setSelectedQrEmp(emp)}
+                            className="btn btn-secondary btn-sm"
+                            style={{ flex: "1 1 80px", padding: "6px 10px", fontSize: "0.75rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                            title="Ver, descargar o compartir Carnet QR por WhatsApp"
+                          >
+                            🪪 Carnet QR
+                          </button>
+                        )}
                         {isAdmin && (
                           <>
                             <button
@@ -1324,7 +1326,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
               />
             </div>
 
-            {selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned" && (
+            {isAdmin && selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned" && (
               <button
                 type="button"
                 onClick={() => {
@@ -1855,7 +1857,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
               )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, paddingTop: 16, borderTop: "1px solid var(--color-border)", flexWrap: "wrap" }}>
-                {editingEmp && (
+                {isAdmin && editingEmp && (
                   <button
                     type="button"
                     onClick={() => {

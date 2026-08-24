@@ -714,9 +714,9 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                           display: "block",
                           width: "100%",
                         }}
-                        title={`${ev.employee_name}: ${ev.title}`}
+                        title={`👤 Especialista: ${ev.employee_name}${ev.employee_specialty ? ` (${ev.employee_specialty})` : ""} | ⏰ ${ev.start_time ? ev.start_time.slice(0, 5) : "Todo el día"} | ${ev.title}`}
                       >
-                        {ev.icon} {ev.start_time ? `${ev.start_time.slice(0, 5)} ` : ""}{ev.employee_name.split(" ")[0]} · {ev.title.slice(0, 16)}
+                        {ev.icon} {ev.start_time ? `${ev.start_time.slice(0, 5)} ` : ""}{ev.employee_name === "Sin Asignar" ? "⚠️ Sin Asignar" : `👤 ${ev.employee_name.split(" ")[0]}`} · {ev.title.slice(0, 18)}
                       </button>
                     ))}
                     {dayEvents.length > 3 && (
@@ -810,7 +810,9 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                           <div style={{ display: "flex", justifyContent: "space-between", color: ev.color, fontWeight: 700, fontSize: "0.7rem" }}>
                             <span>{ev.icon} {ev.start_time || "Todo el día"}</span>
                           </div>
-                          <p style={{ margin: "2px 0", fontWeight: 600, color: "var(--color-text)" }}>{ev.employee_name}</p>
+                          <p style={{ margin: "2px 0", fontWeight: 600, color: "var(--color-text)", fontSize: "0.76rem" }}>
+                            👤 {ev.employee_name}
+                          </p>
                           <p style={{ margin: 0, fontSize: "0.68rem", color: "var(--color-text-muted)" }}>{ev.title}</p>
                         </div>
                       ))
@@ -881,10 +883,15 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                   <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                     <span style={{ fontSize: "1.5rem" }}>{ev.icon}</span>
                     <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <strong style={{ fontSize: "0.95rem", color: "var(--color-text)" }}>
-                          {ev.employee_name}
+                          👤 {ev.employee_name}
                         </strong>
+                        {ev.employee_specialty && (
+                          <span style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", background: "rgba(255,255,255,0.06)", padding: "1px 6px", borderRadius: 3 }}>
+                            {ev.employee_specialty}
+                          </span>
+                        )}
                         <span className={`badge ${ev.badge_class}`} style={{ fontSize: "0.65rem" }}>
                           {ev.status_label}
                         </span>
