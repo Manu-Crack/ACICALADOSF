@@ -11,6 +11,10 @@ interface Employee {
 }
 
 import { AttendanceRecord, getAttendanceStatusInfo } from "@/lib/types/attendance";
+import {
+  calculateEffectiveWorkingMinutes,
+  parseTempLeavesFromNotes,
+} from "@/lib/utils/attendance-temp-leaves";
 
 interface BlockRecord {
   id: string;
@@ -84,14 +88,23 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
       if (res.ok) {
         const data = await res.json();
         setAttendances(data.attendances || []);
-        setBlocks(data.blocks || []);
+      }
+
+      // 2. Fetch justifications / agenda blocks for selected month
+      const monthParam = rangeMode === "month" ? selectedMonth : undefined;
+      const blocksRes = await fetch(
+        `/api/admin/employees/blocks?employee_id=${employee.id}${monthParam ? `&month=${monthParam}` : ""}`
+      );
+      if (blocksRes.ok) {
+        const blocksData = await blocksRes.json();
+        setBlocks(blocksData.blocks || []);
       }
     } catch (err) {
       console.error("Error loading employee history:", err);
     } finally {
       setLoading(false);
     }
-  }, [computeDateRange, employee.id]);
+  }, [computeDateRange, employee.id, rangeMode, selectedMonth]);
 
   useEffect(() => {
     loadHistory();
@@ -117,18 +130,10 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
     }
   }
 
-  function calculateDuration(checkIn: string, checkOut: string | null) {
+  function calculateDuration(checkIn: string, checkOut: string | null, notes?: string | null) {
     if (!checkIn || !checkOut) return "—";
-    try {
-      const diffMs = new Date(checkOut).getTime() - new Date(checkIn).getTime();
-      if (diffMs <= 0) return "—";
-      const totalMinutes = Math.floor(diffMs / 60000);
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      return `${hours}h ${minutes}m`;
-    } catch {
-      return "—";
-    }
+    const { formatted } = calculateEffectiveWorkingMinutes(checkIn, checkOut, notes);
+    return formatted;
   }
 
   return (
@@ -359,10 +364,15 @@ export function EmployeeHistoryModal({ employee, onClose }: EmployeeHistoryModal
                         {(att.bonus_minutes || 0) > 0 ? `+${att.bonus_minutes} min` : "—"}
                       </td>
                       <td style={{ padding: "12px", color: "var(--color-text-muted)" }}>
-                        {calculateDuration(att.check_in, att.check_out)}
+                        {calculateDuration(att.check_in, att.check_out, att.notes)}
                       </td>
                       <td style={{ padding: "12px", color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
-                        {att.notes || "—"}
+                        {(() => {
+                          const { cleanNotes, tempLeaves } = parseTempLeavesFromNotes(att.notes);
+                          if (cleanNotes) return cleanNotes;
+                          if (tempLeaves.length > 0) return `${tempLeaves.length} permiso(s) temporal(es)`;
+                          return "—";
+                        })()}
                       </td>
                     </tr>
                   ))}

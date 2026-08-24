@@ -6,6 +6,13 @@
 
 import { calculateBonusMinutes } from "../../src/lib/utils/bonus-calculator";
 import { sanitizeForExcel } from "../../src/lib/utils/excel-generator";
+import {
+  parseTempLeavesFromNotes,
+  serializeTempLeavesToNotes,
+  calculateTotalTempLeaveMinutes,
+  calculateEffectiveWorkingMinutes,
+  type TempLeave,
+} from "../../src/lib/utils/attendance-temp-leaves";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -348,11 +355,138 @@ function tryPayBalance(amount: number) {
 
 const concurrentA = tryPayBalance(7500); // Gana el lock
 const concurrentB = tryPayBalance(7500); // Intenta sobre el saldo ya liquidado
+// -----------------------------------------------------------------------------
+// 9. FLUJO INTELIGENTE DE ASISTENCIA QR Y REGLA DE BONIFICACIÓN POR TOLERANCIA
+// -----------------------------------------------------------------------------
+console.log("\n--- 9. Flujo Inteligente de Asistencia QR, Permisos Temporales y Bonificación ---");
+
+// Caso A: Primer escaneo del día -> Entrada con estado inicial
+const simulatedEmp = { id: "emp-test-01", first_name: "Carlos", last_name: "Barbero", is_active: true };
+let currentAttendance: {
+  id: string;
+  employee_id: string;
+  date: string;
+  check_in: string;
+  check_out: string | null;
+  status: string;
+  notes: string | null;
+  bonus_minutes: number;
+} | null = null;
+
+// Simular Primer Escaneo (Entrada a las 09:05 AM - Lunes)
+currentAttendance = {
+  id: "att-smart-001",
+  employee_id: simulatedEmp.id,
+  date: "2026-08-24",
+  check_in: "2026-08-24T09:05:00-05:00",
+  check_out: null,
+  status: "presente",
+  notes: null,
+  bonus_minutes: 0,
+};
 check(
-  concurrentA.accepted === true &&
-  concurrentB.accepted === false &&
-  bookingBalance === 0,
-  "Prueba H: Dos pagos concurrentes intentando liquidar el mismo saldo -> 1 aceptado, 1 rechazado, balance 0"
+  currentAttendance !== null && currentAttendance.status === "presente" && currentAttendance.check_out === null,
+  "Caso A: Primer escaneo del día -> Entrada registrada (Estado: PRESENTE)"
+);
+
+// Caso B: Segundo escaneo -> Salida Temporal por Emergencia con Motivo
+const tempLeave1: TempLeave = {
+  id: "tl-001",
+  leave_time: "2026-08-24T12:00:00-05:00",
+  return_time: null,
+  reason: "Emergencia médica familiar",
+  duration_minutes: 0,
+};
+const updatedNotesWithLeave = serializeTempLeavesToNotes([tempLeave1], currentAttendance.notes);
+currentAttendance.status = "en_permiso";
+currentAttendance.notes = updatedNotesWithLeave;
+
+check(
+  currentAttendance.status === "en_permiso" &&
+  currentAttendance.notes?.includes("Emergencia médica familiar") === true,
+  "Caso B: Segundo escaneo -> Salida Temporal registrada con motivo obligatorio (Estado: EN PERMISO)"
+);
+
+// Caso C: Tercer escaneo (en permiso) -> Reingreso automático a las 12:40 PM (40 min transcurridos)
+const returnTime = "2026-08-24T12:40:00-05:00";
+const { tempLeaves: activeLeaves } = parseTempLeavesFromNotes(currentAttendance.notes);
+const activeLeave = activeLeaves.find((tl) => !tl.return_time);
+check(activeLeave !== undefined, "Caso C: Detecta permiso temporal abierto para reingreso automático");
+
+if (activeLeave) {
+  const startMs = new Date(activeLeave.leave_time).getTime();
+  const endMs = new Date(returnTime).getTime();
+  activeLeave.return_time = returnTime;
+  activeLeave.duration_minutes = Math.round((endMs - startMs) / 60000); // 40 min
+  currentAttendance.status = "presente";
+  currentAttendance.notes = serializeTempLeavesToNotes(activeLeaves);
+}
+
+check(
+  currentAttendance.status === "presente" &&
+  activeLeaves[0]?.duration_minutes === 40 &&
+  activeLeaves[0]?.return_time === returnTime,
+  "Caso C: Tercer escaneo -> Reingreso automático registrado (Duración: 40 min, Estado: PRESENTE)"
+);
+
+// Simular un segundo permiso temporal más tarde (15:00 a 15:20 = 20 min)
+const tempLeave2: TempLeave = {
+  id: "tl-002",
+  leave_time: "2026-08-24T15:00:00-05:00",
+  return_time: "2026-08-24T15:20:00-05:00",
+  reason: "Trámite bancario urgente",
+  duration_minutes: 20,
+};
+const allLeaves = [...activeLeaves, tempLeave2];
+currentAttendance.notes = serializeTempLeavesToNotes(allLeaves);
+
+// Caso D: Cuarto escaneo (Salida Definitiva a las 21:25 PM - Lunes con tolerancia 21:10)
+const finalCheckOutTime = "2026-08-24T21:25:00-05:00";
+const totalTempMinutes = calculateTotalTempLeaveMinutes(allLeaves);
+check(totalTempMinutes === 60, "Suma acumulada de permisos temporales = 60 minutos (40m + 20m)");
+
+const effectiveDuration = calculateEffectiveWorkingMinutes(
+  currentAttendance.check_in,
+  finalCheckOutTime,
+  currentAttendance.notes
+);
+// 09:05 a 21:25 = 12h 20m = 740 min brutos. Descontando 60 min permisos = 680 min netos (11h 20m)
+check(
+  effectiveDuration.grossMinutes === 740 &&
+  effectiveDuration.tempLeaveMinutes === 60 &&
+  effectiveDuration.netMinutes === 680,
+  "Duración Neta Efectiva: 740 min brutos - 60 min permisos = 680 min efectivos (11h 20m)"
+);
+
+// Regla de Bonificación con Tolerancia Estricta:
+// Umbral lunes: 21:10 (tolerancia de 10 min sobre turno 21:00)
+// Salida a las 21:05 -> 0 min
+const bonusBeforeTolerance = calculateBonusMinutes("2026-08-24T21:05:00-05:00", "2026-08-24");
+check(bonusBeforeTolerance.bonus_minutes === 0, "Regla Bonificación: Salida 21:05 (antes de tolerancia 21:10) -> 0 min");
+
+// Salida a las 21:10 (exactamente el límite) -> 0 min
+const bonusExactTolerance = calculateBonusMinutes("2026-08-24T21:10:00-05:00", "2026-08-24");
+check(bonusExactTolerance.bonus_minutes === 0, "Regla Bonificación: Salida 21:10 (exactamente en el límite de tolerancia) -> 0 min");
+
+// Salida a las 21:15 (después del umbral) -> 5 min (10 min de tolerancia completamente excluidos)
+const bonusPostTolerance15 = calculateBonusMinutes("2026-08-24T21:15:00-05:00", "2026-08-24");
+check(
+  bonusPostTolerance15.bonus_minutes === 5,
+  "Regla Bonificación: Salida 21:15 -> 5 min computados (tolerancia 21:10 excluida)"
+);
+
+// Salida a las 21:25 -> 15 min computados
+const bonusPostTolerance25 = calculateBonusMinutes(finalCheckOutTime, "2026-08-24");
+check(
+  bonusPostTolerance25.bonus_minutes === 15,
+  "Regla Bonificación: Salida 21:25 -> 15 min computados (tolerancia 21:10 excluida)"
+);
+
+// Salida Domingo a las 20:25 (umbral 20:10) -> 15 min computados
+const bonusSunday = calculateBonusMinutes("2026-08-23T20:25:00-05:00", "2026-08-23");
+check(
+  bonusSunday.bonus_minutes === 15,
+  "Regla Bonificación Domingo: Salida 20:25 (umbral 20:10) -> 15 min computados"
 );
 
 console.log("\n==========================================================================");

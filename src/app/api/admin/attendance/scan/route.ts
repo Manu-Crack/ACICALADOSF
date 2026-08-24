@@ -4,6 +4,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ATTENDANCE_STATUS, AttendanceStatus } from "@/lib/types/attendance";
 import { calculateBonusMinutes } from "@/lib/utils/bonus-calculator";
 import { type BonusRule, DEFAULT_BONUS_RULES } from "@/lib/types/bonus";
+import {
+  parseTempLeavesFromNotes,
+  serializeTempLeavesToNotes,
+  calculateTotalTempLeaveMinutes,
+  calculateEffectiveWorkingMinutes,
+  type TempLeave,
+} from "@/lib/utils/attendance-temp-leaves";
 
 async function verifyAdmin() {
   const supabase = await createClient();
@@ -85,7 +92,11 @@ function extractEmployeeId(code: string): string | null {
 
 /**
  * POST /api/admin/attendance/scan
- * Endpoint principal de escaneo de código QR para registro de Asistencia (Entrada / Salida)
+ * Endpoint principal de escaneo de código QR para registro de Asistencia:
+ * - Caso A: Primer escaneo -> Entrada (PRESENTE)
+ * - Caso B: Segundo escaneo -> Diálogo: Salida Temporal (EN PERMISO) o Salida Definitiva
+ * - Caso C: Tercer escaneo (en permiso) -> Reingreso automático (PRESENTE)
+ * - Caso D: Escaneo post-reingreso -> Diálogo o Salida Definitiva
  */
 export async function POST(request: NextRequest) {
   try {
@@ -96,6 +107,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const rawCode = body.code || body.employee_id;
+    const actionType = body.action_type as "temp_leave" | "final_checkout" | undefined;
+    const tempLeaveReason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const confirmCheckout = Boolean(body.confirm_checkout);
 
     if (!rawCode) {
       return NextResponse.json(
@@ -199,16 +213,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar si tenía un permiso registrado para hoy
-    const { data: blockRecord } = await admin
-      .from("employee_blocks")
-      .select("reason")
-      .eq("employee_id", employee.id)
-      .eq("block_date", peruDate)
-      .maybeSingle();
+    // Parsear historial de permisos temporales de hoy
+    const { tempLeaves, cleanNotes } = parseTempLeavesFromNotes(attendanceRecord?.notes);
+    const activeTempLeave = tempLeaves.find((tl) => !tl.return_time);
 
-    // CASO A: No tiene registro hoy -> Marcar ENTRADA (Check-in) con estado de puntualidad
+    // =========================================================================
+    // CASO A: Primer escaneo del día (No existe registro previo hoy) -> ENTRADA
+    // =========================================================================
     if (!attendanceRecord) {
+      // Verificar si tenía un permiso previo de agenda registrado para hoy
+      const { data: blockRecord } = await admin
+        .from("employee_blocks")
+        .select("reason")
+        .eq("employee_id", employee.id)
+        .eq("block_date", peruDate)
+        .maybeSingle();
+
       const { data: newAttendance, error: insertError } = await admin
         .from("employee_attendances")
         .insert({
@@ -235,7 +255,7 @@ export async function POST(request: NextRequest) {
         status: "success",
         punctuality: punctualityLabel,
         attendance_status: dbStatus,
-        message: `Entrada registrada: ${employee.first_name} ${employee.last_name} (${punctualityLabel} - ${currentTimeFormatted})`,
+        message: `Entrada registrada: ${employee.first_name} ${employee.last_name} (${punctualityLabel} - ${currentTimeFormatted}) · Estado: PRESENTE`,
         employee,
         attendance: newAttendance,
         timestamp: currentTimeFormatted,
@@ -243,107 +263,226 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // CASO B: Ya tiene ENTRADA pero NO tiene SALIDA -> Flujo de Confirmación de Salida
-    if (!attendanceRecord.check_out) {
-      const confirmCheckout = Boolean(body.confirm_checkout);
-      const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
-
-      // Si no ha confirmado la salida, solicitar confirmación modal
-      if (!confirmCheckout) {
-        return NextResponse.json({
-          action: "requires_checkout_confirmation",
-          status: "confirmation_needed",
-          message: `El empleado ${employee.first_name} ${employee.last_name} ya registró su entrada hoy a las ${checkInFormatted}. ¿Desea registrar su salida ahora?`,
-          employee,
-          attendance: attendanceRecord,
-          check_in_time: checkInFormatted,
-          current_time: currentTimeFormatted,
-          date: peruDate,
-        });
+    // =========================================================================
+    // CASO C: Empleado está actualmente "EN PERMISO" -> REINGRESO AUTOMÁTICO
+    // =========================================================================
+    if (activeTempLeave || attendanceRecord.status === "en_permiso") {
+      let durationMin = 0;
+      if (activeTempLeave) {
+        const leaveDate = new Date(activeTempLeave.leave_time);
+        durationMin = Math.max(1, Math.round((now.getTime() - leaveDate.getTime()) / 60000));
+        activeTempLeave.return_time = now.toISOString();
+        activeTempLeave.duration_minutes = durationMin;
       }
 
-      // Si confirmó la salida, calcular bonificación según reglas de día de semana
-      let bonusRules: BonusRule[] = DEFAULT_BONUS_RULES;
-      try {
-        const { data: dbRules } = await admin.from("bonus_settings").select("*");
-        if (dbRules && dbRules.length > 0) bonusRules = dbRules;
-      } catch (err) {
-        console.error("Error fetching bonus rules in scan:", err);
-      }
+      const updatedNotes = serializeTempLeavesToNotes(tempLeaves, cleanNotes);
 
-      const bonusResult = calculateBonusMinutes(now.toISOString(), peruDate, bonusRules);
-
-      // Registrar check_out y bonus_minutes
-      let updatedAttendance: any = null;
-      let updateError: any = null;
-
-      const fullUpdateRes = await admin
+      const { data: updatedAttendance, error: updateError } = await admin
         .from("employee_attendances")
         .update({
-          check_out: now.toISOString(),
-          bonus_minutes: bonusResult.bonus_minutes,
-          bonus_calculation_type: "auto",
+          status: ATTENDANCE_STATUS.PRESENTE,
+          notes: updatedNotes,
           updated_at: now.toISOString(),
         })
         .eq("id", attendanceRecord.id)
         .select()
         .single();
 
-      if (fullUpdateRes.error) {
-        // Si hay un error de schema cache o columna no encontrada, intentar fallback resiliente
-        console.warn("Retrying attendance checkout with minimal payload due to:", fullUpdateRes.error);
-        const fallbackRes = await admin
+      if (updateError) {
+        return NextResponse.json(
+          { error: `Error al registrar reingreso: ${getErrorMessage(updateError)}` },
+          { status: 500 }
+        );
+      }
+
+      const reasonMsg = activeTempLeave?.reason ? ` (${activeTempLeave.reason})` : "";
+
+      return NextResponse.json({
+        action: "temp_leave_return",
+        status: "success",
+        message: `Reingreso registrado: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted}. Duración del permiso: ${durationMin} min${reasonMsg} · Estado: PRESENTE`,
+        employee,
+        attendance: updatedAttendance,
+        timestamp: currentTimeFormatted,
+        duration_minutes: durationMin,
+        date: peruDate,
+      });
+    }
+
+    // =========================================================================
+    // CASO B / D: Tiene Entrada activa y NO tiene Salida Definitiva
+    // =========================================================================
+    if (!attendanceRecord.check_out) {
+      const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
+
+      // B.1: El usuario seleccionó "Salida Temporal / Emergencia"
+      if (actionType === "temp_leave") {
+        if (!tempLeaveReason) {
+          return NextResponse.json(
+            { error: "Debe especificar el motivo de la salida temporal por emergencia." },
+            { status: 400 }
+          );
+        }
+
+        const newLeave: TempLeave = {
+          id: crypto.randomUUID(),
+          leave_time: now.toISOString(),
+          return_time: null,
+          reason: tempLeaveReason,
+          duration_minutes: 0,
+        };
+
+        const updatedLeaves = [...tempLeaves, newLeave];
+        const updatedNotes = serializeTempLeavesToNotes(updatedLeaves, cleanNotes);
+
+        const { data: updatedAttendance, error: updateError } = await admin
           .from("employee_attendances")
           .update({
-            check_out: now.toISOString(),
+            status: ATTENDANCE_STATUS.EN_PERMISO,
+            notes: updatedNotes,
             updated_at: now.toISOString(),
           })
           .eq("id", attendanceRecord.id)
           .select()
           .single();
 
-        if (fallbackRes.error) {
-          updateError = fallbackRes.error;
-        } else {
-          updatedAttendance = fallbackRes.data;
+        if (updateError) {
+          return NextResponse.json(
+            { error: `Error al registrar salida temporal: ${getErrorMessage(updateError)}` },
+            { status: 500 }
+          );
         }
-      } else {
-        updatedAttendance = fullUpdateRes.data;
+
+        return NextResponse.json({
+          action: "temp_leave_start",
+          status: "success",
+          message: `Salida temporal registrada: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted} (${tempLeaveReason}) · Estado: EN PERMISO`,
+          employee,
+          attendance: updatedAttendance,
+          timestamp: currentTimeFormatted,
+          reason: tempLeaveReason,
+          date: peruDate,
+        });
       }
 
-      if (updateError) {
-        const dbMsg = getErrorMessage(updateError);
-        return NextResponse.json(
-          { error: `Error al registrar salida: ${dbMsg}` },
-          { status: 500 }
-        );
+      // B.2: El usuario seleccionó "Salida Definitiva" (o confirmó salida)
+      if (actionType === "final_checkout" || confirmCheckout) {
+        // Cargar reglas de bonificación
+        let bonusRules: BonusRule[] = DEFAULT_BONUS_RULES;
+        try {
+          const { data: dbRules } = await admin.from("bonus_settings").select("*");
+          if (dbRules && dbRules.length > 0) bonusRules = dbRules;
+        } catch (err) {
+          console.error("Error fetching bonus rules in scan:", err);
+        }
+
+        // Calcular bonificación con exclusión estricta de la tolerancia
+        const bonusResult = calculateBonusMinutes(now.toISOString(), peruDate, bonusRules);
+
+        // Si había un permiso temporal sin cerrar, cerrarlo automáticamente ahora
+        const openLeave = tempLeaves.find((tl) => !tl.return_time);
+        if (openLeave) {
+          const leaveDate = new Date(openLeave.leave_time);
+          openLeave.return_time = now.toISOString();
+          openLeave.duration_minutes = Math.max(1, Math.round((now.getTime() - leaveDate.getTime()) / 60000));
+        }
+
+        const finalNotes = serializeTempLeavesToNotes(tempLeaves, cleanNotes);
+        const { grossMinutes, tempLeaveMinutes, netMinutes, formatted: durationFormatted } =
+          calculateEffectiveWorkingMinutes(attendanceRecord.check_in, now.toISOString(), finalNotes);
+
+        // Registrar check_out y persistir
+        let updatedAttendance: any = null;
+        let updateError: any = null;
+
+        const updatePayload = {
+          check_out: now.toISOString(),
+          bonus_minutes: bonusResult.bonus_minutes,
+          bonus_calculation_type: "auto",
+          status: attendanceRecord.status === "en_permiso" ? ATTENDANCE_STATUS.PRESENTE : attendanceRecord.status,
+          notes: finalNotes,
+          updated_at: now.toISOString(),
+        };
+
+        const fullUpdateRes = await admin
+          .from("employee_attendances")
+          .update(updatePayload)
+          .eq("id", attendanceRecord.id)
+          .select()
+          .single();
+
+        if (fullUpdateRes.error) {
+          console.warn("Retrying attendance checkout with minimal payload due to:", fullUpdateRes.error);
+          const fallbackRes = await admin
+            .from("employee_attendances")
+            .update({
+              check_out: now.toISOString(),
+              notes: finalNotes,
+              updated_at: now.toISOString(),
+            })
+            .eq("id", attendanceRecord.id)
+            .select()
+            .single();
+
+          if (fallbackRes.error) {
+            updateError = fallbackRes.error;
+          } else {
+            updatedAttendance = fallbackRes.data;
+          }
+        } else {
+          updatedAttendance = fullUpdateRes.data;
+        }
+
+        if (updateError) {
+          return NextResponse.json(
+            { error: `Error al registrar salida definitiva: ${getErrorMessage(updateError)}` },
+            { status: 500 }
+          );
+        }
+
+        const bonusMsg = bonusResult.bonus_minutes > 0
+          ? ` (+${bonusResult.bonus_minutes} min bonificación)`
+          : "";
+
+        return NextResponse.json({
+          action: "check_out",
+          status: "success",
+          message: `Salida definitiva: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted}${bonusMsg} · Jornada neta: ${durationFormatted}`,
+          employee,
+          attendance: updatedAttendance,
+          bonus_result: bonusResult,
+          check_in_time: checkInFormatted,
+          check_out_time: currentTimeFormatted,
+          temp_leave_minutes: tempLeaveMinutes,
+          net_duration_minutes: netMinutes,
+          date: peruDate,
+        });
       }
 
-      const bonusMessage = bonusResult.bonus_minutes > 0
-        ? ` (+${bonusResult.bonus_minutes} min bonificación)`
-        : "";
-
+      // B.3: Sin acción especificada -> Solicitar al usuario elegir entre Salida Temporal o Definitiva
       return NextResponse.json({
-        action: "check_out",
-        status: "success",
-        message: `Salida registrada: ${employee.first_name} ${employee.last_name} a las ${currentTimeFormatted}${bonusMessage}`,
+        action: "requires_scan_action",
+        status: "confirmation_needed",
+        message: `El empleado ${employee.first_name} ${employee.last_name} tiene entrada activa hoy a las ${checkInFormatted}. Seleccione una opción:`,
         employee,
-        attendance: updatedAttendance,
-        bonus_result: bonusResult,
+        attendance: attendanceRecord,
         check_in_time: checkInFormatted,
-        check_out_time: currentTimeFormatted,
+        current_time: currentTimeFormatted,
         date: peruDate,
+        temp_leaves_count: tempLeaves.length,
       });
     }
 
-    // CASO C: Ya tiene ENTRADA y SALIDA registradas hoy -> Notificar turno completado
+    // =========================================================================
+    // CASO E: Ya tiene ENTRADA y SALIDA DEFINITIVA registradas hoy
+    // =========================================================================
     const checkInFormatted = timeFormatter.format(new Date(attendanceRecord.check_in));
     const checkOutFormatted = timeFormatter.format(new Date(attendanceRecord.check_out));
 
     return NextResponse.json({
       action: "already_completed",
       status: "info",
-      message: `El empleado ${employee.first_name} ${employee.last_name} ya completó su turno de hoy (Entrada: ${checkInFormatted} | Salida: ${checkOutFormatted}).`,
+      message: `El empleado ${employee.first_name} ${employee.last_name} ya completó su jornada de hoy (Entrada: ${checkInFormatted} | Salida: ${checkOutFormatted}).`,
       employee,
       attendance: attendanceRecord,
       check_in_time: checkInFormatted,

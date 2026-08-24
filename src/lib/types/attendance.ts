@@ -9,7 +9,8 @@ export type AttendanceStatus =
   | "tardanza"
   | "salida_temprana"
   | "falta_justificada"
-  | "falta_injustificada";
+  | "falta_injustificada"
+  | "en_permiso";
 
 export const ATTENDANCE_STATUS = {
   PRESENTE: "presente",
@@ -17,6 +18,7 @@ export const ATTENDANCE_STATUS = {
   SALIDA_TEMPRANA: "salida_temprana",
   FALTA_JUSTIFICADA: "falta_justificada",
   FALTA_INJUSTIFICADA: "falta_injustificada",
+  EN_PERMISO: "en_permiso",
 } as const;
 
 export interface AttendanceRecord {
@@ -57,6 +59,8 @@ export function getAttendanceStatusInfo(
   switch (normalized) {
     case "presente":
       return { label: "Presente (A tiempo)", badgeClass: "badge-success", icon: "🟢", isJustified: false };
+    case "en_permiso":
+      return { label: "En Permiso Temporal", badgeClass: "badge-warning", icon: "⏸️", isJustified: true };
     case "tardanza":
       if (hasEntryJust) {
         return { label: "Tardanza (Justificada)", badgeClass: "badge-warning", icon: "🟡", isJustified: true };

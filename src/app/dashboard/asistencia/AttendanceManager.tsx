@@ -18,6 +18,11 @@ interface Employee {
 
 import { AttendanceRecord, getAttendanceStatusInfo } from "@/lib/types/attendance";
 import type { JustificationType } from "@/lib/types/bonus";
+import {
+  calculateEffectiveWorkingMinutes,
+  parseTempLeavesFromNotes,
+  calculateTotalTempLeaveMinutes,
+} from "@/lib/utils/attendance-temp-leaves";
 
 interface BlockRecord {
   id: string;
@@ -248,18 +253,10 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
     }
   }
 
-  function calculateDuration(checkIn: string, checkOut: string | null) {
+  function calculateDuration(checkIn: string, checkOut: string | null, notes?: string | null) {
     if (!checkIn || !checkOut) return "—";
-    try {
-      const diffMs = new Date(checkOut).getTime() - new Date(checkIn).getTime();
-      if (diffMs <= 0) return "—";
-      const totalMinutes = Math.floor(diffMs / 60000);
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      return `${hours}h ${minutes}m`;
-    } catch {
-      return "—";
-    }
+    const { formatted } = calculateEffectiveWorkingMinutes(checkIn, checkOut, notes);
+    return formatted;
   }
 
   // Filter employees by search term
@@ -602,14 +599,22 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                       empAttendance.entry_justification,
                       empAttendance.exit_justification
                     );
-                    const tooltipText = [
+                    const { cleanNotes, tempLeaves } = parseTempLeavesFromNotes(empAttendance.notes);
+                    const activeTemp = tempLeaves.find((tl) => !tl.return_time);
+                    const tempSummary = tempLeaves.length > 0
+                      ? `${tempLeaves.length} permiso(s) temporal(es)`
+                      : null;
+
+                    const tooltipParts = [
+                      activeTemp ? `⏸️ En Permiso: ${activeTemp.reason}` : null,
                       empAttendance.entry_justification ? `Entrada: ${empAttendance.entry_justification}` : null,
                       empAttendance.exit_justification ? `Salida: ${empAttendance.exit_justification}` : null,
-                      empAttendance.notes ? `Notas: ${empAttendance.notes}` : null,
-                    ].filter(Boolean).join(" | ");
+                      cleanNotes ? `Notas: ${cleanNotes}` : null,
+                      tempSummary,
+                    ].filter(Boolean);
 
                     statusBadge = (
-                      <span className={`badge ${statusInfo.badgeClass}`} title={tooltipText || undefined}>
+                      <span className={`badge ${statusInfo.badgeClass}`} title={tooltipParts.join(" | ") || undefined}>
                         {statusInfo.icon} {statusInfo.label}
                       </span>
                     );
@@ -787,7 +792,9 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
 
                       {/* Duration */}
                       <td style={{ padding: "14px 16px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
-                        {empAttendance ? calculateDuration(empAttendance.check_in, empAttendance.check_out) : "—"}
+                        {empAttendance
+                          ? calculateDuration(empAttendance.check_in, empAttendance.check_out, empAttendance.notes)
+                          : "—"}
                       </td>
 
                       {/* Actions */}
