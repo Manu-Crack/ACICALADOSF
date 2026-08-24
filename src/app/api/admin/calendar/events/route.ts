@@ -4,9 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   CALENDAR_EVENT_CONFIG,
   type CalendarEvent,
-  type CalendarEventType,
 } from "@/lib/types/calendar";
-import { getAttendanceStatusInfo } from "@/lib/types/attendance";
 import {
   PERMISSION_TYPE_LABELS,
   PERMISSION_STATUS_LABELS,
@@ -16,11 +14,9 @@ import {
 
 /**
  * GET /api/admin/calendar/events
- * Retorna todos los eventos consolidados para el calendario por empleado:
- * - Reservas
+ * Retorna los eventos consolidados para el calendario por especialista:
+ * - Reservas de clientes (bookings)
  * - Permisos y Ausencias (employee_blocks)
- * - Asistencias (employee_attendances)
- * - Bonificaciones
  */
 export async function GET(request: NextRequest) {
   try {
@@ -48,7 +44,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("start_date") || new Date().toISOString().slice(0, 10);
     const endDate = searchParams.get("end_date") || startDate;
     const employeeId = searchParams.get("employee_id");
-    const typesFilter = searchParams.get("types")?.split(",") || ["booking", "permission", "attendance", "bonus"];
+    const typesFilter = searchParams.get("types")?.split(",") || ["booking", "permission"];
 
     const admin = createAdminClient();
 
@@ -72,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     const events: CalendarEvent[] = [];
 
-    // 2. Cargar Reservas
+    // 2. Cargar Reservas de Clientes (bookings)
     if (typesFilter.includes("booking")) {
       let bQuery = admin
         .from("bookings")
@@ -287,110 +283,6 @@ export async function GET(request: NextRequest) {
             evidence_url: p.evidence_url,
           },
         });
-      });
-    }
-
-    // 4. Cargar Asistencias (employee_attendances)
-    if (typesFilter.includes("attendance") || typesFilter.includes("bonus")) {
-      let aQuery = admin
-        .from("employee_attendances")
-        .select(`
-          id,
-          employee_id,
-          date,
-          check_in,
-          check_out,
-          status,
-          bonus_minutes,
-          bonus_calculation_type,
-          check_in_justified,
-          check_out_justified,
-          notes
-        `)
-        .gte("date", startDate)
-        .lte("date", endDate);
-
-      if (employeeId && employeeId !== "all") {
-        aQuery = aQuery.eq("employee_id", employeeId);
-      }
-
-      const { data: attendances, error: aError } = await aQuery;
-      if (aError) {
-        console.error("[GET /api/admin/calendar/events] Error consultando asistencias:", aError);
-      }
-
-      interface RawAttendanceEvent {
-        id: string;
-        employee_id: string;
-        date: string;
-        check_in: string;
-        check_out: string | null;
-        status: string;
-        bonus_minutes: number | null;
-        bonus_calculation_type: string | null;
-        check_in_justified: boolean;
-        check_out_justified: boolean;
-        notes: string | null;
-      }
-
-      ((attendances || []) as unknown as RawAttendanceEvent[]).forEach((att) => {
-        const empName = empMap.get(att.employee_id) || "Personal";
-        const attInfo = getAttendanceStatusInfo(att.status);
-
-        if (typesFilter.includes("attendance")) {
-          const cfg = CALENDAR_EVENT_CONFIG.attendance;
-          events.push({
-            id: `attendance-${att.id}`,
-            type: "attendance",
-            title: `Asistencia: ${attInfo.label}`,
-            employee_id: att.employee_id,
-            employee_name: empName,
-            employee_specialty: empSpecialtyMap.get(att.employee_id),
-            date: att.date,
-            start_time: att.check_in ? new Date(att.check_in).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" }) : undefined,
-            end_time: att.check_out ? new Date(att.check_out).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" }) : undefined,
-            status: att.status,
-            status_label: attInfo.label,
-            badge_class: attInfo.badgeClass,
-            icon: attInfo.icon,
-            color: cfg.color,
-            bg_color: cfg.bgColor,
-            border_color: cfg.borderColor,
-            description: att.notes || `Entrada: ${att.check_in?.slice(11, 16)}`,
-            details: {
-              check_in: att.check_in,
-              check_out: att.check_out,
-              observation: att.notes || undefined,
-            },
-          });
-        }
-
-        // Evento de Bonificación
-        if (typesFilter.includes("bonus") && (att.bonus_minutes || 0) > 0) {
-          const cfg = CALENDAR_EVENT_CONFIG.bonus;
-          const mins = att.bonus_minutes || 0;
-          events.push({
-            id: `bonus-${att.id}`,
-            type: "bonus",
-            title: `⏱️ Bono: +${mins} min (${(mins / 60).toFixed(2)}h)`,
-            employee_id: att.employee_id,
-            employee_name: empName,
-            employee_specialty: empSpecialtyMap.get(att.employee_id),
-            date: att.date,
-            status: "bonificado",
-            status_label: `${mins} min`,
-            badge_class: "badge-gold",
-            icon: cfg.icon,
-            color: cfg.color,
-            bg_color: cfg.bgColor,
-            border_color: cfg.borderColor,
-            description: `Cálculo: ${att.bonus_calculation_type === "manual" ? "Manual" : "Automático"}`,
-            details: {
-              bonus_minutes: mins,
-              bonus_hours: Math.round((mins / 60) * 100) / 100,
-            },
-          });
-        }
       });
     }
 

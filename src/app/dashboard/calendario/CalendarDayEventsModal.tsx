@@ -38,20 +38,25 @@ export function CalendarDayEventsModal({
     }
   }, [dateStr]);
 
-  // Ordenar eventos por hora de inicio
+  // Filtrar exclusivamente eventos de reservas de clientes
+  const bookingEvents = useMemo(() => {
+    return events.filter((ev) => ev.type === "booking");
+  }, [events]);
+
+  // Ordenar reservas por hora de inicio
   const sortedEvents = useMemo(() => {
-    return [...events].sort((a, b) => {
+    return [...bookingEvents].sort((a, b) => {
       const timeA = a.start_time || "00:00";
       const timeB = b.start_time || "00:00";
       return timeA.localeCompare(timeB);
     });
-  }, [events]);
+  }, [bookingEvents]);
 
   // Manejar exportación a PDF de la agenda del día
   const handleExportPdf = () => {
     try {
       setExportingPdf(true);
-      exportDailyCalendarAgendaPdf(dateStr, events);
+      exportDailyCalendarAgendaPdf(dateStr, bookingEvents);
     } catch (err) {
       console.error("Error al exportar agenda en PDF:", err);
     } finally {
@@ -131,7 +136,7 @@ export function CalendarDayEventsModal({
               }}
             >
               Total de eventos programados:{" "}
-              <strong style={{ color: "var(--color-primary)" }}>{events.length}</strong>
+              <strong style={{ color: "var(--color-primary)" }}>{sortedEvents.length}</strong>
             </p>
           </div>
 

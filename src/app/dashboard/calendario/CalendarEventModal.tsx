@@ -157,32 +157,6 @@ export function CalendarEventModal({ event, onClose }: CalendarEventModalProps) 
               )}
             </>
           )}
-
-          {event.type === "attendance" && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--color-text-muted)" }}>Entrada:</span>
-                <strong>{event.start_time || "—"}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--color-text-muted)" }}>Salida:</span>
-                <strong>{event.end_time || "—"}</strong>
-              </div>
-            </>
-          )}
-
-          {event.type === "bonus" && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--color-text-muted)" }}>Minutos Bonificados:</span>
-                <strong style={{ color: "#22c55e", fontSize: "1.1rem" }}>+{event.details.bonus_minutes} min</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--color-text-muted)" }}>Horas Bonificadas:</span>
-                <span>{event.details.bonus_hours} hrs</span>
-              </div>
-            </>
-          )}
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, paddingTop: 14, borderTop: "1px solid var(--color-border)" }}>

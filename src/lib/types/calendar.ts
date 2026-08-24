@@ -2,7 +2,7 @@
  * Tipos TypeScript para el Módulo de Calendario por Empleado.
  */
 
-export type CalendarEventType = "booking" | "permission" | "attendance" | "bonus";
+export type CalendarEventType = "booking" | "permission";
 
 export const CALENDAR_EVENT_CONFIG: Record<
   CalendarEventType,
@@ -21,20 +21,6 @@ export const CALENDAR_EVENT_CONFIG: Record<
     color: "#f59e0b",
     bgColor: "rgba(245, 158, 11, 0.12)",
     borderColor: "rgba(245, 158, 11, 0.35)",
-  },
-  attendance: {
-    label: "Asistencia",
-    icon: "🟢",
-    color: "#22c55e",
-    bgColor: "rgba(34, 197, 94, 0.12)",
-    borderColor: "rgba(34, 197, 94, 0.35)",
-  },
-  bonus: {
-    label: "Bonificación",
-    icon: "⏱️",
-    color: "#c8a45c",
-    bgColor: "rgba(200, 164, 92, 0.12)",
-    borderColor: "rgba(200, 164, 92, 0.35)",
   },
 };
 
@@ -68,10 +54,6 @@ export interface CalendarEvent {
     reason?: string;
     observation?: string;
     evidence_url?: string | null;
-    bonus_minutes?: number;
-    bonus_hours?: number;
-    check_in?: string | null;
-    check_out?: string | null;
   };
 }
 

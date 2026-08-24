@@ -41,8 +41,6 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
   const [activeTypes, setActiveTypes] = useState<Record<CalendarEventType, boolean>>({
     booking: true,
     permission: true,
-    attendance: true,
-    bonus: true,
   });
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -261,18 +259,6 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
             },
             () => {
               console.log("[Supabase Realtime: Calendar] ⚡ Cambio en employee_blocks");
-              if (loadEventsRef.current) loadEventsRef.current(true);
-            }
-          )
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "employee_attendances",
-            },
-            () => {
-              console.log("[Supabase Realtime: Calendar] ⚡ Cambio en employee_attendances");
               if (loadEventsRef.current) loadEventsRef.current(true);
             }
           )

@@ -4,7 +4,7 @@ import { CalendarManager } from "./CalendarManager";
 
 export const metadata = {
   title: "Calendario por Empleado | Panel Acicalados",
-  description: "Cronograma interactivo de reservas, permisos y asistencias por especialista",
+  description: "Cronograma interactivo de reservas y citas por especialista",
 };
 
 export default async function CalendarioPage() {
