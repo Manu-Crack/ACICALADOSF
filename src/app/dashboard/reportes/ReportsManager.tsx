@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { FullReportData } from "@/lib/types/reports";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS } from "@/lib/types/payments";
+import { DailyClosingWhatsAppModal } from "./DailyClosingWhatsAppModal";
 
 interface EmployeeOption {
   id: string;
@@ -15,6 +16,9 @@ type PeriodType = "day" | "week" | "month" | "year" | "custom";
 type ModuleFilter = "all" | "spa" | "barberia";
 
 export function ReportsManager() {
+  // Modal de Cierre de Caja WhatsApp
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
+
   // ---------------------------------------------------------------------------
   // Helpers de fechas y rangos
   // ---------------------------------------------------------------------------
@@ -336,8 +340,28 @@ export function ReportsManager() {
           </p>
         </div>
 
-        {/* Botones de Exportación */}
+        {/* Botones de Acción y Exportación */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setIsClosingModalOpen(true)}
+            className="btn btn-secondary"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontWeight: 700,
+              borderColor: "rgba(34, 197, 94, 0.5)",
+              background: "rgba(34, 197, 94, 0.08)",
+              color: "#22c55e",
+              boxShadow: "0 2px 10px rgba(34, 197, 94, 0.15)",
+            }}
+            id="daily-closing-whatsapp-btn"
+            title="Generar reporte diario de cierre de caja en formato WhatsApp"
+          >
+            <span>📱 Cierre de Caja (WhatsApp)</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportExcel}
@@ -348,8 +372,8 @@ export function ReportsManager() {
               alignItems: "center",
               gap: 8,
               fontWeight: 700,
-              borderColor: "rgba(34, 197, 94, 0.4)",
-              color: "#22c55e",
+              borderColor: "rgba(200, 164, 92, 0.4)",
+              color: "var(--color-primary)",
             }}
             id="export-excel-btn"
           >
@@ -491,6 +515,27 @@ export function ReportsManager() {
               >
                 Hoy
               </button>
+
+              {periodType === "day" && (
+                <button
+                  type="button"
+                  onClick={() => setIsClosingModalOpen(true)}
+                  className="btn btn-ghost btn-sm"
+                  style={{
+                    fontSize: "0.75rem",
+                    padding: "4px 10px",
+                    color: "#22c55e",
+                    border: "1px solid rgba(34, 197, 94, 0.3)",
+                    background: "rgba(34, 197, 94, 0.08)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  title="Abrir resumen de cierre diario para compartir por WhatsApp"
+                >
+                  <span>📱 Ver Cierre WhatsApp</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1653,6 +1698,13 @@ export function ReportsManager() {
           )}
         </>
       )}
+
+      {/* Modal de Cierre de Caja Diario (WhatsApp) */}
+      <DailyClosingWhatsAppModal
+        isOpen={isClosingModalOpen}
+        onClose={() => setIsClosingModalOpen(false)}
+        initialDate={periodType === "day" ? startDate : undefined}
+      />
     </div>
   );
 }
