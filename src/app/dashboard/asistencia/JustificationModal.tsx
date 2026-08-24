@@ -160,8 +160,8 @@ export function JustificationModal({
           {/* Tipo de Justificación */}
           <div>
             <label className="label">Tipo de Justificación</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {(["check_in", "check_out", "absence"] as JustificationType[]).map((t) => (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {(["check_in", "check_out"] as JustificationType[]).map((t) => (
                 <button
                   key={t}
                   type="button"

@@ -5,7 +5,6 @@ import { AttendanceQRScannerModal } from "./AttendanceQRScannerModal";
 import { EmployeeQRBadgeModal } from "./EmployeeQRBadgeModal";
 import { EmployeeHistoryModal } from "./EmployeeHistoryModal";
 import { JustificationModal } from "./JustificationModal";
-import { JustificationHistoryModal } from "./JustificationHistoryModal";
 import { BonusSettingsModal } from "./BonusSettingsModal";
 import { BonusAdjustmentModal } from "./BonusAdjustmentModal";
 
@@ -64,11 +63,6 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
     employeeName: string;
     initialType: JustificationType;
     dateStr: string;
-  } | null>(null);
-  const [historyJustificationsData, setHistoryJustificationsData] = useState<{
-    employeeId?: string;
-    attendanceId?: string;
-    employeeName?: string;
   } | null>(null);
   const [bonusAdjustmentData, setBonusAdjustmentData] = useState<{
     attendanceId: string;
@@ -719,21 +713,7 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                             ) : null}
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setJustificationModalData({
-                                employeeId: emp.id,
-                                employeeName: `${emp.first_name} ${emp.last_name}`,
-                                initialType: "absence",
-                                dateStr: selectedDate,
-                              })
-                            }
-                            className="btn btn-ghost btn-sm"
-                            style={{ fontSize: "0.68rem", padding: "2px 6px", color: "var(--color-text-muted)" }}
-                          >
-                            📝 Justificar Falta
-                          </button>
+                          <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>—</span>
                         )}
                       </td>
 
@@ -813,33 +793,18 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
                       {/* Actions */}
                       <td style={{ padding: "14px 16px", textAlign: "right" }}>
                         <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                          {/* Botón Justificaciones */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setHistoryJustificationsData({
-                                employeeId: emp.id,
-                                attendanceId: empAttendance?.id,
-                                employeeName: `${emp.first_name} ${emp.last_name}`,
-                              })
-                            }
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: "5px 8px", fontSize: "0.75rem" }}
-                            title="Ver justificaciones del trabajador"
-                          >
-                            📜 Justif.
-                          </button>
-
-                          {/* QR Badge Button */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedQrEmployee(emp)}
-                            className="btn btn-secondary btn-sm"
-                            style={{ padding: "5px 10px", fontSize: "0.75rem" }}
-                            title="Ver / Descargar Carnet QR"
-                          >
-                            🪪 QR
-                          </button>
+                          {/* QR Badge Button - Solo visible para Administrador */}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedQrEmployee(emp)}
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: "5px 10px", fontSize: "0.75rem" }}
+                              title="Ver / Descargar Carnet QR"
+                            >
+                              🪪 QR
+                            </button>
+                          )}
 
                           {/* Individual History */}
                           <button
@@ -914,18 +879,6 @@ export function AttendanceManager({ userRole = "admin" }: { userRole?: string })
             setJustificationModalData(null);
             loadData();
           }}
-        />
-      )}
-
-      {/* Justifications History Modal */}
-      {historyJustificationsData && (
-        <JustificationHistoryModal
-          employeeId={historyJustificationsData.employeeId}
-          attendanceId={historyJustificationsData.attendanceId}
-          employeeName={historyJustificationsData.employeeName}
-          userRole={userRole}
-          onClose={() => setHistoryJustificationsData(null)}
-          onStatusChanged={loadData}
         />
       )}
 
