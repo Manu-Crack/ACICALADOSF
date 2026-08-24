@@ -190,6 +190,259 @@ export async function findAvailableEmployeeForBooking(
   return rankedEmployees[0]?.id || null;
 }
 
+export interface ServiceInputItem {
+  id: string;
+  name: string;
+  price_cents: number;
+  duration_minutes: number;
+  type: "barberia" | "spa";
+}
+
+export interface AssignedServiceItem {
+  service_id: string;
+  service_name: string;
+  service_price_cents: number;
+  duration_minutes: number;
+  service_type: "barberia" | "spa";
+  start_time: string; // "HH:MM:SS"
+  end_time: string;   // "HH:MM:SS"
+  assigned_employee_id: string | null;
+  employee_name?: string;
+  employee_type?: string;
+}
+
+export interface MultiServiceAssignmentResult {
+  items: AssignedServiceItem[];
+  primary_employee_id: string | null;
+  total_duration_minutes: number;
+  formatted_start_time: string;
+  formatted_end_time: string;
+  has_conflicts: boolean;
+  conflict_messages: string[];
+}
+
+/**
+ * Asigna de forma inteligente y equitativa colaboradores disponibles a cada servicio
+ * de una reserva simple o multi-servicio, evitando solapamientos y verificando ausencias.
+ */
+export async function assignMultiServiceEmployees(params: {
+  services: ServiceInputItem[];
+  bookingDate: string;
+  startTime: string; // "HH:MM" o "HH:MM:SS"
+  manualAssignments?: Record<string, string> | null; // { [service_id]: employee_id }
+  globalEmployeeId?: string | null; // Empleado asignado para toda la cita
+}): Promise<MultiServiceAssignmentResult> {
+  const { services, bookingDate, startTime, manualAssignments, globalEmployeeId } = params;
+  const admin = createAdminClient();
+
+  // 1. Obtener empleados activos
+  const { data: allEmployees } = await admin
+    .from("employees")
+    .select("id, first_name, last_name, type, rotation_order")
+    .eq("is_active", true)
+    .neq("type", "recepcionista");
+
+  const activeEmployees = allEmployees || [];
+  const employeeMap = new Map(activeEmployees.map((e) => [e.id, e]));
+
+  // 2. Obtener ausencias y permisos aprobados en la fecha
+  const { data: absences } = await admin
+    .from("employee_blocks")
+    .select("employee_id, start_date, end_date, is_all_day, start_time, end_time, status")
+    .lte("start_date", bookingDate)
+    .gte("end_date", bookingDate)
+    .eq("status", "approved");
+
+  // 3. Obtener asistencias con falta en la fecha
+  const { data: attendances } = await admin
+    .from("employee_attendances")
+    .select("employee_id, status")
+    .eq("date", bookingDate)
+    .in("status", ["falta_injustificada", "falta_justificada"]);
+
+  const absentTodayIds = new Set<string>();
+  (attendances || []).forEach((att) => absentTodayIds.add(att.employee_id));
+
+  // 4. Obtener reservas activas en la fecha
+  const { data: existingBookings } = await admin
+    .from("bookings")
+    .select("id, booking_code, assigned_employee_id, start_time, end_time, status")
+    .eq("booking_date", bookingDate)
+    .not("status", "in", '("cancelada","expirada")');
+
+  // Obtener también los booking_services asignados para detectar solapamientos por servicio
+  const { data: existingBookingServices } = await admin
+    .from("booking_services")
+    .select("booking_id, assigned_employee_id, duration_minutes, bookings!inner(booking_date, start_time, end_time, status)")
+    .eq("bookings.booking_date", bookingDate)
+    .not("bookings.status", "in", '("cancelada","expirada")');
+
+  // Mapear franjas ocupadas en memoria por empleado
+  const employeeBusySlots = new Map<string, Array<{ start: string; end: string }>>();
+  const dailyWorkload = new Map<string, number>();
+
+  for (const emp of activeEmployees) {
+    employeeBusySlots.set(emp.id, []);
+    dailyWorkload.set(emp.id, 0);
+  }
+
+  // Cargar reservas existentes en los busy slots
+  for (const b of existingBookings || []) {
+    if (b.assigned_employee_id && b.start_time && b.end_time) {
+      const slots = employeeBusySlots.get(b.assigned_employee_id) || [];
+      slots.push({ start: b.start_time, end: b.end_time });
+      employeeBusySlots.set(b.assigned_employee_id, slots);
+
+      const count = dailyWorkload.get(b.assigned_employee_id) || 0;
+      dailyWorkload.set(b.assigned_employee_id, count + 1);
+    }
+  }
+
+  // Cargar sub-servicios con asignación directa si existen
+  for (const bs of existingBookingServices || []) {
+    if (bs.assigned_employee_id) {
+      const bookingData: any = bs.bookings;
+      if (bookingData?.start_time && bookingData?.end_time) {
+        const slots = employeeBusySlots.get(bs.assigned_employee_id) || [];
+        slots.push({ start: bookingData.start_time, end: bookingData.end_time });
+        employeeBusySlots.set(bs.assigned_employee_id, slots);
+      }
+    }
+  }
+
+  // 5. Asignar secuencialmente cada servicio en la cita
+  const timeParts = startTime.split(":");
+  const baseStartH = parseInt(timeParts[0], 10) || 0;
+  const baseStartM = parseInt(timeParts[1], 10) || 0;
+  let currentMinutes = baseStartH * 60 + baseStartM;
+
+  const assignedItems: AssignedServiceItem[] = [];
+  const conflictMessages: string[] = [];
+
+  const totalBookingDuration = services.reduce((acc, s) => acc + (s.duration_minutes || 30), 0);
+  const formattedBookingStartTime = `${String(baseStartH).padStart(2, "0")}:${String(baseStartM).padStart(2, "0")}:00`;
+  const endH = Math.floor((baseStartH * 60 + baseStartM + totalBookingDuration) / 60);
+  const endM = (baseStartH * 60 + baseStartM + totalBookingDuration) % 60;
+  const formattedBookingEndTime = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}:00`;
+
+  for (const svc of services) {
+    const duration = svc.duration_minutes || 30;
+    const slotStartMin = currentMinutes;
+    const slotEndMin = slotStartMin + duration;
+
+    const sH = Math.floor(slotStartMin / 60);
+    const sM = slotStartMin % 60;
+    const eH = Math.floor(slotEndMin / 60);
+    const eM = slotEndMin % 60;
+
+    const slotStartFormatted = `${String(sH).padStart(2, "0")}:${String(sM).padStart(2, "0")}:00`;
+    const slotEndFormatted = `${String(eH).padStart(2, "0")}:${String(eM).padStart(2, "0")}:00`;
+
+    // Comprobar si hay una asignación manual para este servicio o global
+    const requestedEmpId = manualAssignments?.[svc.id] || globalEmployeeId || null;
+    let chosenEmpId: string | null = null;
+    let chosenEmpName = "Sin Asignar";
+    let chosenEmpType = svc.type;
+
+    const isEmpFree = (empId: string) => {
+      // Verificar si tiene falta registrada
+      if (absentTodayIds.has(empId)) return false;
+
+      // Verificar ausencias / permisos en employee_blocks
+      const empAbsences = (absences || []).filter((b) => b.employee_id === empId);
+      for (const b of empAbsences) {
+        if (b.is_all_day || !b.start_time || !b.end_time) return false;
+        if (hasTimeOverlap(b.start_time, b.end_time, slotStartFormatted, slotEndFormatted)) return false;
+      }
+
+      // Verificar franjas ocupadas
+      const busySlots = employeeBusySlots.get(empId) || [];
+      for (const slot of busySlots) {
+        if (hasTimeOverlap(slot.start, slot.end, slotStartFormatted, slotEndFormatted)) return false;
+      }
+
+      return true;
+    };
+
+    if (requestedEmpId) {
+      const manualEmp = employeeMap.get(requestedEmpId);
+      if (manualEmp && isEmpFree(requestedEmpId)) {
+        chosenEmpId = requestedEmpId;
+        chosenEmpName = `${manualEmp.first_name} ${manualEmp.last_name}`.trim();
+        chosenEmpType = manualEmp.type;
+      } else {
+        const empLabel = manualEmp ? `${manualEmp.first_name} ${manualEmp.last_name}` : "Colaborador";
+        conflictMessages.push(
+          `${empLabel} no se encuentra disponible para el servicio "${svc.name}" (${slotStartFormatted.slice(0, 5)} - ${slotEndFormatted.slice(0, 5)}) por cruce de horario o ausencia.`
+        );
+      }
+    }
+
+    // Si no hubo asignación manual o no estaba disponible, asignar automáticamente
+    if (!chosenEmpId) {
+      // Filtrar candidatos por especialidad
+      const candidates = activeEmployees.filter((e) => {
+        if (svc.type === "barberia" && e.type !== "barberia" && e.type !== "ambos") return false;
+        if (svc.type === "spa" && e.type !== "spa" && e.type !== "ambos") return false;
+        return isEmpFree(e.id);
+      });
+
+      if (candidates.length > 0) {
+        // Ordenar por menor carga diaria y desempatar por rotación
+        candidates.sort((a, b) => {
+          const loadA = dailyWorkload.get(a.id) || 0;
+          const loadB = dailyWorkload.get(b.id) || 0;
+          if (loadA !== loadB) return loadA - loadB;
+          return (a.rotation_order ?? 0) - (b.rotation_order ?? 0);
+        });
+
+        const best = candidates[0];
+        chosenEmpId = best.id;
+        chosenEmpName = `${best.first_name} ${best.last_name}`.trim();
+        chosenEmpType = best.type;
+      }
+    }
+
+    // Si se asignó un empleado, registrar su franja ocupada e incrementar su carga diaria
+    if (chosenEmpId) {
+      const slots = employeeBusySlots.get(chosenEmpId) || [];
+      slots.push({ start: slotStartFormatted, end: slotEndFormatted });
+      employeeBusySlots.set(chosenEmpId, slots);
+
+      const currentLoad = dailyWorkload.get(chosenEmpId) || 0;
+      dailyWorkload.set(chosenEmpId, currentLoad + 1);
+    }
+
+    assignedItems.push({
+      service_id: svc.id,
+      service_name: svc.name,
+      service_price_cents: svc.price_cents,
+      duration_minutes: duration,
+      service_type: svc.type,
+      start_time: slotStartFormatted,
+      end_time: slotEndFormatted,
+      assigned_employee_id: chosenEmpId,
+      employee_name: chosenEmpName,
+      employee_type: chosenEmpType,
+    });
+
+    currentMinutes = slotEndMin;
+  }
+
+  const primaryEmployeeId =
+    assignedItems.find((i) => i.assigned_employee_id)?.assigned_employee_id || globalEmployeeId || null;
+
+  return {
+    items: assignedItems,
+    primary_employee_id: primaryEmployeeId,
+    total_duration_minutes: totalBookingDuration,
+    formatted_start_time: formattedBookingStartTime,
+    formatted_end_time: formattedBookingEndTime,
+    has_conflicts: conflictMessages.length > 0,
+    conflict_messages: conflictMessages,
+  };
+}
+
 /**
  * Consulta la cantidad de colaboradoras activas disponibles en una fecha y especialidad
  */

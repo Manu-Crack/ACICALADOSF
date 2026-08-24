@@ -10,6 +10,7 @@ interface ServiceItem {
   type: "barberia" | "spa";
   is_active: boolean;
   category?: string;
+  description?: string;
 }
 
 interface EmployeeItem {
@@ -29,6 +30,14 @@ interface NewBookingModalProps {
 
 export type WalkInPaymentMethod = "efectivo" | "yape" | "transferencia" | "mixto";
 
+function normalizeText(text: string): string {
+  return (text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export function NewBookingModal({
   isOpen,
   onClose,
@@ -36,17 +45,27 @@ export function NewBookingModal({
   employees: initialEmployees = [],
 }: NewBookingModalProps) {
   // ---------------------------------------------------------------------------
-  // Estados del Formulario
+  // Estados del Catálogo y Formulario
   // ---------------------------------------------------------------------------
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [employeesList, setEmployeesList] = useState<EmployeeItem[]>(initialEmployees);
   const [loadingInitial, setLoadingInitial] = useState(false);
 
-  // Rubro exclusivo: Solo 'barberia' o 'spa' (sin botón 'todos')
-  const [selectedRubro, setSelectedRubro] = useState<"barberia" | "spa">("barberia");
+  // Filtro de Rubro / Pestañas: 'todos' | 'barberia' | 'spa'
+  const [selectedRubro, setSelectedRubro] = useState<"todos" | "barberia" | "spa">("todos");
 
-  // Selección de servicios
+  // Buscador en tiempo real de servicios
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Selección de servicios (IDs seleccionados se preservan siempre)
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+
+  // Asignación de personal por servicio: { [serviceId]: employeeId }
+  const [serviceAssignments, setServiceAssignments] = useState<Record<string, string>>({});
+  const [assignmentMode, setAssignmentMode] = useState<"auto" | "custom">("auto");
+
+  // Empleado asignado globalmente (si aplica a 1 servicio o toda la cita)
+  const [assignedEmployeeId, setAssignedEmployeeId] = useState<string>("");
 
   // Datos del Cliente (Nombre obligatorio, resto opcional)
   const [clientFirstName, setClientFirstName] = useState("");
@@ -54,9 +73,6 @@ export function NewBookingModal({
   const [clientPhone, setClientPhone] = useState(""); // Solo 9 dígitos
   const [clientDni, setClientDni] = useState("");     // Solo 8 dígitos
   const [clientEmail, setClientEmail] = useState("");
-
-  // Empleado Asignado
-  const [assignedEmployeeId, setAssignedEmployeeId] = useState<string>("");
 
   // Fecha y Hora
   const [bookingDate, setBookingDate] = useState<string>(() => {
@@ -107,6 +123,7 @@ export function NewBookingModal({
 
     setErrorMsg(null);
     setSuccessMsg(null);
+    setSearchQuery("");
 
     async function loadData() {
       setLoadingInitial(true);
@@ -140,7 +157,7 @@ export function NewBookingModal({
   }, [isOpen]);
 
   // ---------------------------------------------------------------------------
-  // Cálculos Derivados (Total y Duración)
+  // Cálculos Derivados (Servicios Seleccionados, Totales, Filtros)
   // ---------------------------------------------------------------------------
   const selectedServices = useMemo(() => {
     return services.filter((s) => selectedServiceIds.includes(s.id));
@@ -155,6 +172,64 @@ export function NewBookingModal({
   }, [selectedServices]);
 
   const totalPriceSoles = (totalPriceCents / 100).toFixed(2);
+
+  // Conteo de catálogo por rubro
+  const barberiaCount = useMemo(() => services.filter((s) => s.type === "barberia").length, [services]);
+  const spaCount = useMemo(() => services.filter((s) => s.type === "spa").length, [services]);
+
+  // Filtrar catálogo según rubro y término de búsqueda en tiempo real
+  const visibleServices = useMemo(() => {
+    const query = normalizeText(searchQuery);
+
+    return services.filter((s) => {
+      // 1. Filtro por pestaña de rubro
+      if (selectedRubro !== "todos" && s.type !== selectedRubro) {
+        return false;
+      }
+      // 2. Filtro por buscador interactivo
+      if (query) {
+        const nameNorm = normalizeText(s.name);
+        const catNorm = normalizeText(s.category || "");
+        const descNorm = normalizeText(s.description || "");
+        const typeNorm = normalizeText(s.type);
+
+        const matches =
+          nameNorm.includes(query) ||
+          catNorm.includes(query) ||
+          descNorm.includes(query) ||
+          typeNorm.includes(query);
+
+        if (!matches) return false;
+      }
+
+      return true;
+    });
+  }, [services, selectedRubro, searchQuery]);
+
+  // Cronograma secuencial de los servicios seleccionados
+  const serviceTimeline = useMemo(() => {
+    if (!startTime || selectedServices.length === 0) return [];
+    const [h, m] = startTime.split(":").map(Number);
+    let curMin = (isNaN(h) ? 10 : h) * 60 + (isNaN(m) ? 0 : m);
+
+    return selectedServices.map((s) => {
+      const dur = s.duration_minutes || 30;
+      const sH = Math.floor(curMin / 60) % 24;
+      const sM = curMin % 60;
+      const endMin = curMin + dur;
+      const eH = Math.floor(endMin / 60) % 24;
+      const eM = endMin % 60;
+
+      const slotStr = `${String(sH).padStart(2, "0")}:${String(sM).padStart(2, "0")} a ${String(eH).padStart(2, "0")}:${String(eM).padStart(2, "0")}`;
+      curMin = endMin;
+
+      return {
+        service: s,
+        slot: slotStr,
+        duration: dur,
+      };
+    });
+  }, [startTime, selectedServices]);
 
   // Sincronizar montos de pago mixto cuando cambie el total o se elija mixto
   useEffect(() => {
@@ -197,16 +272,6 @@ export function NewBookingModal({
     return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
   }, [startTime, totalDurationMinutes]);
 
-  // Filtrar servicios exclusivamente por el rubro seleccionado (barberia o spa)
-  const visibleServices = useMemo(() => {
-    return services.filter((s) => s.type === selectedRubro);
-  }, [services, selectedRubro]);
-
-  // Filtrar empleados según el rubro seleccionado o polivalentes
-  const visibleEmployees = useMemo(() => {
-    return employeesList.filter((e) => !e.type || e.type === selectedRubro || e.type === "ambos");
-  }, [employeesList, selectedRubro]);
-
   // Manejador de selección de servicio (toggle)
   const toggleService = (id: string) => {
     setSelectedServiceIds((prev) =>
@@ -214,8 +279,26 @@ export function NewBookingModal({
     );
   };
 
+  const removeService = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedServiceIds((prev) => prev.filter((item) => item !== id));
+    // Limpiar asignación individual si existía
+    setServiceAssignments((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handlePerServiceEmployeeChange = (serviceId: string, employeeId: string) => {
+    setServiceAssignments((prev) => ({
+      ...prev,
+      [serviceId]: employeeId,
+    }));
+  };
+
   // ---------------------------------------------------------------------------
-  // Guardar Reserva Walk-in
+  // Guardar Reserva Walk-in con Asignación Inteligente
   // ---------------------------------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,20 +310,18 @@ export function NewBookingModal({
       return;
     }
 
-    // Validar teléfono solo si fue ingresado: debe tener exactamente 9 dígitos
     if (clientPhone.trim() && clientPhone.trim().length !== 9) {
       setErrorMsg("El número de teléfono / WhatsApp debe tener exactamente 9 dígitos.");
       return;
     }
 
-    // Validar DNI solo si fue ingresado: debe tener exactamente 8 dígitos
     if (clientDni.trim() && clientDni.trim().length !== 8) {
       setErrorMsg("El número de DNI debe tener exactamente 8 dígitos.");
       return;
     }
 
     if (selectedServiceIds.length === 0) {
-      setErrorMsg("Debes seleccionar al menos un servicio a realizar.");
+      setErrorMsg("Debes seleccionar al menos un servicio del catálogo.");
       return;
     }
 
@@ -285,6 +366,7 @@ export function NewBookingModal({
         client_email: clientEmail.trim() || null,
         service_ids: selectedServiceIds,
         assigned_employee_id: assignedEmployeeId || null,
+        service_assignments: assignmentMode === "custom" ? serviceAssignments : undefined,
         booking_date: bookingDate,
         start_time: startTime,
         payment_method: paymentMethod,
@@ -304,11 +386,12 @@ export function NewBookingModal({
         throw new Error(data.error || "Error al crear la reserva presencial");
       }
 
-      setSuccessMsg(`¡Reserva ${data.booking?.booking_code || ""} confirmada y cobrada con éxito!`);
+      setSuccessMsg(`¡Reserva ${data.booking?.booking_code || ""} confirmada y distribuida con éxito!`);
 
       // Limpiar formulario y cerrar
       setTimeout(() => {
         setSelectedServiceIds([]);
+        setServiceAssignments({});
         setClientFirstName("");
         setClientLastName("");
         setClientPhone("");
@@ -316,6 +399,7 @@ export function NewBookingModal({
         setClientEmail("");
         setAssignedEmployeeId("");
         setPaymentMethod("efectivo");
+        setSearchQuery("");
         onBookingCreated();
         onClose();
       }, 1000);
@@ -350,7 +434,7 @@ export function NewBookingModal({
           border: "1px solid var(--color-border, rgba(255,255,255,0.1))",
           borderRadius: "var(--radius-lg, 16px)",
           width: "100%",
-          maxWidth: "760px",
+          maxWidth: "820px",
           maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
@@ -379,7 +463,7 @@ export function NewBookingModal({
               </h2>
             </div>
             <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-              Registro directo en mostrador con cobro y confirmación automática inmediata
+              Buscador inteligente sobre catálogo, distribución equitativa de personal y cobro en mostrador
             </p>
           </div>
           <button
@@ -516,13 +600,19 @@ export function NewBookingModal({
               </div>
             </div>
 
-            {/* SECCIÓN 2: SELECCIÓN DE SERVICIOS (Exclusivamente Barbería o Spa) */}
+            {/* SECCIÓN 2: BUSCADOR EN TIEMPO REAL Y SELECCIÓN DE SERVICIOS */}
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", margin: 0, letterSpacing: "0.05em" }}>
-                  2. Selección de Servicio(s) <span style={{ color: "#ef4444" }}>*</span>
-                </h3>
-                {/* Tabs Exclusivos: Barbería y Spa (sin botón Todos) */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", margin: 0, letterSpacing: "0.05em" }}>
+                    2. Selección de Servicio(s) <span style={{ color: "#ef4444" }}>*</span>
+                  </h3>
+                  <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted, #a1a1aa)", margin: "2px 0 0 0" }}>
+                    Filtra y selecciona múltiples servicios de Barbería y Spa en una misma cita
+                  </p>
+                </div>
+
+                {/* Tabs de Rubro: Todos / Barbería / Spa con contadores */}
                 <div
                   style={{
                     display: "flex",
@@ -535,9 +625,30 @@ export function NewBookingModal({
                 >
                   <button
                     type="button"
+                    onClick={() => setSelectedRubro("todos")}
+                    style={{
+                      padding: "5px 12px",
+                      fontSize: "0.75rem",
+                      borderRadius: "var(--radius-sm, 6px)",
+                      border: "none",
+                      background: selectedRubro === "todos" ? "var(--color-primary, #C8A45C)" : "transparent",
+                      color: selectedRubro === "todos" ? "#000" : "var(--color-text-muted, #a1a1aa)",
+                      cursor: "pointer",
+                      fontWeight: selectedRubro === "todos" ? 700 : 500,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span>✨ Todos</span>
+                    <span style={{ fontSize: "0.68rem", opacity: 0.85 }}>({services.length})</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setSelectedRubro("barberia")}
                     style={{
-                      padding: "5px 14px",
+                      padding: "5px 12px",
                       fontSize: "0.75rem",
                       borderRadius: "var(--radius-sm, 6px)",
                       border: "none",
@@ -547,18 +658,18 @@ export function NewBookingModal({
                       fontWeight: selectedRubro === "barberia" ? 700 : 500,
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: 6,
+                      gap: 4,
                       transition: "all 0.15s ease",
                     }}
                   >
-                    <span>💈</span>
-                    <span>Barbería</span>
+                    <span>💈 Barbería</span>
+                    <span style={{ fontSize: "0.68rem", opacity: 0.85 }}>({barberiaCount})</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedRubro("spa")}
                     style={{
-                      padding: "5px 14px",
+                      padding: "5px 12px",
                       fontSize: "0.75rem",
                       borderRadius: "var(--radius-sm, 6px)",
                       border: "none",
@@ -568,23 +679,179 @@ export function NewBookingModal({
                       fontWeight: selectedRubro === "spa" ? 700 : 500,
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: 6,
+                      gap: 4,
                       transition: "all 0.15s ease",
                     }}
                   >
-                    <span>💆‍♀️</span>
-                    <span>Spa</span>
+                    <span>💆‍♀️ Spa</span>
+                    <span style={{ fontSize: "0.68rem", opacity: 0.85 }}>({spaCount})</span>
                   </button>
                 </div>
               </div>
 
+              {/* Barra de Búsqueda Interactiva en Tiempo Real */}
+              <div style={{ position: "relative", marginBottom: 10 }}>
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    fontSize: "0.9rem",
+                    color: "var(--color-text-muted, #a1a1aa)",
+                    pointerEvents: "none",
+                  }}
+                >
+                  🔍
+                </span>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Buscar servicio por nombre, detalle o categoría (ej. Facial, Cejas, Corte, Barba, Depilación)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: "100%",
+                    paddingLeft: 36,
+                    paddingRight: searchQuery ? 32 : 12,
+                    fontSize: "0.82rem",
+                    background: "rgba(0, 0, 0, 0.35)",
+                    borderColor: searchQuery ? "var(--color-primary, #C8A45C)" : "var(--color-border)",
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--color-text-muted, #a1a1aa)",
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      padding: 4,
+                    }}
+                    title="Limpiar búsqueda"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Riel de Servicios Seleccionados (Persistencia Visual) */}
+              {selectedServices.length > 0 && (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    padding: "8px 12px",
+                    background: "rgba(200, 164, 92, 0.08)",
+                    border: "1px solid rgba(200, 164, 92, 0.25)",
+                    borderRadius: "var(--radius-md, 8px)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--color-primary, #C8A45C)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      ✓ {selectedServices.length} {selectedServices.length === 1 ? "Servicio Seleccionado" : "Servicios Seleccionados"} (S/ {totalPriceSoles} · {totalDurationMinutes} min):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedServiceIds([]);
+                        setServiceAssignments({});
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#ef4444",
+                        fontSize: "0.7rem",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        padding: 0,
+                      }}
+                    >
+                      Limpiar selección
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {selectedServices.map((s) => (
+                      <span
+                        key={s.id}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          background: "rgba(200, 164, 92, 0.2)",
+                          border: "1px solid rgba(200, 164, 92, 0.4)",
+                          color: "#fff",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          padding: "3px 8px",
+                          borderRadius: "var(--radius-sm, 6px)",
+                        }}
+                      >
+                        <span>{s.type === "barberia" ? "💈" : "💆‍♀️"}</span>
+                        <span>{s.name}</span>
+                        <span style={{ color: "var(--color-success, #22c55e)", fontWeight: 700 }}>
+                          S/ {(s.price_cents / 100).toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => removeService(s.id, e)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "var(--color-text-muted, #a1a1aa)",
+                            cursor: "pointer",
+                            padding: "0 2px",
+                            fontSize: "0.75rem",
+                            lineHeight: 1,
+                          }}
+                          title="Quitar servicio"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Catálogo de Tarjetas de Servicios Filtradas */}
               {loadingInitial ? (
                 <div style={{ padding: 20, textAlign: "center", color: "var(--color-text-muted)" }}>
                   Cargando catálogo de servicios...
                 </div>
               ) : visibleServices.length === 0 ? (
-                <div style={{ padding: 20, textAlign: "center", color: "var(--color-text-muted)" }}>
-                  No se encontraron servicios disponibles en {selectedRubro === "barberia" ? "Barbería" : "Spa"}.
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: "center",
+                    color: "var(--color-text-muted)",
+                    background: "rgba(0, 0, 0, 0.2)",
+                    borderRadius: "var(--radius-md, 8px)",
+                    border: "1px dashed var(--color-border)",
+                  }}
+                >
+                  <p style={{ margin: 0, fontSize: "0.85rem" }}>
+                    No se encontraron servicios que coincidan con <strong>"{searchQuery}"</strong> en {selectedRubro === "todos" ? "el catálogo" : selectedRubro === "barberia" ? "Barbería" : "Spa"}.
+                  </p>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="btn btn-ghost btn-sm"
+                      style={{ marginTop: 8, fontSize: "0.75rem" }}
+                    >
+                      Mostrar todos los servicios
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div
@@ -592,7 +859,7 @@ export function NewBookingModal({
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
                     gap: 8,
-                    maxHeight: "180px",
+                    maxHeight: "200px",
                     overflowY: "auto",
                     padding: "8px 4px",
                     background: "rgba(0, 0, 0, 0.2)",
@@ -612,7 +879,7 @@ export function NewBookingModal({
                           border: isSelected
                             ? "1px solid var(--color-primary, #C8A45C)"
                             : "1px solid var(--color-border, rgba(255,255,255,0.08))",
-                          background: isSelected ? "rgba(200, 164, 92, 0.12)" : "rgba(255,255,255,0.02)",
+                          background: isSelected ? "rgba(200, 164, 92, 0.14)" : "rgba(255,255,255,0.02)",
                           cursor: "pointer",
                           display: "flex",
                           alignItems: "flex-start",
@@ -624,11 +891,23 @@ export function NewBookingModal({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => {}}
-                          style={{ marginTop: 2, cursor: "pointer" }}
+                          style={{ marginTop: 2, cursor: "pointer", accentColor: "var(--color-primary, #C8A45C)" }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: "0.78rem", fontWeight: isSelected ? 700 : 600, color: isSelected ? "var(--color-primary, #C8A45C)" : "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {s.name}
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: "0.75rem" }}>{s.type === "barberia" ? "💈" : "💆‍♀️"}</span>
+                            <div
+                              style={{
+                                fontSize: "0.78rem",
+                                fontWeight: isSelected ? 700 : 600,
+                                color: isSelected ? "var(--color-primary, #C8A45C)" : "#fff",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {s.name}
+                            </div>
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--color-text-muted, #a1a1aa)", marginTop: 2 }}>
                             <span>⏱️ {s.duration_minutes} min</span>
@@ -644,10 +923,10 @@ export function NewBookingModal({
               )}
             </div>
 
-            {/* SECCIÓN 3: PROGRAMACIÓN Y COLABORADOR */}
+            {/* SECCIÓN 3: PROGRAMACIÓN Y ASIGNACIÓN INTELIGENTE DE PERSONAL */}
             <div>
               <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
-                3. Programación y Colaborador
+                3. Programación y Distribución de Personal
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
                 <div>
@@ -676,28 +955,174 @@ export function NewBookingModal({
                     style={{ width: "100%" }}
                   />
                 </div>
-                <div>
-                  <label className="label" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                    Colaborador Asignado <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>(opcional)</span>
-                  </label>
-                  <select
-                    className="select"
-                    value={assignedEmployeeId}
-                    onChange={(e) => setAssignedEmployeeId(e.target.value)}
-                    style={{ width: "100%" }}
-                  >
-                    <option value="">— Asignación Automática / Sin asignar —</option>
-                    {visibleEmployees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.first_name} {emp.last_name} {emp.type ? `(${emp.type === "barberia" ? "Barbero" : emp.type === "spa" ? "Spa" : emp.type})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
+                {/* Si solo hay 1 servicio o modo simple */}
+                {selectedServices.length <= 1 ? (
+                  <div>
+                    <label className="label" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
+                      Colaborador Asignado
+                    </label>
+                    <select
+                      className="select"
+                      value={assignedEmployeeId}
+                      onChange={(e) => setAssignedEmployeeId(e.target.value)}
+                      style={{ width: "100%" }}
+                    >
+                      <option value="">— 🤖 Asignación Automática Inteligente —</option>
+                      {employeesList
+                        .filter((emp) => {
+                          if (selectedServices.length === 1) {
+                            const reqType = selectedServices[0].type;
+                            return !emp.type || emp.type === reqType || emp.type === "ambos";
+                          }
+                          return true;
+                        })
+                        .map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.first_name} {emp.last_name} {emp.type ? `(${emp.type === "barberia" ? "Barbero" : emp.type === "spa" ? "Spa" : emp.type})` : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="label" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
+                      Modo de Asignación ({selectedServices.length} servicios)
+                    </label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssignmentMode("auto");
+                          setAssignedEmployeeId("");
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          fontSize: "0.75rem",
+                          borderRadius: "var(--radius-sm, 6px)",
+                          border: assignmentMode === "auto" ? "1px solid var(--color-primary, #C8A45C)" : "1px solid var(--color-border)",
+                          background: assignmentMode === "auto" ? "rgba(200, 164, 92, 0.15)" : "transparent",
+                          color: assignmentMode === "auto" ? "var(--color-primary, #C8A45C)" : "var(--color-text-muted)",
+                          fontWeight: assignmentMode === "auto" ? 700 : 500,
+                          cursor: "pointer",
+                        }}
+                      >
+                        🤖 Automático
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignmentMode("custom")}
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          fontSize: "0.75rem",
+                          borderRadius: "var(--radius-sm, 6px)",
+                          border: assignmentMode === "custom" ? "1px solid var(--color-primary, #C8A45C)" : "1px solid var(--color-border)",
+                          background: assignmentMode === "custom" ? "rgba(200, 164, 92, 0.15)" : "transparent",
+                          color: assignmentMode === "custom" ? "var(--color-primary, #C8A45C)" : "var(--color-text-muted)",
+                          fontWeight: assignmentMode === "custom" ? 700 : 500,
+                          cursor: "pointer",
+                        }}
+                      >
+                        ⚙️ Por Servicio
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Panel de Asignación Detallada Multi-Servicio */}
+              {selectedServices.length > 1 && assignmentMode === "custom" && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "12px 14px",
+                    background: "rgba(0, 0, 0, 0.25)",
+                    border: "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                    borderRadius: "var(--radius-md, 8px)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-primary, #C8A45C)" }}>
+                    ⚙️ Asignación Individual de Colaboradores por Servicio:
+                  </span>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+                    {serviceTimeline.map((item, idx) => {
+                      const svc = item.service;
+                      const assignedId = serviceAssignments[svc.id] || "";
+                      const matchingEmployees = employeesList.filter(
+                        (e) => !e.type || e.type === svc.type || e.type === "ambos"
+                      );
+
+                      return (
+                        <div
+                          key={svc.id}
+                          style={{
+                            padding: "8px 10px",
+                            background: "rgba(255, 255, 255, 0.03)",
+                            border: "1px solid rgba(255, 255, 255, 0.06)",
+                            borderRadius: "var(--radius-sm, 6px)",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff" }}>
+                              {idx + 1}. {svc.type === "barberia" ? "💈" : "💆‍♀️"} {svc.name}
+                            </span>
+                            <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
+                              🕒 {item.slot} ({item.duration}m)
+                            </span>
+                          </div>
+                          <select
+                            className="select"
+                            value={assignedId}
+                            onChange={(e) => handlePerServiceEmployeeChange(svc.id, e.target.value)}
+                            style={{ width: "100%", fontSize: "0.75rem", padding: "4px 8px" }}
+                          >
+                            <option value="">— 🤖 Asignación Automática —</option>
+                            {matchingEmployees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.first_name} {emp.last_name} {emp.type ? `(${emp.type === "barberia" ? "Barbero" : "Spa"})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Timeline de Horario Estimado Multi-Servicio */}
+              {selectedServices.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "8px 12px",
+                    background: "rgba(56, 189, 248, 0.06)",
+                    border: "1px solid rgba(56, 189, 248, 0.2)",
+                    borderRadius: "var(--radius-md, 8px)",
+                    fontSize: "0.75rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ color: "#38bdf8", fontWeight: 700 }}>📅 Cronograma:</span>
+                  {serviceTimeline.map((item, idx) => (
+                    <span key={item.service.id} style={{ color: "var(--color-text, #f4f4f5)" }}>
+                      {idx > 0 && <span style={{ color: "var(--color-text-muted)", margin: "0 4px" }}>➔</span>}
+                      <strong>{item.slot}</strong> ({item.service.name})
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* SECCIÓN 4: MÉTODO DE PAGO Y CONFIRMACIÓN (4 Formas: Efectivo, Yape, Transferencia, Mixto) */}
+            {/* SECCIÓN 4: MÉTODO DE PAGO Y CONFIRMACIÓN */}
             <div>
               <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
                 4. Método de Pago y Confirmación *
@@ -890,7 +1315,8 @@ export function NewBookingModal({
                   Servicios Elegidos
                 </span>
                 <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--color-primary, #C8A45C)" }}>
-                  {selectedServices.length} {selectedServices.length === 1 ? "servicio" : "servicios"} ({selectedRubro === "barberia" ? "Barbería" : "Spa"})
+                  {selectedServices.length} {selectedServices.length === 1 ? "servicio" : "servicios"}
+                  {selectedRubro !== "todos" ? ` (${selectedRubro === "barberia" ? "Barbería" : "Spa"})` : ""}
                 </span>
               </div>
 
@@ -941,7 +1367,7 @@ export function NewBookingModal({
               {submitting ? (
                 <>
                   <span className="spinner" style={{ width: 14, height: 14 }} />
-                  <span>Guardando...</span>
+                  <span>Guardando y Asignando...</span>
                 </>
               ) : (
                 <>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assignMultiServiceEmployees } from "@/lib/utils/employee-assignment";
 
 function timeToMinutes(timeStr: string | null | undefined): number {
   if (!timeStr) return 0;
@@ -338,6 +339,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       service_ids,
+      service_assignments,
       booking_date,
       start_time,
       client_first_name,
@@ -392,69 +394,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Ordenar los servicios según el orden solicitado
+    const orderedServices = service_ids
+      .map((id) => services.find((s) => s.id === id))
+      .filter(Boolean) as typeof services;
+
     // 3. Determinar rubro (barbería, spa o mixto) y calcular totales
-    const types = new Set(services.map((s) => s.type));
-    const serviceType = types.size > 1 ? "mixto" : services[0].type;
+    const types = new Set(orderedServices.map((s) => s.type));
+    const serviceType = types.size > 1 ? "mixto" : orderedServices[0].type;
+    const totalPriceCents = orderedServices.reduce((sum, s) => sum + (s.price_cents || 0), 0);
 
-    const totalPriceCents = services.reduce((sum, s) => sum + (s.price_cents || 0), 0);
-    const totalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 30), 0);
+    // 4. Asignación automática inteligente por servicio y validación de horarios
+    const assignmentResult = await assignMultiServiceEmployees({
+      services: orderedServices.map((s) => ({
+        id: s.id,
+        name: s.name,
+        price_cents: s.price_cents,
+        duration_minutes: s.duration_minutes || 30,
+        type: s.type,
+      })),
+      bookingDate: booking_date,
+      startTime: start_time,
+      manualAssignments: service_assignments || null,
+      globalEmployeeId: assigned_employee_id || null,
+    });
 
-    // 4. Calcular hora de finalización (end_time)
-    const timeParts = start_time.split(":");
-    const startHour = parseInt(timeParts[0], 10) || 0;
-    const startMin = parseInt(timeParts[1], 10) || 0;
-    const totalStartMinutes = startHour * 60 + startMin;
-    const totalEndMinutes = totalStartMinutes + totalDuration;
-    const endHour = Math.floor(totalEndMinutes / 60);
-    const endMin = totalEndMinutes % 60;
-    const formattedStartTime = `${String(startHour).padStart(2, "0")}:${String(startMin).padStart(2, "0")}:00`;
-    const formattedEndTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}:00`;
-
-    // 5. Validar disponibilidad del colaborador si se seleccionó uno específico
-    const empId = assigned_employee_id || null;
-    if (empId) {
-      // Verificar ausencias
-      const { data: absences } = await admin
-        .from("employee_blocks")
-        .select("id, start_time, end_time, reason")
-        .eq("employee_id", empId)
-        .eq("block_date", booking_date);
-
-      const hasAbsence = (absences || []).some((b) => {
-        if (!b.start_time || !b.end_time) return true;
-        return hasTimeOverlap(b.start_time, b.end_time, formattedStartTime, formattedEndTime);
-      });
-
-      if (hasAbsence) {
-        return NextResponse.json(
-          { error: "El colaborador seleccionado tiene un permiso o ausencia registrada en ese horario." },
-          { status: 409 }
-        );
-      }
-
-      // Verificar choque con otra reserva activa
-      const { data: conflictingBookings } = await admin
-        .from("bookings")
-        .select("id, booking_code, start_time, end_time")
-        .eq("assigned_employee_id", empId)
-        .eq("booking_date", booking_date)
-        .not("status", "in", '("cancelada","expirada")');
-
-      const conflict = (conflictingBookings || []).find((cb) => {
-        return hasTimeOverlap(cb.start_time, cb.end_time, formattedStartTime, formattedEndTime);
-      });
-
-      if (conflict) {
-        return NextResponse.json(
-          {
-            error: `El colaborador ya cuenta con la cita ${conflict.booking_code} asignada en ese horario (${conflict.start_time?.slice(0, 5)} - ${conflict.end_time?.slice(0, 5)}).`,
-          },
-          { status: 409 }
-        );
-      }
+    // Si hubo conflicto explícito con empleados asignados manualmente
+    if (assignmentResult.has_conflicts && (assigned_employee_id || service_assignments)) {
+      return NextResponse.json(
+        { error: assignmentResult.conflict_messages.join(" ") },
+        { status: 409 }
+      );
     }
 
-    // 6. Determinar método de pago inicial si fue cobrado en el mostrador
+    const formattedStartTime = assignmentResult.formatted_start_time;
+    const formattedEndTime = assignmentResult.formatted_end_time;
+    const totalDuration = assignmentResult.total_duration_minutes;
+    const finalPrimaryEmployeeId = assignmentResult.primary_employee_id;
+
+    // 5. Determinar método de pago inicial si fue cobrado en el mostrador
     const reqMethod = (body.payment_method || "").toLowerCase();
     let normalizedMethod: "cash" | "yape" | "transfer" | "mixed" | null = null;
     let dbPaymentMethodLabel: string | null = null;
@@ -499,7 +477,7 @@ export async function POST(request: NextRequest) {
     const initialAdvanceAmount = normalizedMethod ? totalPriceCents : 0;
     const initialBalance = normalizedMethod ? 0 : totalPriceCents;
 
-    // 7. Insertar registro principal de reserva en tabla 'bookings'
+    // 6. Insertar registro principal de reserva en tabla 'bookings'
     const { data: newBooking, error: bookingError } = await admin
       .from("bookings")
       .insert({
@@ -509,7 +487,7 @@ export async function POST(request: NextRequest) {
         client_email: client_email?.trim() || null,
         client_dni: client_dni?.trim() || null,
         service_type: serviceType,
-        assigned_employee_id: empId,
+        assigned_employee_id: finalPrimaryEmployeeId,
         booking_date,
         start_time: formattedStartTime,
         end_time: formattedEndTime,
@@ -534,16 +512,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 8. Insertar detalle de servicios en 'booking_services'
-    const bookingServices = services.map((s) => ({
+    // 7. Insertar detalle de servicios en 'booking_services' con empleados asignados
+    const bookingServices = assignmentResult.items.map((item) => ({
       booking_id: newBooking.id,
-      service_id: s.id,
-      service_name: s.name,
-      service_price_cents: s.price_cents,
-      duration_minutes: s.duration_minutes,
+      service_id: item.service_id,
+      service_name: item.service_name,
+      service_price_cents: item.service_price_cents,
+      duration_minutes: item.duration_minutes,
+      assigned_employee_id: item.assigned_employee_id,
     }));
 
     const { error: bsError } = await admin.from("booking_services").insert(bookingServices);
+    if (bsError) {
+      console.error("Error al insertar booking_services:", bsError);
+    }
     if (bsError) {
       console.error("Error al insertar booking_services:", bsError);
     }

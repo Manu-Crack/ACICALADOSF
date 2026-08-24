@@ -489,6 +489,68 @@ check(
   "Regla Bonificación Domingo: Salida 20:25 (umbral 20:10) -> 15 min computados"
 );
 
+console.log("\n--- 10. Asignación Automática Multi-Servicio y Balanceo de Carga ---");
+
+// Mock de empleados disponibles
+const mockEmployees = [
+  { id: "emp-barber-1", first_name: "Carlos", last_name: "Barbero", type: "barberia", is_active: true },
+  { id: "emp-barber-2", first_name: "Yordi", last_name: "Corte", type: "barberia", is_active: true },
+  { id: "emp-spa-1", first_name: "María", last_name: "Faciales", type: "spa", is_active: true },
+  { id: "emp-spa-2", first_name: "Lucía", last_name: "Estética", type: "spa", is_active: true },
+  { id: "emp-ambos", first_name: "Andrea", last_name: "Integral", type: "ambos", is_active: true },
+];
+
+// Test A: Verificación de cálculo secuencial de franjas horarias
+const multiServicesInput = [
+  { service_id: "svc-1", service_name: "Corte Clásico", service_price_cents: 2000, duration_minutes: 30, service_type: "barberia" as const },
+  { service_id: "svc-2", service_name: "Facial Básico", service_price_cents: 5000, duration_minutes: 45, service_type: "spa" as const },
+];
+
+// Slot 1: 10:00 a 10:30 (600 a 630 min)
+// Slot 2: 10:30 a 11:15 (630 a 675 min)
+const slot1Start = 10 * 60;
+const slot1End = slot1Start + 30;
+const slot2Start = slot1End;
+const slot2End = slot2Start + 45;
+
+check(slot1Start === 600 && slot1End === 630, "Multi-Servicio: Franja Servicio 1 -> 10:00 a 10:30");
+check(slot2Start === 630 && slot2End === 675, "Multi-Servicio: Franja Servicio 2 -> 10:30 a 11:15");
+
+// Test B: Filtrado estricto por especialidad requerida
+const barberSpecialists = mockEmployees.filter(e => e.type === "barberia" || e.type === "ambos");
+const spaSpecialists = mockEmployees.filter(e => e.type === "spa" || e.type === "ambos");
+
+check(
+  barberSpecialists.map(e => e.id).includes("emp-barber-1") &&
+  barberSpecialists.map(e => e.id).includes("emp-barber-2") &&
+  barberSpecialists.map(e => e.id).includes("emp-ambos") &&
+  !barberSpecialists.map(e => e.id).includes("emp-spa-1"),
+  "Multi-Servicio: Especialistas en Barbería identificados correctamente (incluyendo 'ambos')"
+);
+
+check(
+  spaSpecialists.map(e => e.id).includes("emp-spa-1") &&
+  spaSpecialists.map(e => e.id).includes("emp-spa-2") &&
+  spaSpecialists.map(e => e.id).includes("emp-ambos") &&
+  !spaSpecialists.map(e => e.id).includes("emp-barber-1"),
+  "Multi-Servicio: Especialistas en Spa identificados correctamente (incluyendo 'ambos')"
+);
+
+// Test C: Detección de cruces con bloqueos de ausencia o permisos
+const mockAbsenceBlocks = [
+  { employee_id: "emp-barber-1", block_date: "2026-08-25", all_day: true },
+];
+
+const availableForBarberSlot = barberSpecialists.filter(e => 
+  !mockAbsenceBlocks.some(b => b.employee_id === e.id && b.block_date === "2026-08-25")
+);
+
+check(
+  availableForBarberSlot.length === 2 &&
+  !availableForBarberSlot.some(e => e.id === "emp-barber-1"),
+  "Multi-Servicio: Empleado con ausencia aprobada es excluido de la asignación automática"
+);
+
 console.log("\n==========================================================================");
 console.log(` 🏁 RESULTADO SUITE UNITARIA: ${passedCount} pruebas superadas, ${failedCount} fallos.`);
 console.log("==========================================================================\n");

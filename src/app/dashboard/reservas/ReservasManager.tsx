@@ -12,6 +12,15 @@ import {
   type PaymentMethod,
 } from "@/lib/types/payments";
 
+export type BookingServiceItem = {
+  id: string;
+  service_id: string | null;
+  service_name: string;
+  service_price_cents: number;
+  duration_minutes: number;
+  assigned_employee_id: string | null;
+};
+
 type Booking = {
   id: string;
   booking_code: string;
@@ -35,12 +44,15 @@ type Booking = {
   confirmed_at: string | null;
   assigned_employee_id: string | null;
   created_at: string;
+  booking_services?: BookingServiceItem[];
 };
 
 type Employee = {
   id: string;
   first_name: string;
   last_name: string;
+  type?: string;
+  is_active?: boolean;
 };
 
 const statusLabels: Record<string, string> = {
@@ -117,7 +129,10 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
         let query = supabase
           .from("bookings")
           .select(
-            "id, booking_code, booking_date, start_time, end_time, status, payment_status, payment_method, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at"
+            `id, booking_code, booking_date, start_time, end_time, status, payment_status, payment_method, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at,
+            booking_services (
+              id, service_id, service_name, service_price_cents, duration_minutes, assigned_employee_id
+            )`
           )
           .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
           .order("booking_date", { ascending: false })
@@ -139,7 +154,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
         if (error) {
           console.error("[ReservasManager] Error consultando reservas:", error);
         } else if (data) {
-          setBookings(data);
+          setBookings(data as unknown as Booking[]);
         }
       } catch (err) {
         console.error("[ReservasManager] Excepción al cargar reservas:", err);
@@ -153,11 +168,28 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const loadEmployees = useCallback(async () => {
     const { data } = await supabase
       .from("employees")
-      .select("id, first_name, last_name")
-      .eq("is_active", true)
+      .select("id, first_name, last_name, type, is_active")
       .order("first_name");
     setEmployees(data ?? []);
   }, [supabase]);
+
+  // Actualizar asignación de un servicio individual dentro de una reserva
+  async function updateBookingServiceEmployee(bookingServiceId: string, employeeId: string | null) {
+    try {
+      const { error } = await supabase
+        .from("booking_services")
+        .update({ assigned_employee_id: employeeId })
+        .eq("id", bookingServiceId);
+
+      if (error) {
+        alert("Error al actualizar la asignación del servicio: " + error.message);
+      } else {
+        await loadBookings(true);
+      }
+    } catch (err) {
+      console.error("Error al reasignar empleado de servicio:", err);
+    }
+  }
 
   // Carga inicial y por cambio de filtros en la vista
   useEffect(() => {
@@ -421,9 +453,9 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
     );
   });
 
-  const employeeMap = new Map(
-    employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
-  );
+  const employeeMap = useMemo(() => {
+    return new Map(employees.map((e) => [e.id, e]));
+  }, [employees]);
 
   // Stats Calculations
   const pendingCount = bookings.filter((b) => b.status === "pendiente").length;
@@ -881,8 +913,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "110px 200px 110px 130px 110px 130px 150px 130px 100px 160px",
-                  minWidth: "1330px",
+                  gridTemplateColumns: "110px 190px 105px 125px 230px 120px 140px 120px 95px 150px",
+                  minWidth: "1385px",
                   padding: "12px 16px",
                   fontSize: "0.75rem",
                   fontWeight: 700,
@@ -896,7 +928,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                 <div>Cliente</div>
                 <div>Fecha</div>
                 <div>Hora</div>
-                <div>Tipo</div>
+                <div>Servicio(s)</div>
                 <div>Estado</div>
                 <div>Pago</div>
                 <div>WhatsApp</div>
@@ -928,8 +960,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "110px 200px 110px 130px 110px 130px 150px 130px 100px 160px",
-                      minWidth: "1330px",
+                      gridTemplateColumns: "110px 190px 105px 125px 230px 120px 140px 120px 95px 150px",
+                      minWidth: "1385px",
                       alignItems: "center",
                       padding: "12px 16px",
                       cursor: "pointer",
@@ -986,34 +1018,80 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                       {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
                     </div>
 
-                    {/* 5. Tipo */}
+                    {/* 5. Tipo y Desglose de Servicios */}
                     <div>
-                      <span
-                        className="badge badge-gold"
-                        style={{
-                          fontSize: "0.6875rem",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
-                      >
-                        <img
-                          src={
-                            b.service_type === "barberia"
-                              ? "/LogoBarberia.svg"
-                              : b.service_type === "spa"
-                              ? "/LogoSpa.svg"
-                              : "/LogoTodo.svg"
-                          }
-                          alt={b.service_type}
-                          style={{ height: 12, width: "auto" }}
-                        />
-                        {b.service_type === "barberia"
-                          ? "Barbería"
-                          : b.service_type === "spa"
-                          ? "Spa"
-                          : "Mixto"}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span
+                          className="badge badge-gold"
+                          style={{
+                            fontSize: "0.6875rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 6px",
+                          }}
+                        >
+                          <img
+                            src={
+                              b.service_type === "barberia"
+                                ? "/LogoBarberia.svg"
+                                : b.service_type === "spa"
+                                ? "/LogoSpa.svg"
+                                : "/LogoTodo.svg"
+                            }
+                            alt={b.service_type}
+                            style={{ height: 11, width: "auto" }}
+                          />
+                          {b.service_type === "barberia"
+                            ? "Barbería"
+                            : b.service_type === "spa"
+                            ? "Spa"
+                            : "Mixto"}
+                        </span>
+                        {b.booking_services && b.booking_services.length > 1 && (
+                          <span
+                            style={{
+                              fontSize: "0.68rem",
+                              background: "rgba(200, 164, 92, 0.2)",
+                              color: "var(--color-primary, #C8A45C)",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {b.booking_services.length} servicios
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Lista de nombres de servicios */}
+                      {b.booking_services && b.booking_services.length > 0 ? (
+                        <p
+                          style={{
+                            fontSize: "0.74rem",
+                            color: "var(--color-text, #f4f4f5)",
+                            margin: "4px 0 0 0",
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            maxWidth: "220px",
+                          }}
+                          title={b.booking_services.map((bs) => bs.service_name).join(" + ")}
+                        >
+                          {b.booking_services.map((bs) => bs.service_name).join(" + ")}
+                        </p>
+                      ) : (
+                        <p
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "var(--color-text-muted)",
+                            margin: "2px 0 0 0",
+                          }}
+                        >
+                          {formatDuration(b.total_duration_minutes)}
+                        </p>
+                      )}
                     </div>
 
                     {/* 6. Estado */}
@@ -1483,6 +1561,122 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                           </p>
                         )}
                       </div>
+                    </div>
+
+                    {/* Sección Detalle Multi-Servicio y Asignación por Servicio */}
+                    <div
+                      style={{
+                        marginBottom: 16,
+                        padding: "12px 14px",
+                        background: "rgba(0, 0, 0, 0.35)",
+                        border: "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                        borderRadius: "var(--radius-md, 8px)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+                        <span
+                          style={{
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            color: "var(--color-primary, #C8A45C)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span>📋</span>
+                          <span>
+                            Servicios Contratados ({b.booking_services?.length || 1}) · Asignación de Personal
+                          </span>
+                        </span>
+                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                          Total: S/ {(b.total_price_cents / 100).toFixed(2)} ({formatDuration(b.total_duration_minutes)})
+                        </span>
+                      </div>
+
+                      {b.booking_services && b.booking_services.length > 0 ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+                          {b.booking_services.map((bs, idx) => {
+                            const assignedEmp = bs.assigned_employee_id
+                              ? employeeMap.get(bs.assigned_employee_id)
+                              : (b.assigned_employee_id ? employeeMap.get(b.assigned_employee_id) : null);
+
+                            return (
+                              <div
+                                key={bs.id || idx}
+                                style={{
+                                  padding: "10px 12px",
+                                  background: "rgba(255, 255, 255, 0.03)",
+                                  border: "1px solid rgba(255, 255, 255, 0.07)",
+                                  borderRadius: "var(--radius-sm, 6px)",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 6,
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                  <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#fff" }}>
+                                    <span style={{ color: "var(--color-primary, #C8A45C)", marginRight: 4 }}>
+                                      {idx + 1}.
+                                    </span>
+                                    {bs.service_name}
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      fontSize: "0.8rem",
+                                      color: "var(--color-success, #22c55e)",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    S/ {(bs.service_price_cents / 100).toFixed(2)}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                                  <span>⏱️ {bs.duration_minutes} min</span>
+                                  <span
+                                    style={{
+                                      background: assignedEmp ? "rgba(34, 197, 94, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                                      color: assignedEmp ? "#22c55e" : "#f59e0b",
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      fontWeight: 600,
+                                      fontSize: "0.7rem",
+                                    }}
+                                  >
+                                    {assignedEmp ? `👤 ${assignedEmp.first_name} ${assignedEmp.last_name}` : "⚠️ Sin Asignar"}
+                                  </span>
+                                </div>
+
+                                {/* Selector de Reasignación individual */}
+                                <div style={{ marginTop: 2 }}>
+                                  <select
+                                    className="select"
+                                    style={{ width: "100%", fontSize: "0.72rem", padding: "4px 8px", height: "auto" }}
+                                    value={bs.assigned_employee_id || ""}
+                                    onChange={(e) => updateBookingServiceEmployee(bs.id, e.target.value || null)}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <option value="">— Reasignar colaborador —</option>
+                                    {employees.map((emp) => (
+                                      <option key={emp.id} value={emp.id}>
+                                        {emp.first_name} {emp.last_name} {emp.type ? `(${emp.type === "barberia" ? "Barbero" : emp.type === "spa" ? "Spa" : emp.type})` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
+                          {b.service_type === "barberia" ? "💈 Servicio de Barbería" : b.service_type === "spa" ? "💆‍♀️ Servicio de Spa" : "✨ Servicio Mixto"} ({formatDuration(b.total_duration_minutes)})
+                        </div>
+                      )}
                     </div>
 
                     {/* Action Buttons in Expanded Drawer */}
