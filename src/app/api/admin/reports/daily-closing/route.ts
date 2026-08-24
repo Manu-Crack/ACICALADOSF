@@ -148,7 +148,6 @@ export async function GET(request: NextRequest) {
       isPermission: boolean;
       amountCents: number;
     }> = [];
-    const textLines: string[] = [];
 
     (employees || []).forEach((emp) => {
       const displayName = emp.first_name.trim().split(/\s+/)[0];
@@ -165,8 +164,6 @@ export async function GET(request: NextRequest) {
         isPermission: hasPermission,
         amountCents: hasPermission ? 0 : amountCents,
       });
-
-      textLines.push(`${displayName}: ${displayValue}`);
     });
 
     // 7. Totales de Productos (Venta) y Vestuario (Traje)
@@ -179,12 +176,28 @@ export async function GET(request: NextRequest) {
     const totalProductCents = 0;
     const totalProductSoles = (totalProductCents / 100).toFixed(0);
 
-    textLines.push(`Venta: ${totalProductSoles}`);
-    textLines.push(`Traje: ${totalWardrobeSoles}`);
-
     const formattedDate = formatSpanishDate(targetDate);
-    textLines.push("");
-    textLines.push(`Verifiquen del ${formattedDate}`);
+
+    // 8. Construcción con la estructura exacta solicitada para WhatsApp
+    const headerBannerTop = "▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄";
+    const headerTitle = "            REPORTE ACICALADOS ";
+    const headerDate = `            ${formattedDate}`;
+    const headerBannerBottom = "▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀";
+
+    const textLines: string[] = [
+      headerBannerTop,
+      headerTitle,
+      headerDate,
+      headerBannerBottom,
+      "",
+      " *Equipo:*",
+      ...employeeRows.map((emp) => `${emp.name}: ${emp.value}`),
+      "",
+      ` *Venta:* ${totalProductSoles}`,
+      ` *Traje:* ${totalWardrobeSoles}`,
+      "",
+      ` _Verifiquen del ${formattedDate}_`,
+    ];
 
     const finalReportText = textLines.join("\n");
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(finalReportText)}`;
