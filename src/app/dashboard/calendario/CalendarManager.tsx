@@ -172,6 +172,8 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
             },
             (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
               console.log("[Supabase Realtime: Calendar] ⚡ INSERT en bookings:", payload.new);
+              const newStatus = (payload.new as { status?: string })?.status;
+              if (newStatus === "expirada") return;
               if (loadEventsRef.current) {
                 loadEventsRef.current(true);
               }
@@ -195,6 +197,11 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
               };
 
               if (updated?.id) {
+                if (updated.status === "expirada") {
+                  setEvents((prev) => prev.filter((ev) => ev.id !== `booking-${updated.id}`));
+                  return;
+                }
+
                 const statusBadges: Record<string, string> = {
                   confirmada: "badge-success",
                   pendiente: "badge-warning",
@@ -386,17 +393,21 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
         const end = new Date(y2, m2 - 1, d2);
         while (cur <= end) {
           const dStr = toDateStr(cur);
-          if (!map.has(dStr)) map.set(dStr, []);
-          map.get(dStr)!.push(ev);
+          if (dStr >= startDate && dStr <= endDate) {
+            if (!map.has(dStr)) map.set(dStr, []);
+            map.get(dStr)!.push(ev);
+          }
           cur.setDate(cur.getDate() + 1);
         }
       } else {
-        if (!map.has(ev.date)) map.set(ev.date, []);
-        map.get(ev.date)!.push(ev);
+        if (ev.date >= startDate && ev.date <= endDate) {
+          if (!map.has(ev.date)) map.set(ev.date, []);
+          map.get(ev.date)!.push(ev);
+        }
       }
     });
     return map;
-  }, [events]);
+  }, [events, startDate, endDate]);
 
   // Generar días para vista de mes
   const monthDays = useMemo(() => {

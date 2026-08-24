@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
             service_price_cents
           )
         `)
+        .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
         .gte("booking_date", startDate)
         .lte("booking_date", endDate);
 
