@@ -151,7 +151,6 @@ export function ReportsManager() {
   const [reportData, setReportData] = useState<FullReportData | null>(null);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -209,29 +208,6 @@ export function ReportsManager() {
   useEffect(() => {
     loadReportData();
   }, [loadReportData]);
-
-  // Exportar Excel
-  const handleExportExcel = async () => {
-    setExportingExcel(true);
-    try {
-      const params = new URLSearchParams();
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
-      if (bookingStatus && bookingStatus !== "all") params.set("bookingStatus", bookingStatus);
-      if (paymentStatus && paymentStatus !== "all") params.set("paymentStatus", paymentStatus);
-      if (employeeId && employeeId !== "all") params.set("employeeId", employeeId);
-      if (paymentMethod && paymentMethod !== "all") params.set("paymentMethod", paymentMethod);
-      if (searchTerm.trim()) params.set("searchTerm", searchTerm.trim());
-
-      const url = `/api/admin/reports/export/excel?${params.toString()}`;
-      window.location.href = url;
-    } catch (err) {
-      console.error("Error exporting Excel:", err);
-      alert("Error al descargar el archivo Excel.");
-    } finally {
-      setTimeout(() => setExportingExcel(false), 2000);
-    }
-  };
 
   // Exportar PDF
   const handleExportPdf = async () => {
@@ -357,27 +333,9 @@ export function ReportsManager() {
               boxShadow: "0 2px 10px rgba(34, 197, 94, 0.15)",
             }}
             id="daily-closing-whatsapp-btn"
-            title="Generar reporte diario de cierre de caja en formato WhatsApp"
+            title="Generar Reporte Acicalados del Día para WhatsApp"
           >
-            <span>📱 Cierre de Caja (WhatsApp)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            disabled={exportingExcel || loading}
-            className="btn btn-secondary"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              fontWeight: 700,
-              borderColor: "rgba(200, 164, 92, 0.4)",
-              color: "var(--color-primary)",
-            }}
-            id="export-excel-btn"
-          >
-            {exportingExcel ? "Generando..." : "📊 Exportar Excel (.xlsx)"}
+            <span>📱 Reporte acicalados del dia</span>
           </button>
 
           <button
@@ -531,9 +489,9 @@ export function ReportsManager() {
                     alignItems: "center",
                     gap: 4,
                   }}
-                  title="Abrir resumen de cierre diario para compartir por WhatsApp"
+                  title="Abrir Reporte Acicalados del Día para compartir por WhatsApp"
                 >
-                  <span>📱 Ver Cierre WhatsApp</span>
+                  <span>📱 Reporte acicalados del dia</span>
                 </button>
               )}
             </div>

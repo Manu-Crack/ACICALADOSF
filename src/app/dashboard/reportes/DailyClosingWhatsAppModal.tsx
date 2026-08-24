@@ -146,7 +146,7 @@ export function DailyClosingWhatsAppModal({
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: "1.3rem" }}>📱</span>
               <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#22c55e", margin: 0 }}>
-                Cierre de Caja Diario (WhatsApp)
+                Reporte Acicalados del Día (WhatsApp)
               </h2>
             </div>
             <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
@@ -408,7 +408,7 @@ export function DailyClosingWhatsAppModal({
               }}
               title="Abrir WhatsApp para seleccionar contacto o grupo destinatario"
             >
-              <span>📲 Compartir Cierre por WhatsApp</span>
+              <span>📲 Compartir Reporte por WhatsApp</span>
             </button>
           </div>
         </div>
