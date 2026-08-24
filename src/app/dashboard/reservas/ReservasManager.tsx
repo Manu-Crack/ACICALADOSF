@@ -421,6 +421,93 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
     );
   });
 
+  // Control de deslizamiento horizontal y arrastre con mouse (Drag-to-Scroll)
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
+  const dragInfoRef = useRef({
+    isDown: false,
+    startX: 0,
+    scrollLeft: 0,
+    hasMoved: false,
+  });
+
+  const checkScrollability = useCallback(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollWidth > el.clientWidth + 5;
+    setHasHorizontalOverflow(hasOverflow);
+    setCanScrollLeft(el.scrollLeft > 5);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 5);
+  }, []);
+
+  useEffect(() => {
+    checkScrollability();
+    const handleResize = () => checkScrollability();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [checkScrollability, filteredBookings]);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest("a") ||
+      target.closest("input") ||
+      target.closest("select") ||
+      target.closest(".sticky-actions-td") ||
+      target.closest(".sticky-actions-th")
+    ) {
+      return;
+    }
+
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    dragInfoRef.current = {
+      isDown: true,
+      startX: e.pageX - container.offsetLeft,
+      scrollLeft: container.scrollLeft,
+      hasMoved: false,
+    };
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragInfoRef.current.isDown) return;
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - dragInfoRef.current.startX) * 1.5;
+    if (Math.abs(walk) > 4) {
+      dragInfoRef.current.hasMoved = true;
+    }
+    container.scrollLeft = dragInfoRef.current.scrollLeft - walk;
+    checkScrollability();
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (dragInfoRef.current.isDown) {
+      dragInfoRef.current.isDown = false;
+      setIsDragging(false);
+    }
+  };
+
+  const scrollTable = (direction: "left" | "right") => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    const scrollAmount = 320;
+    el.scrollBy({
+      left: direction === "left" ? -scrollAmount : scrollAmount,
+      behavior: "smooth",
+    });
+    setTimeout(checkScrollability, 350);
+  };
+
   const employeeMap = new Map(
     employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
   );
@@ -847,7 +934,70 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
       </div>
 
       {/* Bookings Table */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="card" style={{ padding: 0, overflow: "hidden", position: "relative" }}>
+        {/* Top Scroll Helper & Navigation Indicator Bar */}
+        {!loading && filteredBookings.length > 0 && hasHorizontalOverflow && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "8px 16px",
+              borderBottom: "1px solid var(--color-border)",
+              background: "rgba(200, 164, 92, 0.05)",
+              fontSize: "0.75rem",
+              color: "var(--color-text-muted)",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>↔ Desplazamiento:</span>
+              <span>Arrastra con el mouse, usa Shift + Rueda o los botones laterales.</span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => scrollTable("left")}
+                disabled={!canScrollLeft}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  padding: "3px 8px",
+                  fontSize: "0.72rem",
+                  opacity: canScrollLeft ? 1 : 0.4,
+                  cursor: canScrollLeft ? "pointer" : "not-allowed",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+                title="Desplazar tabla hacia la izquierda"
+              >
+                ◀ Izquierda
+              </button>
+
+              <button
+                type="button"
+                onClick={() => scrollTable("right")}
+                disabled={!canScrollRight}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  padding: "3px 8px",
+                  fontSize: "0.72rem",
+                  opacity: canScrollRight ? 1 : 0.4,
+                  cursor: canScrollRight ? "pointer" : "not-allowed",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+                title="Desplazar tabla hacia la derecha (Acciones)"
+              >
+                Derecha (Acciones) ▶
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ padding: 48, textAlign: "center" }}>
             <p className="text-muted">Cargando reservas...</p>
@@ -868,8 +1018,16 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
             </button>
           </div>
         ) : (
-          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            <table style={{ width: "100%", minWidth: "960px", borderCollapse: "collapse" }}>
+          <div
+            ref={tableContainerRef}
+            className={`table-responsive-container ${isDragging ? "is-dragging" : ""}`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpOrLeave}
+            onMouseLeave={handleMouseUpOrLeave}
+            onScroll={checkScrollability}
+          >
+            <table style={{ width: "100%", minWidth: "1020px", borderCollapse: "collapse" }}>
               <thead>
                 <tr
                   style={{
@@ -995,6 +1153,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                     Total
                   </th>
                   <th
+                    className="sticky-actions-th"
                     style={{
                       padding: "12px 16px",
                       fontSize: "0.75rem",
@@ -1019,12 +1178,16 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                           expandedId === b.id
                             ? "none"
                             : "1px solid var(--color-border)",
-                        cursor: "pointer",
+                        cursor: isDragging ? "grabbing" : "pointer",
                         transition: "background var(--transition-fast)",
                       }}
-                      onClick={() =>
-                        setExpandedId(expandedId === b.id ? null : b.id)
-                      }
+                      onClick={() => {
+                        if (dragInfoRef.current.hasMoved) {
+                          dragInfoRef.current.hasMoved = false;
+                          return;
+                        }
+                        setExpandedId(expandedId === b.id ? null : b.id);
+                      }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.background =
                           "rgba(200,164,92,0.04)")
@@ -1217,11 +1380,13 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                         S/ {(b.total_price_cents / 100).toFixed(2)}
                       </td>
                       <td
+                        className="sticky-actions-td"
                         style={{
                           padding: "14px 16px",
                           textAlign: "center",
                           whiteSpace: "nowrap",
                         }}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <div
                           style={{
