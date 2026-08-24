@@ -1576,26 +1576,6 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 alignItems: "center",
                               }}
                             >
-                              {/* Action 1: Complete appointment */}
-                              {b.status === "confirmada" && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateBooking(b.id, {
-                                      status: "completada",
-                                    });
-                                  }}
-                                  disabled={actionLoading === b.id}
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ padding: "8px 16px" }}
-                                >
-                                  {actionLoading === b.id
-                                    ? "Actualizando..."
-                                    : "🏁 Marcar Cita como Completada"}
-                                </button>
-                              )}
-
                               {/* Action 3: Cancel appointment */}
                               {isAdmin &&
                                 b.status !== "cancelada" &&
