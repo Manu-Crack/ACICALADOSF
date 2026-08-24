@@ -92,7 +92,9 @@ export async function GET(request: NextRequest) {
           assigned_employee_id,
           service_type,
           booking_services (
-            services (name)
+            service_name,
+            duration_minutes,
+            service_price_cents
           )
         `)
         .gte("booking_date", startDate)
@@ -102,7 +104,10 @@ export async function GET(request: NextRequest) {
         bQuery = bQuery.eq("assigned_employee_id", employeeId);
       }
 
-      const { data: bookings } = await bQuery;
+      const { data: bookings, error: bError } = await bQuery;
+      if (bError) {
+        console.error("[GET /api/admin/calendar/events] Error consultando reservas:", bError);
+      }
 
       interface RawBookingEvent {
         id: string;
@@ -118,19 +123,43 @@ export async function GET(request: NextRequest) {
         total_price_cents: number;
         assigned_employee_id: string | null;
         service_type: string;
-        booking_services: Array<{ services: { name: string } | null }> | null;
+        booking_services: Array<{
+          service_name: string;
+          duration_minutes?: number;
+          service_price_cents?: number;
+        }> | null;
       }
+
+      const bookingStatusLabels: Record<string, string> = {
+        confirmada: "CONFIRMADA",
+        pendiente: "PENDIENTE",
+        completada: "COMPLETADA",
+        cancelada: "CANCELADA",
+        expirada: "EXPIRADA",
+      };
+
+      const bookingStatusBadges: Record<string, string> = {
+        confirmada: "badge-success",
+        pendiente: "badge-warning",
+        completada: "badge-gold",
+        cancelada: "badge-error",
+        expirada: "badge-neutral",
+      };
 
       ((bookings || []) as unknown as RawBookingEvent[]).forEach((b) => {
         const empName = b.assigned_employee_id ? empMap.get(b.assigned_employee_id) || "Sin Asignar" : "Sin Asignar";
-        const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim();
-        const serviceNames = (b.booking_services || []).map((bs) => bs.services?.name || "Servicio");
+        const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim() || "Cliente";
+        const serviceNames = (b.booking_services || [])
+          .map((bs) => bs.service_name || "Servicio")
+          .filter(Boolean);
         const cfg = CALENDAR_EVENT_CONFIG.booking;
+
+        const displayServices = serviceNames.length > 0 ? serviceNames : [b.service_type === "spa" ? "Spa" : "Barbería"];
 
         events.push({
           id: `booking-${b.id}`,
           type: "booking",
-          title: `Cita: ${clientName} (${serviceNames.slice(0, 2).join(", ")})`,
+          title: `Cita: ${clientName} (${displayServices.slice(0, 2).join(", ")})`,
           employee_id: b.assigned_employee_id || "unassigned",
           employee_name: empName,
           employee_specialty: b.assigned_employee_id ? empSpecialtyMap.get(b.assigned_employee_id) : undefined,
@@ -138,18 +167,18 @@ export async function GET(request: NextRequest) {
           start_time: b.start_time,
           end_time: b.end_time,
           status: b.status,
-          status_label: b.status.toUpperCase(),
-          badge_class: b.status === "confirmada" ? "badge-success" : b.status === "pendiente" ? "badge-warning" : "badge-neutral",
+          status_label: bookingStatusLabels[b.status] || (b.status ? b.status.toUpperCase() : "RESERVA"),
+          badge_class: bookingStatusBadges[b.status] || "badge-neutral",
           icon: cfg.icon,
           color: cfg.color,
           bg_color: cfg.bgColor,
           border_color: cfg.borderColor,
-          description: `Servicios: ${serviceNames.join(", ")} | Monto: S/ ${(b.total_price_cents / 100).toFixed(2)}`,
+          description: `Servicios: ${displayServices.join(", ")} | Total: S/ ${(b.total_price_cents / 100).toFixed(2)}`,
           details: {
             booking_code: b.booking_code,
             client_name: clientName,
             client_phone: b.client_phone || undefined,
-            services: serviceNames,
+            services: displayServices,
             price_cents: b.total_price_cents,
             payment_status: b.payment_status,
           },
@@ -182,7 +211,10 @@ export async function GET(request: NextRequest) {
         pQuery = pQuery.eq("employee_id", employeeId);
       }
 
-      const { data: blocks } = await pQuery;
+      const { data: blocks, error: pError } = await pQuery;
+      if (pError) {
+        console.error("[GET /api/admin/calendar/events] Error consultando permisos:", pError);
+      }
 
       interface RawBlockEvent {
         id: string;
@@ -258,7 +290,10 @@ export async function GET(request: NextRequest) {
         aQuery = aQuery.eq("employee_id", employeeId);
       }
 
-      const { data: attendances } = await aQuery;
+      const { data: attendances, error: aError } = await aQuery;
+      if (aError) {
+        console.error("[GET /api/admin/calendar/events] Error consultando asistencias:", aError);
+      }
 
       interface RawAttendanceEvent {
         id: string;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
 import {
   CALENDAR_EVENT_CONFIG,
   type CalendarEvent,
@@ -24,6 +25,14 @@ interface CalendarManagerProps {
   userRole?: string;
 }
 
+// Helper seguro para formatear fechas a YYYY-MM-DD en la zona horaria local
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
   const isAdmin = userRole === "admin";
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
@@ -39,17 +48,20 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [dayEventsModal, setDayEventsModal] = useState<{ dateStr: string; events: CalendarEvent[] } | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
 
-  // Calcular fechas de inicio y fin según el modo de visualización
+  const supabase = useMemo(() => createClient(), []);
+
+  // Calcular fechas de inicio y fin según el modo de visualización sin desfases horarios
   const { startDate, endDate } = useMemo(() => {
     const y = currentDate.getFullYear();
     const m = currentDate.getMonth();
 
     if (viewMode === "day") {
-      const dStr = currentDate.toISOString().slice(0, 10);
+      const dStr = toDateStr(currentDate);
       return { startDate: dStr, endDate: dStr };
     }
 
@@ -61,75 +73,283 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
       return {
-        startDate: monday.toISOString().slice(0, 10),
-        endDate: sunday.toISOString().slice(0, 10),
+        startDate: toDateStr(monday),
+        endDate: toDateStr(sunday),
       };
     }
 
     // Month view
     const firstDay = new Date(y, m, 1);
     const lastDay = new Date(y, m + 1, 0);
-    // Extender para cubrir la cuadrícula completa de 35 o 42 días
-    const startPadding = (firstDay.getDay() + 6) % 7; // Lunes=0
-    const startGrid = new Date(firstDay);
-    startGrid.setDate(firstDay.getDate() - startPadding);
+    // Extender para cubrir la cuadrícula completa de 35 o 42 días (Lunes=0)
+    const startPadding = (firstDay.getDay() + 6) % 7;
+    const startGrid = new Date(y, m, 1 - startPadding);
 
-    const endPadding = (7 - ((lastDay.getDay() + 6) % 7) - 1) % 7;
-    const endGrid = new Date(lastDay);
-    endGrid.setDate(lastDay.getDate() + endPadding);
+    const lastDayOfWeek = (lastDay.getDay() + 6) % 7;
+    const endPadding = 6 - lastDayOfWeek;
+    const endGrid = new Date(y, m + 1, endPadding);
 
     return {
-      startDate: startGrid.toISOString().slice(0, 10),
-      endDate: endGrid.toISOString().slice(0, 10),
+      startDate: toDateStr(startGrid),
+      endDate: toDateStr(endGrid),
     };
   }, [currentDate, viewMode]);
 
-  const loadEvents = useCallback(async () => {
-    setLoading(true);
-    try {
-      const typesList = (Object.keys(activeTypes) as CalendarEventType[]).filter((t) => activeTypes[t]);
-      const params = new URLSearchParams({
-        start_date: startDate,
-        end_date: endDate,
-        types: typesList.join(","),
-      });
+  const loadEvents = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) setLoading(true);
+      try {
+        const typesList = (Object.keys(activeTypes) as CalendarEventType[]).filter((t) => activeTypes[t]);
+        const params = new URLSearchParams({
+          start_date: startDate,
+          end_date: endDate,
+          types: typesList.join(","),
+        });
 
-      if (selectedEmployeeId !== "all") {
-        params.set("employee_id", selectedEmployeeId);
-      }
+        if (selectedEmployeeId !== "all") {
+          params.set("employee_id", selectedEmployeeId);
+        }
 
-      const res = await fetch(`/api/admin/calendar/events?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setEvents(data.events || []);
-        if (data.employees) setEmployees(data.employees);
+        const res = await fetch(`/api/admin/calendar/events?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          setEvents(data.events || []);
+          if (data.employees) setEmployees(data.employees);
+        }
+      } catch (err) {
+        console.error("Error loading calendar events:", err);
+      } finally {
+        if (!isSilent) setLoading(false);
       }
-    } catch (err) {
-      console.error("Error loading calendar events:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [startDate, endDate, selectedEmployeeId, activeTypes]);
+    },
+    [startDate, endDate, selectedEmployeeId, activeTypes]
+  );
 
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
 
-  // Navegación
+  // Referencias para que la suscripción en tiempo real no dependa de re-renders de UI
+  const loadEventsRef = useRef(loadEvents);
+  useEffect(() => {
+    loadEventsRef.current = loadEvents;
+  }, [loadEvents]);
+
+  // Suscripción protegida y autenticada a Supabase Realtime
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let isMounted = true;
+
+    async function initRealtime() {
+      try {
+        console.log("[Supabase Realtime: Calendar] 🔄 Verificando sesión...");
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        if (session?.access_token) {
+          console.log("[Supabase Realtime: Calendar] 🔑 Autenticando canal con JWT...");
+          supabase.realtime.setAuth(session.access_token);
+        }
+
+        if (!isMounted) return;
+
+        const channelName = "realtime-calendar-events-changes";
+        const existing = supabase.getChannels().find((c: { topic: string }) => c.topic === `realtime:${channelName}` || c.topic === channelName);
+        if (existing) {
+          console.log("[Supabase Realtime: Calendar] 🧹 Removiendo canal previo...");
+          supabase.removeChannel(existing);
+        }
+
+        console.log("[Supabase Realtime: Calendar] 📡 Inicializando canal:", channelName);
+
+        channel = supabase
+          .channel(channelName)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "bookings",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Calendar] ⚡ INSERT en bookings:", payload.new);
+              if (loadEventsRef.current) {
+                loadEventsRef.current(true);
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "bookings",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Calendar] ⚡ UPDATE en bookings:", payload.new);
+              const updated = payload.new as {
+                id?: string;
+                status?: string;
+                booking_date?: string;
+                start_time?: string;
+                end_time?: string;
+              };
+
+              if (updated?.id) {
+                const statusBadges: Record<string, string> = {
+                  confirmada: "badge-success",
+                  pendiente: "badge-warning",
+                  completada: "badge-gold",
+                  cancelada: "badge-error",
+                  expirada: "badge-neutral",
+                };
+
+                setEvents((prev) =>
+                  prev.map((ev) => {
+                    if (ev.id === `booking-${updated.id}`) {
+                      const newStatus = updated.status || ev.status;
+                      return {
+                        ...ev,
+                        date: updated.booking_date || ev.date,
+                        start_time: updated.start_time !== undefined ? updated.start_time : ev.start_time,
+                        end_time: updated.end_time !== undefined ? updated.end_time : ev.end_time,
+                        status: newStatus,
+                        status_label: newStatus.toUpperCase(),
+                        badge_class: statusBadges[newStatus] || ev.badge_class,
+                      };
+                    }
+                    return ev;
+                  })
+                );
+              }
+
+              if (loadEventsRef.current) {
+                loadEventsRef.current(true);
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "DELETE",
+              schema: "public",
+              table: "bookings",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Calendar] ⚡ DELETE en bookings:", payload.old);
+              const deletedId = (payload.old as { id?: string })?.id;
+              if (deletedId) {
+                setEvents((prev) => prev.filter((ev) => ev.id !== `booking-${deletedId}`));
+              }
+              if (loadEventsRef.current) {
+                loadEventsRef.current(true);
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "employee_blocks",
+            },
+            () => {
+              console.log("[Supabase Realtime: Calendar] ⚡ Cambio en employee_blocks");
+              if (loadEventsRef.current) loadEventsRef.current(true);
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "employee_attendances",
+            },
+            () => {
+              console.log("[Supabase Realtime: Calendar] ⚡ Cambio en employee_attendances");
+              if (loadEventsRef.current) loadEventsRef.current(true);
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "employees",
+            },
+            () => {
+              console.log("[Supabase Realtime: Calendar] ⚡ Cambio en employees");
+              if (loadEventsRef.current) loadEventsRef.current(true);
+            }
+          )
+          .subscribe((status: string, err?: Error | unknown) => {
+            console.log(`[Supabase Realtime: Calendar] 📡 Estado: ${status}`);
+            if (status === "SUBSCRIBED") {
+              setIsRealtimeConnected(true);
+            } else if (status === "CHANNEL_ERROR") {
+              console.error("[Supabase Realtime: Calendar] ❌ Error en canal:", err);
+              setIsRealtimeConnected(false);
+            } else if (status === "TIMED_OUT" || status === "CLOSED") {
+              setIsRealtimeConnected(false);
+            }
+          });
+      } catch (err) {
+        console.error("[Supabase Realtime: Calendar] Error inicializando suscripción:", err);
+      }
+    }
+
+    initRealtime();
+
+    const { data: authSubData } = supabase.auth.onAuthStateChange(async (_event: string, session: { access_token?: string } | null) => {
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      authSubData?.subscription?.unsubscribe();
+      if (channel) {
+        console.log("[Supabase Realtime: Calendar] 🛑 Desmontando: Removiendo canal...");
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [supabase]);
+
+  // Navegación segura
   const handlePrev = () => {
-    const d = new Date(currentDate);
-    if (viewMode === "day") d.setDate(d.getDate() - 1);
-    else if (viewMode === "week") d.setDate(d.getDate() - 7);
-    else d.setMonth(d.getMonth() - 1);
-    setCurrentDate(d);
+    if (viewMode === "day") {
+      setCurrentDate((prev) => {
+        const d = new Date(prev);
+        d.setDate(d.getDate() - 1);
+        return d;
+      });
+    } else if (viewMode === "week") {
+      setCurrentDate((prev) => {
+        const d = new Date(prev);
+        d.setDate(d.getDate() - 7);
+        return d;
+      });
+    } else {
+      setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    }
   };
 
   const handleNext = () => {
-    const d = new Date(currentDate);
-    if (viewMode === "day") d.setDate(d.getDate() + 1);
-    else if (viewMode === "week") d.setDate(d.getDate() + 7);
-    else d.setMonth(d.getMonth() + 1);
-    setCurrentDate(d);
+    if (viewMode === "day") {
+      setCurrentDate((prev) => {
+        const d = new Date(prev);
+        d.setDate(d.getDate() + 1);
+        return d;
+      });
+    } else if (viewMode === "week") {
+      setCurrentDate((prev) => {
+        const d = new Date(prev);
+        d.setDate(d.getDate() + 7);
+        return d;
+      });
+    } else {
+      setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    }
   };
 
   const handleToday = () => {
@@ -160,10 +380,12 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
     events.forEach((ev) => {
       // Si el evento tiene rango de fechas (ej: permiso multidia)
       if (ev.end_date && ev.end_date !== ev.date) {
-        const cur = new Date(ev.date + "T12:00:00Z");
-        const end = new Date(ev.end_date + "T12:00:00Z");
+        const [y1, m1, d1] = ev.date.split("-").map(Number);
+        const [y2, m2, d2] = ev.end_date.split("-").map(Number);
+        const cur = new Date(y1, m1 - 1, d1);
+        const end = new Date(y2, m2 - 1, d2);
         while (cur <= end) {
-          const dStr = cur.toISOString().slice(0, 10);
+          const dStr = toDateStr(cur);
           if (!map.has(dStr)) map.set(dStr, []);
           map.get(dStr)!.push(ev);
           cur.setDate(cur.getDate() + 1);
@@ -180,17 +402,19 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
   const monthDays = useMemo(() => {
     if (viewMode !== "month") return [];
     const days: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean; isToday: boolean }> = [];
-    const cur = new Date(startDate + "T12:00:00Z");
-    const end = new Date(endDate + "T12:00:00Z");
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const [startY, startM, startD] = startDate.split("-").map(Number);
+    const [endY, endM, endD] = endDate.split("-").map(Number);
+    const cur = new Date(startY, startM - 1, startD);
+    const end = new Date(endY, endM - 1, endD);
+    const todayStr = toDateStr(new Date());
     const targetMonth = currentDate.getMonth();
 
     while (cur <= end) {
-      const dStr = cur.toISOString().slice(0, 10);
+      const dStr = toDateStr(cur);
       days.push({
         dateStr: dStr,
-        dayNum: cur.getUTCDate(),
-        isCurrentMonth: cur.getUTCMonth() === targetMonth,
+        dayNum: cur.getDate(),
+        isCurrentMonth: cur.getMonth() === targetMonth,
         isToday: dStr === todayStr,
       });
       cur.setDate(cur.getDate() + 1);
@@ -200,6 +424,59 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, width: "100%", maxWidth: 1400, margin: "0 auto", padding: "8px 0" }}>
+      {/* Realtime Connection Indicator Bar */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 8,
+          background: "rgba(200, 164, 92, 0.04)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-md)",
+          padding: "8px 14px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              backgroundColor: isRealtimeConnected ? "var(--color-success)" : "#f59e0b",
+              display: "inline-block",
+              boxShadow: isRealtimeConnected
+                ? "0 0 8px var(--color-success)"
+                : "0 0 8px #f59e0b",
+            }}
+          />
+          <span
+            style={{
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              color: isRealtimeConnected ? "var(--color-success)" : "var(--color-text-muted)",
+            }}
+          >
+            {isRealtimeConnected
+              ? "🟢 Sincronización en tiempo real activa (Supabase Realtime)"
+              : "🟡 Conectando tiempo real..."}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => loadEvents(false)}
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: "0.75rem", padding: "4px 8px" }}
+            title="Forzar actualización manual de eventos"
+            id="refresh-calendar-btn"
+          >
+            🔄 Actualizar
+          </button>
+        </div>
+      </div>
       {/* Header Controls */}
       <div
         className="card card-gold"
@@ -473,9 +750,9 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
             {Array.from({ length: 7 }).map((_, idx) => {
-              const d = new Date(startDate + "T12:00:00Z");
-              d.setDate(d.getDate() + idx);
-              const dStr = d.toISOString().slice(0, 10);
+              const [startY, startM, startD] = startDate.split("-").map(Number);
+              const d = new Date(startY, startM - 1, startD + idx);
+              const dStr = toDateStr(d);
               const dayEvents = eventsByDate.get(dStr) || [];
               const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -497,7 +774,7 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
                     <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", fontWeight: 700, display: "block" }}>
                       {dayNames[idx]}
                     </span>
-                    <strong style={{ fontSize: "0.95rem" }}>{d.getUTCDate()}</strong>
+                    <strong style={{ fontSize: "0.95rem" }}>{d.getDate()}</strong>
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, overflowY: "auto" }}>
@@ -548,7 +825,7 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
             {events.length > 0 && (
               <button
                 type="button"
-                onClick={() => exportDailyCalendarAgendaPdf(currentDate.toISOString().slice(0, 10), events)}
+                onClick={() => exportDailyCalendarAgendaPdf(toDateStr(currentDate), events)}
                 className="btn btn-secondary btn-sm"
                 style={{
                   display: "inline-flex",
