@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   CALENDAR_EVENT_CONFIG,
   type CalendarEvent,
 } from "@/lib/types/calendar";
+import { exportDailyCalendarAgendaPdf } from "@/lib/utils/daily-calendar-agenda-pdf";
 
 interface CalendarDayEventsModalProps {
   dateStr: string;
@@ -19,6 +20,8 @@ export function CalendarDayEventsModal({
   onClose,
   onSelectEvent,
 }: CalendarDayEventsModalProps) {
+  const [exportingPdf, setExportingPdf] = useState(false);
+
   // Formatear fecha para el encabezado en español
   const formattedDate = useMemo(() => {
     try {
@@ -44,6 +47,18 @@ export function CalendarDayEventsModal({
     });
   }, [events]);
 
+  // Manejar exportación a PDF de la agenda del día
+  const handleExportPdf = () => {
+    try {
+      setExportingPdf(true);
+      exportDailyCalendarAgendaPdf(dateStr, events);
+    } catch (err) {
+      console.error("Error al exportar agenda en PDF:", err);
+    } finally {
+      setTimeout(() => setExportingPdf(false), 1000);
+    }
+  };
+
   return (
     <div
       style={{
@@ -68,7 +83,7 @@ export function CalendarDayEventsModal({
         className="card card-gold"
         style={{
           width: "100%",
-          maxWidth: 580,
+          maxWidth: 620,
           maxHeight: "88vh",
           display: "flex",
           flexDirection: "column",
@@ -89,6 +104,8 @@ export function CalendarDayEventsModal({
             justifyContent: "space-between",
             alignItems: "center",
             background: "rgba(200, 164, 92, 0.05)",
+            flexWrap: "wrap",
+            gap: 10,
           }}
         >
           <div>
@@ -118,20 +135,51 @@ export function CalendarDayEventsModal({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-ghost btn-sm"
-            style={{
-              padding: "4px 8px",
-              fontSize: "1.1rem",
-              lineHeight: 1,
-              color: "var(--color-text-muted)",
-            }}
-            aria-label="Cerrar modal"
-          >
-            ✕
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Botón de exportación en el Header */}
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="btn btn-primary btn-sm"
+              style={{
+                fontSize: "0.78rem",
+                padding: "6px 12px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 700,
+              }}
+              title="Descargar agenda del día en formato PDF"
+              id="export-day-agenda-header-btn"
+            >
+              {exportingPdf ? (
+                <>
+                  <span className="spinner" style={{ width: 12, height: 12 }} />
+                  <span>Exportando...</span>
+                </>
+              ) : (
+                <>
+                  <span>📄 Exportar Agenda del Día</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-ghost btn-sm"
+              style={{
+                padding: "4px 8px",
+                fontSize: "1.1rem",
+                lineHeight: 1,
+                color: "var(--color-text-muted)",
+              }}
+              aria-label="Cerrar modal"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* List of Events */}
@@ -207,6 +255,19 @@ export function CalendarDayEventsModal({
                         >
                           {ev.status_label || cfg?.label || ev.type}
                         </span>
+                        {ev.employee_specialty && (
+                          <span
+                            style={{
+                              fontSize: "0.65rem",
+                              color: "var(--color-text-muted)",
+                              background: "rgba(255, 255, 255, 0.05)",
+                              padding: "1px 5px",
+                              borderRadius: 3,
+                            }}
+                          >
+                            {ev.employee_specialty}
+                          </span>
+                        )}
                       </div>
 
                       <p
@@ -279,14 +340,37 @@ export function CalendarDayEventsModal({
             padding: "12px 20px",
             borderTop: "1px solid var(--color-border)",
             display: "flex",
-            justifyContent: "flex-end",
+            justifyContent: "space-between",
+            alignItems: "center",
             background: "rgba(200, 164, 92, 0.02)",
+            flexWrap: "wrap",
+            gap: 10,
           }}
         >
+          {/* Botón de exportación en el Footer */}
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+            className="btn btn-secondary btn-sm"
+            style={{
+              padding: "6px 14px",
+              fontSize: "0.8rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              color: "var(--color-primary)",
+              borderColor: "rgba(200, 164, 92, 0.4)",
+            }}
+            id="export-day-agenda-footer-btn"
+          >
+            {exportingPdf ? "Generando PDF..." : "📄 Exportar Agenda del Día"}
+          </button>
+
           <button
             type="button"
             onClick={onClose}
-            className="btn btn-secondary btn-sm"
+            className="btn btn-ghost btn-sm"
             style={{ padding: "6px 18px", fontSize: "0.82rem" }}
           >
             Cerrar

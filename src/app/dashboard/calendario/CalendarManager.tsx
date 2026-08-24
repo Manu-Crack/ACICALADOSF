@@ -10,6 +10,7 @@ import {
 import { CalendarEventModal } from "./CalendarEventModal";
 import { CalendarDayEventsModal } from "./CalendarDayEventsModal";
 import { EmployeeAbsenceRangeModal } from "@/app/dashboard/empleados/EmployeeAbsenceRangeModal";
+import { exportDailyCalendarAgendaPdf } from "@/lib/utils/daily-calendar-agenda-pdf";
 
 interface Employee {
   id: string;
@@ -535,6 +536,36 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
       ) : (
         /* VISTA DE DÍA */
         <div className="card" style={{ padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--color-primary)", fontWeight: 800 }}>
+                Agenda de Citas del Día
+              </h4>
+              <p style={{ margin: "2px 0 0 0", fontSize: "0.76rem", color: "var(--color-text-muted)" }}>
+                Total de eventos: <strong style={{ color: "#fff" }}>{events.length}</strong>
+              </p>
+            </div>
+            {events.length > 0 && (
+              <button
+                type="button"
+                onClick={() => exportDailyCalendarAgendaPdf(currentDate.toISOString().slice(0, 10), events)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: "0.78rem",
+                  color: "var(--color-primary)",
+                  borderColor: "rgba(200, 164, 92, 0.4)",
+                  fontWeight: 700,
+                }}
+                id="export-calendar-day-view-pdf"
+              >
+                📄 Exportar Agenda del Día (PDF)
+              </button>
+            )}
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {events.length === 0 ? (
               <div style={{ padding: 40, textAlign: "center" }}>
