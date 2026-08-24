@@ -105,7 +105,6 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<string>("all");
   const [assignmentDateFilter, setAssignmentDateFilter] = useState<string>("");
   const [assignmentSearch, setAssignmentSearch] = useState<string>("");
-  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
 
   // Modal states
   const [showEmpModal, setShowEmpModal] = useState(false);
@@ -291,31 +290,6 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   function viewEmployeeAssignments(employeeId: string) {
     setSelectedEmpFilter(employeeId);
     setActiveTab("assignments");
-  }
-
-  // Reassign or update booking status from assignments tab
-  async function handleUpdateAssignedBooking(
-    bookingId: string,
-    payload: Record<string, unknown>
-  ) {
-    setUpdatingBookingId(bookingId);
-    try {
-      const res = await fetch("/api/admin/bookings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: bookingId, ...payload }),
-      });
-      if (res.ok) {
-        await loadData();
-      } else {
-        const data = await res.json();
-        alert(data.error || "No se pudo actualizar la reserva");
-      }
-    } catch {
-      alert("Error de conexión al actualizar la asignación.");
-    } finally {
-      setUpdatingBookingId(null);
-    }
   }
 
   // Abrir Modal Empleado (Crear / Editar)
@@ -1565,7 +1539,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                       )}
                     </div>
 
-                    {/* Bottom Row: Client info, Reassign Employee selector and Actions */}
+                    {/* Bottom Row: Client info, WhatsApp link, and Total price */}
                     <div
                       style={{
                         display: "flex",
@@ -1614,106 +1588,19 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                             <span>WhatsApp</span>
                           </a>
                         )}
+                      </div>
 
+                      {/* Right: Total Price */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span
                           style={{
                             fontSize: "0.9375rem",
                             fontWeight: 800,
                             color: "var(--color-primary)",
-                            marginLeft: 4,
                           }}
                         >
                           Total: S/ {(b.total_price_cents / 100).toFixed(2)}
                         </span>
-                      </div>
-
-                      {/* Reassign Worker Dropdown */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <label className="label" style={{ marginBottom: 0, fontSize: "0.75rem" }}>
-                          Reasignar:
-                        </label>
-                        <select
-                          className="select"
-                          style={{
-                            padding: "4px 8px",
-                            fontSize: "0.8125rem",
-                            minWidth: 180,
-                          }}
-                          value={b.assigned_employee_id || ""}
-                          disabled={updatingBookingId === b.id}
-                          onChange={(e) =>
-                            handleUpdateAssignedBooking(b.id, {
-                              assigned_employee_id: e.target.value || null,
-                            })
-                          }
-                        >
-                          <option value="">⚠️ Sin asignar</option>
-                          {employees.filter((emp) => emp.type !== "recepcionista").map((emp) => (
-                            <option key={emp.id} value={emp.id}>
-                              {emp.type === "barberia" ? "💈" : "Spa:"} {emp.first_name}{" "}
-                              {emp.last_name}
-                            </option>
-                          ))}
-                        </select>
-
-                        {/* Status Toggle buttons */}
-                        {b.status === "pendiente" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleUpdateAssignedBooking(b.id, { status: "confirmada" })
-                            }
-                            disabled={updatingBookingId === b.id}
-                            className="btn btn-sm"
-                            style={{
-                              background: "var(--color-success)",
-                              color: "#000000",
-                              fontWeight: 700,
-                              padding: "4px 10px",
-                              fontSize: "0.75rem",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 4,
-                            }}
-                          >
-                            <img src="/Activo.svg" alt="Confirmar" style={{ width: 14, height: 14 }} /> Confirmar
-                          </button>
-                        )}
-
-                        {b.payment_status !== "total" && b.status !== "cancelada" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleUpdateAssignedBooking(b.id, { mark_paid: true })
-                            }
-                            disabled={updatingBookingId === b.id}
-                            className="btn btn-primary btn-sm"
-                            style={{
-                              padding: "4px 10px",
-                              fontSize: "0.75rem",
-                              fontWeight: 700,
-                            }}
-                          >
-                            💰 Cobrar
-                          </button>
-                        )}
-
-                        {b.status === "confirmada" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleUpdateAssignedBooking(b.id, { status: "completada" })
-                            }
-                            disabled={updatingBookingId === b.id}
-                            className="btn btn-secondary btn-sm"
-                            style={{
-                              padding: "4px 10px",
-                              fontSize: "0.75rem",
-                            }}
-                          >
-                            🏁 Completar
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>
