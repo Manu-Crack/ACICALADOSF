@@ -421,93 +421,6 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
     );
   });
 
-  // Control de deslizamiento horizontal y arrastre con mouse (Drag-to-Scroll)
-  const tableContainerRef = useRef<HTMLDivElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-  const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
-  const dragInfoRef = useRef({
-    isDown: false,
-    startX: 0,
-    scrollLeft: 0,
-    hasMoved: false,
-  });
-
-  const checkScrollability = useCallback(() => {
-    const el = tableContainerRef.current;
-    if (!el) return;
-    const hasOverflow = el.scrollWidth > el.clientWidth + 5;
-    setHasHorizontalOverflow(hasOverflow);
-    setCanScrollLeft(el.scrollLeft > 5);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 5);
-  }, []);
-
-  useEffect(() => {
-    checkScrollability();
-    const handleResize = () => checkScrollability();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [checkScrollability, filteredBookings]);
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement;
-    if (
-      target.closest("button") ||
-      target.closest("a") ||
-      target.closest("input") ||
-      target.closest("select") ||
-      target.closest(".sticky-actions-td") ||
-      target.closest(".sticky-actions-th")
-    ) {
-      return;
-    }
-
-    const container = tableContainerRef.current;
-    if (!container) return;
-
-    dragInfoRef.current = {
-      isDown: true,
-      startX: e.pageX - container.offsetLeft,
-      scrollLeft: container.scrollLeft,
-      hasMoved: false,
-    };
-    setIsDragging(true);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!dragInfoRef.current.isDown) return;
-    const container = tableContainerRef.current;
-    if (!container) return;
-
-    e.preventDefault();
-    const x = e.pageX - container.offsetLeft;
-    const walk = (x - dragInfoRef.current.startX) * 1.5;
-    if (Math.abs(walk) > 4) {
-      dragInfoRef.current.hasMoved = true;
-    }
-    container.scrollLeft = dragInfoRef.current.scrollLeft - walk;
-    checkScrollability();
-  };
-
-  const handleMouseUpOrLeave = () => {
-    if (dragInfoRef.current.isDown) {
-      dragInfoRef.current.isDown = false;
-      setIsDragging(false);
-    }
-  };
-
-  const scrollTable = (direction: "left" | "right") => {
-    const el = tableContainerRef.current;
-    if (!el) return;
-    const scrollAmount = 320;
-    el.scrollBy({
-      left: direction === "left" ? -scrollAmount : scrollAmount,
-      behavior: "smooth",
-    });
-    setTimeout(checkScrollability, 350);
-  };
-
   const employeeMap = new Map(
     employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
   );
@@ -933,71 +846,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
         </button>
       </div>
 
-      {/* Bookings Table */}
-      <div className="card" style={{ padding: 0, overflow: "hidden", position: "relative" }}>
-        {/* Top Scroll Helper & Navigation Indicator Bar */}
-        {!loading && filteredBookings.length > 0 && hasHorizontalOverflow && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "8px 16px",
-              borderBottom: "1px solid var(--color-border)",
-              background: "rgba(200, 164, 92, 0.05)",
-              fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>↔ Desplazamiento:</span>
-              <span>Arrastra con el mouse, usa Shift + Rueda o los botones laterales.</span>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button
-                type="button"
-                onClick={() => scrollTable("left")}
-                disabled={!canScrollLeft}
-                className="btn btn-secondary btn-sm"
-                style={{
-                  padding: "3px 8px",
-                  fontSize: "0.72rem",
-                  opacity: canScrollLeft ? 1 : 0.4,
-                  cursor: canScrollLeft ? "pointer" : "not-allowed",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 3,
-                }}
-                title="Desplazar tabla hacia la izquierda"
-              >
-                ◀ Izquierda
-              </button>
-
-              <button
-                type="button"
-                onClick={() => scrollTable("right")}
-                disabled={!canScrollRight}
-                className="btn btn-secondary btn-sm"
-                style={{
-                  padding: "3px 8px",
-                  fontSize: "0.72rem",
-                  opacity: canScrollRight ? 1 : 0.4,
-                  cursor: canScrollRight ? "pointer" : "not-allowed",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 3,
-                }}
-                title="Desplazar tabla hacia la derecha (Acciones)"
-              >
-                Derecha (Acciones) ▶
-              </button>
-            </div>
-          </div>
-        )}
-
+      {/* Bookings List with Independent Horizontal Scroll per Row */}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: 48, textAlign: "center" }}>
             <p className="text-muted">Cargando reservas...</p>
@@ -1018,797 +868,698 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
             </button>
           </div>
         ) : (
-          <div
-            ref={tableContainerRef}
-            className={`table-responsive-container ${isDragging ? "is-dragging" : ""}`}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUpOrLeave}
-            onMouseLeave={handleMouseUpOrLeave}
-            onScroll={checkScrollability}
-          >
-            <table style={{ width: "100%", minWidth: "1020px", borderCollapse: "collapse" }}>
-              <thead>
-                <tr
+          <div>
+            {/* Header de referencia alineado */}
+            <div
+              className="booking-row-scroll"
+              style={{
+                background: "rgba(200, 164, 92, 0.04)",
+                borderBottom: "1px solid var(--color-border)",
+                scrollbarWidth: "none",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "110px 200px 110px 130px 110px 130px 150px 130px 100px 160px",
+                  minWidth: "1330px",
+                  padding: "12px 16px",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  alignItems: "center",
+                }}
+              >
+                <div>Código</div>
+                <div>Cliente</div>
+                <div>Fecha</div>
+                <div>Hora</div>
+                <div>Tipo</div>
+                <div>Estado</div>
+                <div>Pago</div>
+                <div>WhatsApp</div>
+                <div>Total</div>
+                <div style={{ textAlign: "center" }}>Acciones</div>
+              </div>
+            </div>
+
+            {/* Filas de reservas con scroll horizontal independiente */}
+            {filteredBookings.map((b) => (
+              <div
+                key={b.id}
+                style={{
+                  borderBottom: "1px solid var(--color-border)",
+                  background: "var(--color-bg-card, #14110E)",
+                  transition: "background var(--transition-fast)",
+                }}
+              >
+                {/* Contenedor de desplazamiento individual para esta fila */}
+                <div
+                  className="booking-row-scroll"
                   style={{
-                    borderBottom: "1px solid var(--color-border)",
-                    background: "rgba(200,164,92,0.04)",
+                    width: "100%",
+                    overflowX: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    paddingBottom: 2,
                   }}
                 >
-                  <th
+                  <div
                     style={{
+                      display: "grid",
+                      gridTemplateColumns: "110px 200px 110px 130px 110px 130px 150px 130px 100px 160px",
+                      minWidth: "1330px",
+                      alignItems: "center",
                       padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
+                      cursor: "pointer",
+                      fontSize: "0.875rem",
                     }}
+                    onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "rgba(200,164,92,0.04)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
                   >
-                    Código
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Cliente
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Fecha
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Hora
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Tipo
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Estado
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Pago
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    WhatsApp
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Total
-                  </th>
-                  <th
-                    className="sticky-actions-th"
-                    style={{
-                      padding: "12px 16px",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--color-text-muted)",
-                      textAlign: "center",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBookings.map((b) => (
-                  <Fragment key={b.id}>
-                    <tr
-                      key={b.id}
-                      style={{
-                        borderBottom:
-                          expandedId === b.id
-                            ? "none"
-                            : "1px solid var(--color-border)",
-                        cursor: isDragging ? "grabbing" : "pointer",
-                        transition: "background var(--transition-fast)",
-                      }}
-                      onClick={() => {
-                        if (dragInfoRef.current.hasMoved) {
-                          dragInfoRef.current.hasMoved = false;
-                          return;
-                        }
-                        setExpandedId(expandedId === b.id ? null : b.id);
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(200,164,92,0.04)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
-                    >
-                      <td style={{ padding: "14px 16px" }}>
-                        <code
-                          style={{
-                            color: "var(--color-primary)",
-                            fontWeight: 700,
-                            fontSize: "0.875rem",
-                          }}
-                        >
-                          {b.booking_code}
-                        </code>
-                      </td>
-                      <td style={{ padding: "14px 16px" }}>
-                        <div>
-                          <p style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
-                            {b.client_first_name} {b.client_last_name}
-                          </p>
-                          {b.client_phone && (
-                            <p
-                              className="text-muted"
-                              style={{ fontSize: "0.75rem" }}
-                            >
-                              📱 {b.client_phone}
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      <td
-                        style={{ padding: "14px 16px", fontSize: "0.875rem" }}
-                      >
-                        {b.booking_date}
-                      </td>
-                      <td
+                    {/* 1. Código */}
+                    <div>
+                      <code
                         style={{
-                          padding: "14px 16px",
-                          fontWeight: 600,
-                          fontSize: "0.9375rem",
+                          color: "var(--color-primary)",
+                          fontWeight: 700,
+                          fontSize: "0.875rem",
                         }}
                       >
-                        {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
-                      </td>
-                      <td style={{ padding: "14px 16px" }}>
+                        {b.booking_code}
+                      </code>
+                    </div>
+
+                    {/* 2. Cliente */}
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: "0.9375rem", margin: 0 }}>
+                        {b.client_first_name} {b.client_last_name}
+                      </p>
+                      {b.client_phone && (
+                        <p
+                          className="text-muted"
+                          style={{ fontSize: "0.75rem", margin: 0, marginTop: 2 }}
+                        >
+                          📱 {b.client_phone}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 3. Fecha */}
+                    <div style={{ fontSize: "0.875rem" }}>
+                      {b.booking_date}
+                    </div>
+
+                    {/* 4. Hora */}
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "0.9375rem",
+                      }}
+                    >
+                      {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
+                    </div>
+
+                    {/* 5. Tipo */}
+                    <div>
+                      <span
+                        className="badge badge-gold"
+                        style={{
+                          fontSize: "0.6875rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <img
+                          src={
+                            b.service_type === "barberia"
+                              ? "/LogoBarberia.svg"
+                              : b.service_type === "spa"
+                              ? "/LogoSpa.svg"
+                              : "/LogoTodo.svg"
+                          }
+                          alt={b.service_type}
+                          style={{ height: 12, width: "auto" }}
+                        />
+                        {b.service_type === "barberia"
+                          ? "Barbería"
+                          : b.service_type === "spa"
+                          ? "Spa"
+                          : "Mixto"}
+                      </span>
+                    </div>
+
+                    {/* 6. Estado */}
+                    <div>
+                      <span
+                        className={`badge ${
+                          statusColors[b.status] || "badge-neutral"
+                        }`}
+                      >
+                        {statusLabels[b.status] || b.status}
+                      </span>
+                    </div>
+
+                    {/* 7. Pago */}
+                    <div>
+                      <span
+                        className={`badge ${
+                          b.payment_status === "total"
+                            ? "badge-success"
+                            : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                            ? "badge-warning"
+                            : "badge-error"
+                        }`}
+                        style={{
+                          fontWeight: 700,
+                          letterSpacing: "0.03em",
+                          fontSize: "0.72rem",
+                        }}
+                      >
+                        {b.payment_status === "total"
+                          ? "PAGADO COMPLETO"
+                          : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                          ? "SALDO PENDIENTE"
+                          : "SIN PAGO"}
+                      </span>
+
+                      {/* Monto restante si es saldo pendiente */}
+                      {(b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)) && (
                         <span
-                          className="badge badge-gold"
                           style={{
-                            fontSize: "0.6875rem",
+                            display: "block",
+                            fontSize: "0.7rem",
+                            color: "var(--color-warning, #f59e0b)",
+                            marginTop: 4,
+                            fontWeight: 600,
+                          }}
+                        >
+                          Resta: S/ {((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)}
+                        </span>
+                      )}
+
+                      {/* Método de pago si ya está completado */}
+                      {b.payment_method && b.payment_status === "total" && (
+                        <span
+                          style={{
+                            display: "block",
+                            fontSize: "0.7rem",
+                            color: "var(--color-text-muted)",
+                            marginTop: 4,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {PAYMENT_METHOD_ICONS[b.payment_method as PaymentMethod] || "💳"}{" "}
+                          {PAYMENT_METHOD_LABELS[b.payment_method as PaymentMethod] || b.payment_method}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 8. WhatsApp */}
+                    <div>
+                      {b.client_phone ? (
+                        <a
+                          href={`https://wa.me/51${b.client_phone.replace(
+                            /\D/g,
+                            ""
+                          )}?text=${encodeURIComponent(
+                            `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu reserva ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="btn btn-sm"
+                          style={{
                             display: "inline-flex",
                             alignItems: "center",
                             gap: 6,
+                            padding: "4px 10px",
+                            fontSize: "0.75rem",
+                            background: "#25D366",
+                            color: "#FFFFFF",
+                            border: "none",
+                            borderRadius: "var(--radius-sm)",
+                            fontWeight: 600,
+                            textDecoration: "none",
                           }}
                         >
                           <img
-                            src={
-                              b.service_type === "barberia"
-                                ? "/LogoBarberia.svg"
-                                : b.service_type === "spa"
-                                ? "/LogoSpa.svg"
-                                : "/LogoTodo.svg"
-                            }
-                            alt={b.service_type}
-                            style={{ height: 12, width: "auto" }}
+                            src="/icons/whatsApp.svg"
+                            alt="WhatsApp"
+                            style={{ width: 14, height: 14 }}
                           />
-                          {b.service_type === "barberia"
-                            ? "Barbería"
-                            : b.service_type === "spa"
-                            ? "Spa"
-                            : "Mixto"}
-                        </span>
-                      </td>
-                      <td style={{ padding: "14px 16px" }}>
+                          <span>WhatsApp</span>
+                        </a>
+                      ) : (
                         <span
-                          className={`badge ${
-                            statusColors[b.status] || "badge-neutral"
-                          }`}
+                          className="text-muted"
+                          style={{ fontSize: "0.8125rem" }}
                         >
-                          {statusLabels[b.status] || b.status}
+                          —
                         </span>
-                      </td>
-                      <td style={{ padding: "14px 16px" }}>
-                        <span
-                          className={`badge ${
-                            b.payment_status === "total"
-                              ? "badge-success"
-                              : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                              ? "badge-warning"
-                              : "badge-error"
-                          }`}
-                          style={{
-                            fontWeight: 700,
-                            letterSpacing: "0.03em",
-                            fontSize: "0.72rem",
-                          }}
-                        >
-                          {b.payment_status === "total"
-                            ? "PAGADO COMPLETO"
-                            : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                            ? "SALDO PENDIENTE"
-                            : "SIN PAGO"}
-                        </span>
+                      )}
+                    </div>
 
-                        {/* Si es SALDO PENDIENTE, mostrar monto restante */}
-                        {(b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)) && (
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: "0.7rem",
-                              color: "var(--color-warning, #f59e0b)",
-                              marginTop: 4,
-                              fontWeight: 600,
-                            }}
-                          >
-                            Resta: S/ {((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)}
-                          </span>
-                        )}
+                    {/* 9. Total */}
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        color: "var(--color-primary)",
+                        fontSize: "0.9375rem",
+                      }}
+                    >
+                      S/ {(b.total_price_cents / 100).toFixed(2)}
+                    </div>
 
-                        {/* Si es PAGADO COMPLETO, mostrar método de pago */}
-                        {b.payment_method && b.payment_status === "total" && (
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: "0.7rem",
-                              color: "var(--color-text-muted)",
-                              marginTop: 4,
-                              fontWeight: 600,
+                    {/* 10. Acciones */}
+                    <div
+                      style={{
+                        textAlign: "center",
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                        }}
+                      >
+                        {/* Botón: Pagar (admin + recepcionista) */}
+                        {b.status !== "cancelada" && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openPaymentModal(b);
                             }}
-                          >
-                            {PAYMENT_METHOD_ICONS[b.payment_method as PaymentMethod] || "💳"}{" "}
-                            {PAYMENT_METHOD_LABELS[b.payment_method as PaymentMethod] || b.payment_method}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ padding: "14px 16px" }}>
-                        {b.client_phone ? (
-                          <a
-                            href={`https://wa.me/51${b.client_phone.replace(
-                              /\D/g,
-                              ""
-                            )}?text=${encodeURIComponent(
-                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu reserva ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="btn btn-sm"
+                            disabled={actionLoading === b.id}
+                            className={`btn btn-sm ${
+                              b.payment_status === "total"
+                                ? "btn-secondary"
+                                : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                ? "btn-secondary"
+                                : "btn-primary"
+                            }`}
                             style={{
+                              padding: "4px 9px",
+                              fontSize: "0.73rem",
+                              fontWeight: 700,
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: 6,
-                              padding: "4px 10px",
-                              fontSize: "0.75rem",
-                              background: "#25D366",
-                              color: "#FFFFFF",
-                              border: "none",
-                              borderRadius: "var(--radius-sm)",
-                              fontWeight: 600,
-                              textDecoration: "none",
+                              gap: 4,
+                              ...(b.payment_status === "total"
+                                ? {
+                                    background: "rgba(106, 153, 78, 0.15)",
+                                    color: "var(--color-success)",
+                                    borderColor: "rgba(106, 153, 78, 0.35)",
+                                  }
+                                : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                ? {
+                                    background: "rgba(245, 158, 11, 0.15)",
+                                    color: "var(--color-warning, #f59e0b)",
+                                    borderColor: "rgba(245, 158, 11, 0.4)",
+                                  }
+                                : {}),
+                            }}
+                            title={
+                              b.payment_status === "total"
+                                ? "Ver pago registrado"
+                                : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                                ? `Completar saldo pendiente (S/ ${((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)})`
+                                : "Registrar pago de adelanto o total"
+                            }
+                            id={`pay-btn-${b.id}`}
+                          >
+                            {b.payment_status === "total"
+                              ? "✅ Pagado"
+                              : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                              ? "💳 Pagar Saldo"
+                              : "💳 Pagar"}
+                          </button>
+                        )}
+
+                        {/* Botón: Eliminar (solo admin, el recepcionista no lo ve) */}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteBookingPermanently(b);
+                            }}
+                            disabled={actionLoading === b.id}
+                            className="btn btn-ghost btn-sm"
+                            title="Eliminar reserva definitivamente"
+                            style={{
+                              padding: "4px 7px",
+                              color: "var(--color-error)",
+                              borderColor: "rgba(184,59,46,0.3)",
+                              fontSize: "0.8125rem",
+                            }}
+                            id={`delete-btn-${b.id}`}
+                          >
+                            🗑️
+                          </button>
+                        )}
+
+                        {/* Flecha Toggle Detalle */}
+                        <span
+                          onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}
+                          style={{
+                            color: "var(--color-text-muted)",
+                            fontSize: "0.75rem",
+                            cursor: "pointer",
+                            transition: "transform var(--transition-fast)",
+                            display: "inline-block",
+                            transform:
+                              expandedId === b.id
+                                ? "rotate(180deg)"
+                                : "rotate(0deg)",
+                            marginLeft: 2,
+                            padding: "4px 2px",
+                          }}
+                          title="Ver detalles de la reserva"
+                        >
+                          ▼
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detalle expandido de la reserva */}
+                {expandedId === b.id && (
+                  <div
+                    style={{
+                      padding: "16px 18px",
+                      background: "rgba(200,164,92,0.03)",
+                      borderTop: "1px solid var(--color-border)",
+                      animation: "fadeIn 0.2s ease-out",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: 16,
+                        marginBottom: 18,
+                      }}
+                    >
+                      {/* Client Info */}
+                      <div>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "var(--color-text-muted)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                            marginBottom: 8,
+                          }}
+                        >
+                          Datos del cliente
+                        </p>
+                        <p
+                          style={{
+                            fontSize: "0.875rem",
+                            marginBottom: 4,
+                          }}
+                        >
+                          <strong>
+                            {b.client_first_name} {b.client_last_name}
+                          </strong>
+                        </p>
+                        {b.client_email && (
+                          <p
+                            className="text-muted"
+                            style={{
+                              fontSize: "0.8125rem",
+                              marginBottom: 2,
                             }}
                           >
-                            <img
-                              src="/icons/whatsApp.svg"
-                              alt="WhatsApp"
-                              style={{ width: 14, height: 14 }}
-                            />
-                            <span>WhatsApp</span>
-                          </a>
-                        ) : (
-                          <span
+                            ✉️ {b.client_email}
+                          </p>
+                        )}
+                        {b.client_phone && (
+                          <p
+                            className="text-muted"
+                            style={{
+                              fontSize: "0.8125rem",
+                              marginBottom: 2,
+                            }}
+                          >
+                            📱 {b.client_phone}
+                          </p>
+                        )}
+                        {b.client_dni && (
+                          <p
                             className="text-muted"
                             style={{ fontSize: "0.8125rem" }}
                           >
-                            —
-                          </span>
+                            🪪 DNI: {b.client_dni}
+                          </p>
                         )}
-                      </td>
-                      <td
-                        style={{
-                          padding: "14px 16px",
-                          fontWeight: 700,
-                          color: "var(--color-primary)",
-                          fontSize: "0.9375rem",
-                        }}
-                      >
-                        S/ {(b.total_price_cents / 100).toFixed(2)}
-                      </td>
-                      <td
-                        className="sticky-actions-td"
-                        style={{
-                          padding: "14px 16px",
-                          textAlign: "center",
-                          whiteSpace: "nowrap",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div
+                      </div>
+
+                      {/* Booking Info */}
+                      <div>
+                        <p
                           style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 6,
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "var(--color-text-muted)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                            marginBottom: 8,
                           }}
                         >
-                          {/* Botón: Pagar (admin + recepcionista) */}
-                          {b.status !== "cancelada" && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPaymentModal(b);
-                              }}
-                              disabled={actionLoading === b.id}
-                              className={`btn btn-sm ${
-                                b.payment_status === "total"
-                                  ? "btn-secondary"
-                                  : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                                  ? "btn-secondary"
-                                  : "btn-primary"
-                              }`}
+                          Detalles de la cita
+                        </p>
+                        <p
+                          className="text-muted"
+                          style={{
+                            fontSize: "0.8125rem",
+                            marginBottom: 4,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} /> {b.booking_date}
+                        </p>
+                        <p
+                          className="text-muted"
+                          style={{
+                            fontSize: "0.8125rem",
+                            marginBottom: 4,
+                          }}
+                        >
+                          ⏰ {b.start_time?.slice(0, 5)} –{" "}
+                          {b.end_time?.slice(0, 5)} (
+                          {formatDuration(b.total_duration_minutes)})
+                        </p>
+                        {b.confirmed_at && (
+                          <p
+                            className="text-muted"
+                            style={{
+                              fontSize: "0.8125rem",
+                              marginBottom: 4,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <img src="/Activo.svg" alt="Confirmada" style={{ width: 14, height: 14 }} /> Confirmada:{" "}
+                            {new Date(b.confirmed_at).toLocaleString(
+                              "es-PE"
+                            )}
+                          </p>
+                        )}
+                        <div style={{ marginTop: 8 }}>
+                          <label
+                            className="label"
+                            style={{ fontSize: "0.75rem" }}
+                          >
+                            Asignar Empleado:
+                          </label>
+                          <select
+                            className="select"
+                            style={{
+                              padding: "4px 8px",
+                              fontSize: "0.8125rem",
+                              maxWidth: 220,
+                            }}
+                            value={b.assigned_employee_id || ""}
+                            onChange={(e) =>
+                              updateBooking(b.id, {
+                                assigned_employee_id:
+                                  e.target.value || null,
+                              })
+                            }
+                          >
+                            <option value="">Sin asignar</option>
+                            {employees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.first_name} {emp.last_name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* WhatsApp Contact */}
+                      <div>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "var(--color-text-muted)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                            marginBottom: 8,
+                          }}
+                        >
+                          Contacto WhatsApp
+                        </p>
+                        {b.client_phone ? (
+                          <div>
+                            <p
+                              className="text-muted"
                               style={{
-                                padding: "4px 9px",
-                                fontSize: "0.73rem",
-                                fontWeight: 700,
+                                fontSize: "0.8125rem",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Teléfono: <strong>{b.client_phone}</strong>
+                            </p>
+                            <a
+                              href={`https://wa.me/51${b.client_phone.replace(
+                                /\D/g,
+                                ""
+                              )}?text=${encodeURIComponent(
+                                `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} programada para el ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm"
+                              style={{
                                 display: "inline-flex",
                                 alignItems: "center",
-                                gap: 4,
-                                ...(b.payment_status === "total"
-                                  ? {
-                                      background: "rgba(106, 153, 78, 0.15)",
-                                      color: "var(--color-success)",
-                                      borderColor: "rgba(106, 153, 78, 0.35)",
-                                    }
-                                  : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                                  ? {
-                                      background: "rgba(245, 158, 11, 0.15)",
-                                      color: "var(--color-warning, #f59e0b)",
-                                      borderColor: "rgba(245, 158, 11, 0.4)",
-                                    }
-                                  : {}),
-                              }}
-                              title={
-                                b.payment_status === "total"
-                                  ? "Ver pago registrado"
-                                  : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                                  ? `Completar saldo pendiente (S/ ${((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)})`
-                                  : "Registrar pago de adelanto o total"
-                              }
-                              id={`pay-btn-${b.id}`}
-                            >
-                              {b.payment_status === "total"
-                                ? "✅ Pagado"
-                                : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                                ? "💳 Pagar Saldo"
-                                : "💳 Pagar"}
-                            </button>
-                          )}
-
-                          {/* Botón: Eliminar (solo admin, el recepcionista no lo ve) */}
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteBookingPermanently(b);
-                              }}
-                              disabled={actionLoading === b.id}
-                              className="btn btn-ghost btn-sm"
-                              title="Eliminar reserva definitivamente"
-                              style={{
-                                padding: "4px 7px",
-                                color: "var(--color-error)",
-                                borderColor: "rgba(184,59,46,0.3)",
+                                gap: 6,
+                                padding: "6px 14px",
                                 fontSize: "0.8125rem",
+                                background: "#25D366",
+                                color: "#FFFFFF",
+                                border: "none",
+                                borderRadius: "var(--radius-sm)",
+                                fontWeight: 600,
+                                textDecoration: "none",
                               }}
-                              id={`delete-btn-${b.id}`}
                             >
-                              🗑️
-                            </button>
-                          )}
-
-                          <span
-                            style={{
-                              color: "var(--color-text-muted)",
-                              fontSize: "0.75rem",
-                              transition: "transform var(--transition-fast)",
-                              display: "inline-block",
-                              transform:
-                                expandedId === b.id
-                                  ? "rotate(180deg)"
-                                  : "rotate(0deg)",
-                              marginLeft: 2,
-                            }}
-                            title="Ver detalles de la reserva"
+                              <img
+                                src="/icons/whatsApp.svg"
+                                alt="WhatsApp"
+                                style={{ width: 16, height: 16 }}
+                              />
+                              <span>Abrir Chat WhatsApp</span>
+                            </a>
+                          </div>
+                        ) : (
+                          <p
+                            className="text-muted"
+                            style={{ fontSize: "0.8125rem" }}
                           >
-                            ▼
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
+                            Sin teléfono registrado
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-                    {/* Expanded Detail Row */}
-                    {expandedId === b.id && (
-                      <tr key={`${b.id}-detail`}>
-                        <td
-                          colSpan={10}
+                    {/* Action Buttons in Expanded Drawer */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        paddingTop: 16,
+                        borderTop: "1px solid var(--color-border)",
+                        alignItems: "center",
+                      }}
+                    >
+                      {/* Action 3: Cancel appointment */}
+                      {isAdmin &&
+                        b.status !== "cancelada" &&
+                        b.status !== "completada" && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (
+                                confirm(
+                                  "¿Estás seguro de cancelar esta reserva?"
+                                )
+                              ) {
+                                updateBooking(b.id, {
+                                  status: "cancelada",
+                                });
+                              }
+                            }}
+                            disabled={actionLoading === b.id}
+                            className="btn btn-danger btn-sm"
+                            style={{ padding: "8px 16px" }}
+                          >
+                            ✕ Cancelar Reserva
+                          </button>
+                        )}
+
+                      {b.status === "completada" && (
+                        <span
+                          className="badge badge-gold"
                           style={{
-                            padding: 0,
-                            borderBottom: "1px solid var(--color-border)",
+                            padding: "6px 12px",
+                            fontSize: "0.8125rem",
                           }}
                         >
-                          <div
-                            style={{
-                              padding: "16px 18px",
-                              background: "rgba(200,164,92,0.03)",
-                              borderTop: "1px solid var(--color-border)",
-                              animation: "fadeIn 0.2s ease-out",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns:
-                                  "repeat(auto-fit, minmax(180px, 1fr))",
-                                gap: 16,
-                                marginBottom: 18,
-                              }}
-                            >
-                              {/* Client Info */}
-                              <div>
-                                <p
-                                  style={{
-                                    fontSize: "0.6875rem",
-                                    fontWeight: 700,
-                                    color: "var(--color-text-muted)",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                  Datos del cliente
-                                </p>
-                                <p
-                                  style={{
-                                    fontSize: "0.875rem",
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  <strong>
-                                    {b.client_first_name} {b.client_last_name}
-                                  </strong>
-                                </p>
-                                {b.client_email && (
-                                  <p
-                                    className="text-muted"
-                                    style={{
-                                      fontSize: "0.8125rem",
-                                      marginBottom: 2,
-                                    }}
-                                  >
-                                    ✉️ {b.client_email}
-                                  </p>
-                                )}
-                                {b.client_phone && (
-                                  <p
-                                    className="text-muted"
-                                    style={{
-                                      fontSize: "0.8125rem",
-                                      marginBottom: 2,
-                                    }}
-                                  >
-                                    📱 {b.client_phone}
-                                  </p>
-                                )}
-                                {b.client_dni && (
-                                  <p
-                                    className="text-muted"
-                                    style={{ fontSize: "0.8125rem" }}
-                                  >
-                                    🪪 DNI: {b.client_dni}
-                                  </p>
-                                )}
-                              </div>
+                          ✨ Servicio Completado y Cobrado
+                        </span>
+                      )}
 
-                              {/* Booking Info */}
-                              <div>
-                                <p
-                                  style={{
-                                    fontSize: "0.6875rem",
-                                    fontWeight: 700,
-                                    color: "var(--color-text-muted)",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                  Detalles de la cita
-                                </p>
-                                <p
-                                  className="text-muted"
-                                  style={{
-                                    fontSize: "0.8125rem",
-                                    marginBottom: 4,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
-                                >
-                                  <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} /> {b.booking_date}
-                                </p>
-                                <p
-                                  className="text-muted"
-                                  style={{
-                                    fontSize: "0.8125rem",
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  ⏰ {b.start_time?.slice(0, 5)} –{" "}
-                                  {b.end_time?.slice(0, 5)} (
-                                  {formatDuration(b.total_duration_minutes)})
-                                </p>
-                                {b.confirmed_at && (
-                                  <p
-                                    className="text-muted"
-                                    style={{
-                                      fontSize: "0.8125rem",
-                                      marginBottom: 4,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                    }}
-                                  >
-                                    <img src="/Activo.svg" alt="Confirmada" style={{ width: 14, height: 14 }} /> Confirmada:{" "}
-                                    {new Date(b.confirmed_at).toLocaleString(
-                                      "es-PE"
-                                    )}
-                                  </p>
-                                )}
-                                <div style={{ marginTop: 8 }}>
-                                  <label
-                                    className="label"
-                                    style={{ fontSize: "0.75rem" }}
-                                  >
-                                    Asignar Empleado:
-                                  </label>
-                                  <select
-                                    className="select"
-                                    style={{
-                                      padding: "4px 8px",
-                                      fontSize: "0.8125rem",
-                                      maxWidth: 220,
-                                    }}
-                                    value={b.assigned_employee_id || ""}
-                                    onChange={(e) =>
-                                      updateBooking(b.id, {
-                                        assigned_employee_id:
-                                          e.target.value || null,
-                                      })
-                                    }
-                                  >
-                                    <option value="">Sin asignar</option>
-                                    {employees.map((emp) => (
-                                      <option key={emp.id} value={emp.id}>
-                                        {emp.first_name} {emp.last_name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-
-                              {/* WhatsApp Contact */}
-                              <div>
-                                <p
-                                  style={{
-                                    fontSize: "0.6875rem",
-                                    fontWeight: 700,
-                                    color: "var(--color-text-muted)",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                  Contacto WhatsApp
-                                </p>
-                                {b.client_phone ? (
-                                  <div>
-                                    <p
-                                      className="text-muted"
-                                      style={{
-                                        fontSize: "0.8125rem",
-                                        marginBottom: 6,
-                                      }}
-                                    >
-                                      Teléfono: <strong>{b.client_phone}</strong>
-                                    </p>
-                                    <a
-                                      href={`https://wa.me/51${b.client_phone.replace(
-                                        /\D/g,
-                                        ""
-                                      )}?text=${encodeURIComponent(
-                                        `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} programada para el ${b.booking_date} a las ${b.start_time?.slice(0, 5)}.`
-                                      )}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="btn btn-sm"
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: 6,
-                                        padding: "6px 14px",
-                                        fontSize: "0.8125rem",
-                                        background: "#25D366",
-                                        color: "#FFFFFF",
-                                        border: "none",
-                                        borderRadius: "var(--radius-sm)",
-                                        fontWeight: 600,
-                                        textDecoration: "none",
-                                      }}
-                                    >
-                                      <img
-                                        src="/icons/whatsApp.svg"
-                                        alt="WhatsApp"
-                                        style={{ width: 16, height: 16 }}
-                                      />
-                                      <span>Abrir Chat WhatsApp</span>
-                                    </a>
-                                  </div>
-                                ) : (
-                                  <p
-                                    className="text-muted"
-                                    style={{ fontSize: "0.8125rem" }}
-                                  >
-                                    Sin teléfono registrado
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Action Buttons in Expanded Drawer */}
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 10,
-                                flexWrap: "wrap",
-                                paddingTop: 16,
-                                borderTop: "1px solid var(--color-border)",
-                                alignItems: "center",
-                              }}
-                            >
-                              {/* Action 3: Cancel appointment */}
-                              {isAdmin &&
-                                b.status !== "cancelada" &&
-                                b.status !== "completada" && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (
-                                        confirm(
-                                          "¿Estás seguro de cancelar esta reserva?"
-                                        )
-                                      ) {
-                                        updateBooking(b.id, {
-                                          status: "cancelada",
-                                        });
-                                      }
-                                    }}
-                                    disabled={actionLoading === b.id}
-                                    className="btn btn-danger btn-sm"
-                                    style={{ padding: "8px 16px" }}
-                                  >
-                                    ✕ Cancelar Reserva
-                                  </button>
-                                )}
-
-                              {b.status === "completada" && (
-                                <span
-                                  className="badge badge-gold"
-                                  style={{
-                                    padding: "6px 12px",
-                                    fontSize: "0.8125rem",
-                                  }}
-                                >
-                                  ✨ Servicio Completado y Cobrado
-                                </span>
-                              )}
-
-                              {/* Action 4: Delete Permanently */}
-                              {isAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteBookingPermanently(b);
-                                  }}
-                                  disabled={actionLoading === b.id}
-                                  className="btn btn-ghost btn-sm"
-                                  style={{
-                                    color: "var(--color-error)",
-                                    borderColor: "rgba(184,59,46,0.3)",
-                                    marginLeft: "auto",
-                                  }}
-                                >
-                                  {actionLoading === b.id
-                                    ? "Eliminando..."
-                                    : "🗑️ Eliminar Definitivamente"}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+                      {/* Action 4: Delete Permanently */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteBookingPermanently(b);
+                          }}
+                          disabled={actionLoading === b.id}
+                          className="btn btn-ghost btn-sm"
+                          style={{
+                            color: "var(--color-error)",
+                            borderColor: "rgba(184,59,46,0.3)",
+                            marginLeft: "auto",
+                          }}
+                        >
+                          {actionLoading === b.id
+                            ? "Eliminando..."
+                            : "🗑️ Eliminar Definitivamente"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
 

@@ -117,6 +117,32 @@ a:hover {
    Table Scroll & Sticky Actions Column System
    ============================================================ */
 
+.booking-row-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(200, 164, 92, 0.45) rgba(15, 12, 10, 0.7);
+}
+
+.booking-row-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.booking-row-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 12, 10, 0.7);
+  border-radius: 3px;
+}
+
+.booking-row-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, rgba(153, 123, 60, 0.5), rgba(200, 164, 92, 0.8), rgba(228, 202, 136, 0.5));
+  border-radius: 3px;
+}
+
+.booking-row-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary, #C8A45C);
+}
+
 .table-responsive-container {
   width: 100%;
   overflow-x: auto;
@@ -124,16 +150,10 @@ a:hover {
   position: relative;
   scrollbar-width: thin;
   scrollbar-color: rgba(200, 164, 92, 0.45) rgba(15, 12, 10, 0.85);
-  cursor: grab;
-}
-
-.table-responsive-container.is-dragging {
-  cursor: grabbing !important;
-  user-select: none;
 }
 
 .table-responsive-container::-webkit-scrollbar {
-  height: 9px;
+  height: 8px;
   width: 8px;
 }
 

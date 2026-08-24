@@ -274,7 +274,10 @@ export async function POST(request: NextRequest) {
       const bonusResult = calculateBonusMinutes(now.toISOString(), peruDate, bonusRules);
 
       // Registrar check_out y bonus_minutes
-      const { data: updatedAttendance, error: updateError } = await admin
+      let updatedAttendance: any = null;
+      let updateError: any = null;
+
+      const fullUpdateRes = await admin
         .from("employee_attendances")
         .update({
           check_out: now.toISOString(),
@@ -285,6 +288,28 @@ export async function POST(request: NextRequest) {
         .eq("id", attendanceRecord.id)
         .select()
         .single();
+
+      if (fullUpdateRes.error) {
+        // Si hay un error de schema cache o columna no encontrada, intentar fallback resiliente
+        console.warn("Retrying attendance checkout with minimal payload due to:", fullUpdateRes.error);
+        const fallbackRes = await admin
+          .from("employee_attendances")
+          .update({
+            check_out: now.toISOString(),
+            updated_at: now.toISOString(),
+          })
+          .eq("id", attendanceRecord.id)
+          .select()
+          .single();
+
+        if (fallbackRes.error) {
+          updateError = fallbackRes.error;
+        } else {
+          updatedAttendance = fallbackRes.data;
+        }
+      } else {
+        updatedAttendance = fullUpdateRes.data;
+      }
 
       if (updateError) {
         const dbMsg = getErrorMessage(updateError);

@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert asistencia para ese empleado y fecha
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("employee_attendances")
       .upsert(
         {
@@ -251,6 +251,29 @@ export async function POST(request: NextRequest) {
       )
       .select()
       .single();
+
+    if (error && (error.message?.includes("bonus_calculation_type") || error.message?.includes("bonus_minutes"))) {
+      const fallbackRes = await admin
+        .from("employee_attendances")
+        .upsert(
+          {
+            employee_id,
+            date,
+            check_in,
+            check_out: check_out || null,
+            status: validStatus,
+            notes: notes || null,
+            entry_justification: entry_justification ? String(entry_justification).trim() || null : null,
+            exit_justification: exit_justification ? String(exit_justification).trim() || null : null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "employee_id,date" }
+        )
+        .select()
+        .single();
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
 
     if (error) throw error;
 
@@ -324,12 +347,25 @@ export async function PUT(request: NextRequest) {
       updatePayload.exit_justification = exit_justification ? String(exit_justification).trim() || null : null;
     }
 
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("employee_attendances")
       .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
+
+    if (error && (error.message?.includes("bonus_calculation_type") || error.message?.includes("bonus_minutes"))) {
+      delete updatePayload.bonus_minutes;
+      delete updatePayload.bonus_calculation_type;
+      const fallbackRes = await admin
+        .from("employee_attendances")
+        .update(updatePayload)
+        .eq("id", id)
+        .select()
+        .single();
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
 
     if (error) throw error;
 
