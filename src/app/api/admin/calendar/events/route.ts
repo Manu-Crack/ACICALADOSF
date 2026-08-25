@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Cargar Reservas de Clientes (bookings)
     if (typesFilter.includes("booking")) {
-      let bQuery = admin
+      const bQuery = admin
         .from("bookings")
         .select(`
           id,
@@ -93,18 +93,17 @@ export async function GET(request: NextRequest) {
             type
           ),
           booking_services (
+            id,
+            service_id,
             service_name,
             duration_minutes,
-            service_price_cents
+            service_price_cents,
+            assigned_employee_id
           )
         `)
         .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
         .gte("booking_date", startDate)
         .lte("booking_date", endDate);
-
-      if (employeeId && employeeId !== "all") {
-        bQuery = bQuery.eq("assigned_employee_id", employeeId);
-      }
 
       const { data: bookings, error: bError } = await bQuery;
       if (bError) {
@@ -132,9 +131,12 @@ export async function GET(request: NextRequest) {
           type: string | null;
         } | null;
         booking_services: Array<{
+          id: string;
+          service_id: string;
           service_name: string;
           duration_minutes?: number;
           service_price_cents?: number;
+          assigned_employee_id?: string | null;
         }> | null;
       }
 
@@ -155,53 +157,121 @@ export async function GET(request: NextRequest) {
       };
 
       ((bookings || []) as unknown as RawBookingEvent[]).forEach((b) => {
-        const assignedEmp = b.employees;
-        const empName = assignedEmp
-          ? `${assignedEmp.first_name || ""} ${assignedEmp.last_name || ""}`.trim()
-          : b.assigned_employee_id
-          ? empMap.get(b.assigned_employee_id) || "Sin Asignar"
-          : "Sin Asignar";
-
-        const empSpecialty = assignedEmp?.type
-          ? (assignedEmp.type === "spa" ? "Spa" : assignedEmp.type === "recepcionista" ? "Recepción" : "Barbería")
-          : b.assigned_employee_id
-          ? empSpecialtyMap.get(b.assigned_employee_id)
-          : undefined;
-
         const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim() || "Cliente";
-        const serviceNames = (b.booking_services || [])
-          .map((bs) => bs.service_name || "Servicio")
-          .filter(Boolean);
+        const bServices = b.booking_services || [];
         const cfg = CALENDAR_EVENT_CONFIG.booking;
 
-        const displayServices = serviceNames.length > 0 ? serviceNames : [b.service_type === "spa" ? "Spa" : "Barbería"];
+        // Si no hay booking_services desglosados, tratar como una única reserva
+        if (bServices.length === 0) {
+          const empId = b.assigned_employee_id || "unassigned";
+          if (employeeId && employeeId !== "all" && empId !== employeeId) return;
 
-        events.push({
-          id: `booking-${b.id}`,
-          type: "booking",
-          title: `Cita: ${clientName} (${displayServices.slice(0, 2).join(", ")})`,
-          employee_id: b.assigned_employee_id || "unassigned",
-          employee_name: empName,
-          employee_specialty: empSpecialty,
-          date: b.booking_date,
-          start_time: b.start_time,
-          end_time: b.end_time,
-          status: b.status,
-          status_label: bookingStatusLabels[b.status] || (b.status ? b.status.toUpperCase() : "RESERVA"),
-          badge_class: bookingStatusBadges[b.status] || "badge-neutral",
-          icon: cfg.icon,
-          color: cfg.color,
-          bg_color: cfg.bgColor,
-          border_color: cfg.borderColor,
-          description: `Servicios: ${displayServices.join(", ")} | Total: S/ ${(b.total_price_cents / 100).toFixed(2)}`,
-          details: {
-            booking_code: b.booking_code,
-            client_name: clientName,
-            client_phone: b.client_phone || undefined,
-            services: displayServices,
-            price_cents: b.total_price_cents,
-            payment_status: b.payment_status,
-          },
+          const assignedEmp = b.employees;
+          const empName = assignedEmp
+            ? `${assignedEmp.first_name || ""} ${assignedEmp.last_name || ""}`.trim()
+            : b.assigned_employee_id
+            ? empMap.get(b.assigned_employee_id) || "Sin Asignar"
+            : "Sin Asignar";
+
+          const empSpecialty = assignedEmp?.type
+            ? (assignedEmp.type === "spa" ? "Spa" : assignedEmp.type === "recepcionista" ? "Recepción" : "Barbería")
+            : b.assigned_employee_id
+            ? empSpecialtyMap.get(b.assigned_employee_id)
+            : (b.service_type === "spa" ? "Spa" : "Barbería");
+
+          const displayServices = [b.service_type === "spa" ? "Spa" : "Barbería"];
+
+          events.push({
+            id: `booking-${b.id}`,
+            type: "booking",
+            title: `Cita: ${clientName} (${displayServices.slice(0, 2).join(", ")})`,
+            employee_id: empId,
+            employee_name: empName,
+            employee_specialty: empSpecialty,
+            date: b.booking_date,
+            start_time: b.start_time,
+            end_time: b.end_time,
+            status: b.status,
+            status_label: bookingStatusLabels[b.status] || (b.status ? b.status.toUpperCase() : "RESERVA"),
+            badge_class: bookingStatusBadges[b.status] || "badge-neutral",
+            icon: cfg.icon,
+            color: cfg.color,
+            bg_color: cfg.bgColor,
+            border_color: cfg.borderColor,
+            description: `Servicios: ${displayServices.join(", ")} | Total: S/ ${(b.total_price_cents / 100).toFixed(2)}`,
+            details: {
+              booking_code: b.booking_code,
+              client_name: clientName,
+              client_phone: b.client_phone || undefined,
+              services: displayServices,
+              price_cents: b.total_price_cents,
+              payment_status: b.payment_status,
+            },
+          });
+          return;
+        }
+
+        // Agrupar los servicios de la reserva por colaborador asignado
+        const servicesByEmp = new Map<string, typeof bServices>();
+        bServices.forEach((bs) => {
+          const empId = bs.assigned_employee_id || b.assigned_employee_id || "unassigned";
+          if (!servicesByEmp.has(empId)) {
+            servicesByEmp.set(empId, []);
+          }
+          servicesByEmp.get(empId)!.push(bs);
+        });
+
+        // Generar un evento de calendario por cada colaborador con servicios asignados
+        servicesByEmp.forEach((empServices, empId) => {
+          if (employeeId && employeeId !== "all" && empId !== employeeId) return;
+
+          const empName = empId !== "unassigned"
+            ? empMap.get(empId) || (empId === b.assigned_employee_id && b.employees ? `${b.employees.first_name || ""} ${b.employees.last_name || ""}`.trim() : "Sin Asignar")
+            : "Sin Asignar";
+
+          const empSpecialty = empId !== "unassigned"
+            ? empSpecialtyMap.get(empId)
+            : undefined;
+
+          const serviceNames = empServices
+            .map((bs) => bs.service_name || "Servicio")
+            .filter(Boolean);
+
+          const displayServices = serviceNames.length > 0 ? serviceNames : ["Servicio"];
+          const empServicesPriceCents = empServices.reduce(
+            (sum, bs) => sum + (bs.service_price_cents || 0),
+            0
+          );
+          const priceToShow = empServicesPriceCents > 0 ? empServicesPriceCents : b.total_price_cents;
+          const eventId = servicesByEmp.size > 1 ? `booking-${b.id}-${empId}` : `booking-${b.id}`;
+
+          events.push({
+            id: eventId,
+            type: "booking",
+            title: `Cita: ${clientName} (${displayServices.slice(0, 2).join(", ")})`,
+            employee_id: empId,
+            employee_name: empName,
+            employee_specialty: empSpecialty,
+            date: b.booking_date,
+            start_time: b.start_time,
+            end_time: b.end_time,
+            status: b.status,
+            status_label: bookingStatusLabels[b.status] || (b.status ? b.status.toUpperCase() : "RESERVA"),
+            badge_class: bookingStatusBadges[b.status] || "badge-neutral",
+            icon: cfg.icon,
+            color: cfg.color,
+            bg_color: cfg.bgColor,
+            border_color: cfg.borderColor,
+            description: `Servicios: ${displayServices.join(", ")} | Total: S/ ${(priceToShow / 100).toFixed(2)}`,
+            details: {
+              booking_code: b.booking_code,
+              client_name: clientName,
+              client_phone: b.client_phone || undefined,
+              services: displayServices,
+              price_cents: priceToShow,
+              payment_status: b.payment_status,
+            },
+          });
         });
       });
     }

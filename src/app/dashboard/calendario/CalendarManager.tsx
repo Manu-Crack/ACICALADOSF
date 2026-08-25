@@ -196,7 +196,9 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
 
               if (updated?.id) {
                 if (updated.status === "expirada") {
-                  setEvents((prev) => prev.filter((ev) => ev.id !== `booking-${updated.id}`));
+                  setEvents((prev) =>
+                    prev.filter((ev) => ev.id !== `booking-${updated.id}` && !ev.id.startsWith(`booking-${updated.id}-`))
+                  );
                   return;
                 }
 
@@ -210,7 +212,7 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
 
                 setEvents((prev) =>
                   prev.map((ev) => {
-                    if (ev.id === `booking-${updated.id}`) {
+                    if (ev.id === `booking-${updated.id}` || ev.id.startsWith(`booking-${updated.id}-`)) {
                       const newStatus = updated.status || ev.status;
                       return {
                         ...ev,
@@ -243,11 +245,25 @@ export function CalendarManager({ userRole = "admin" }: CalendarManagerProps) {
               console.log("[Supabase Realtime: Calendar] ⚡ DELETE en bookings:", payload.old);
               const deletedId = (payload.old as { id?: string })?.id;
               if (deletedId) {
-                setEvents((prev) => prev.filter((ev) => ev.id !== `booking-${deletedId}`));
+                setEvents((prev) =>
+                  prev.filter((ev) => ev.id !== `booking-${deletedId}` && !ev.id.startsWith(`booking-${deletedId}-`))
+                );
               }
               if (loadEventsRef.current) {
                 loadEventsRef.current(true);
               }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "booking_services",
+            },
+            () => {
+              console.log("[Supabase Realtime: Calendar] ⚡ Cambio en booking_services");
+              if (loadEventsRef.current) loadEventsRef.current(true);
             }
           )
           .on(

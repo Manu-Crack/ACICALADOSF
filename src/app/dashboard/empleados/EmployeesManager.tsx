@@ -44,6 +44,12 @@ type BookingServiceItem = {
   service_name: string;
   service_price_cents: number;
   duration_minutes: number;
+  assigned_employee_id?: string | null;
+  services?: {
+    id: string;
+    name: string;
+    type: string;
+  } | null;
 };
 
 type AssignedBooking = {
@@ -57,6 +63,7 @@ type AssignedBooking = {
   total_price_cents: number;
   total_duration_minutes: number;
   assigned_employee_id: string | null;
+  service_type?: string;
   client_first_name: string;
   client_last_name: string;
   client_phone: string | null;
@@ -161,6 +168,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
           total_price_cents,
           total_duration_minutes,
           assigned_employee_id,
+          service_type,
           client_first_name,
           client_last_name,
           client_phone,
@@ -170,7 +178,13 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             service_id,
             service_name,
             service_price_cents,
-            duration_minutes
+            duration_minutes,
+            assigned_employee_id,
+            services:service_id (
+              id,
+              name,
+              type
+            )
           )
         `
         )
@@ -281,10 +295,18 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
     };
   }, [supabase]);
 
-  // Employee Map
-  const employeeMap = new Map(
-    employees.map((e) => [e.id, `${e.first_name} ${e.last_name}`])
-  );
+  // Mapas auxiliares para resolución de nombres y rubros
+  const employeeMap = useMemo(() => {
+    return new Map(employees.map((e) => [e.id, `${e.first_name || ""} ${e.last_name || ""}`.trim()]));
+  }, [employees]);
+
+  const employeeTypeMap = useMemo(() => {
+    return new Map(employees.map((e) => [e.id, e.type]));
+  }, [employees]);
+
+  const serviceTypeMap = useMemo(() => {
+    return new Map(services.map((s) => [s.id, s.type]));
+  }, [services]);
 
   // Switch to assignments tab for a specific employee
   function viewEmployeeAssignments(employeeId: string) {
@@ -491,50 +513,107 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
     return name.includes(searchTerm.toLowerCase());
   });
 
+
+  // Determinar si un servicio específico le corresponde a un colaborador dado
+  const isServiceAssignedToEmployee = useCallback(
+    (svc: BookingServiceItem, booking: AssignedBooking, empId: string): boolean => {
+      // 1. Asignación directa en el ítem de servicio
+      if (svc.assigned_employee_id) {
+        return svc.assigned_employee_id === empId;
+      }
+      // 2. Si no tiene asignación directa, verificar asignación principal de la reserva
+      if (booking.assigned_employee_id === empId) {
+        const empType = employeeTypeMap.get(empId);
+        const svcType = svc.services?.type || serviceTypeMap.get(svc.service_id);
+        // Si el empleado tiene rubro ("barberia" o "spa"), asegurar que coincida con el rubro del servicio
+        if (empType && svcType && empType !== "recepcionista") {
+          return empType === svcType;
+        }
+        return true;
+      }
+      return false;
+    },
+    [employeeTypeMap, serviceTypeMap]
+  );
+
+  // Obtener los servicios de una reserva correspondientes al filtro de colaborador activo
+  const getBookingServicesForEmployee = useCallback(
+    (b: AssignedBooking, empFilter: string): BookingServiceItem[] => {
+      const allServices = b.booking_services || [];
+      if (empFilter === "all") {
+        return allServices;
+      }
+      if (empFilter === "unassigned") {
+        return allServices.filter(
+          (s) => !s.assigned_employee_id && !b.assigned_employee_id
+        );
+      }
+      return allServices.filter((s) => isServiceAssignedToEmployee(s, b, empFilter));
+    },
+    [isServiceAssignedToEmployee]
+  );
+
   // Filtered bookings for Tab 2 (Assigned Services Module)
-  const filteredAssignedBookings = assignedBookings.filter((b) => {
-    if (selectedEmpFilter === "unassigned") {
-      if (b.assigned_employee_id !== null) return false;
-    } else if (selectedEmpFilter !== "all") {
-      if (b.assigned_employee_id !== selectedEmpFilter) return false;
-    }
+  const filteredAssignedBookings = useMemo(() => {
+    return assignedBookings.filter((b) => {
+      if (selectedEmpFilter === "unassigned") {
+        const unassignedServices = getBookingServicesForEmployee(b, "unassigned");
+        const isBookingUnassigned = b.assigned_employee_id === null;
+        if (!isBookingUnassigned && unassignedServices.length === 0) return false;
+      } else if (selectedEmpFilter !== "all") {
+        const empServices = getBookingServicesForEmployee(b, selectedEmpFilter);
+        if (empServices.length === 0) return false;
+      }
 
-    if (assignmentStatusFilter !== "all" && b.status !== assignmentStatusFilter) {
-      return false;
-    }
+      if (assignmentStatusFilter !== "all" && b.status !== assignmentStatusFilter) {
+        return false;
+      }
 
-    if (assignmentDateFilter && b.booking_date !== assignmentDateFilter) {
-      return false;
-    }
+      if (assignmentDateFilter && b.booking_date !== assignmentDateFilter) {
+        return false;
+      }
 
-    if (assignmentSearch) {
-      const term = assignmentSearch.toLowerCase();
-      const code = b.booking_code.toLowerCase();
-      const client = `${b.client_first_name} ${b.client_last_name}`.toLowerCase();
-      const phone = (b.client_phone || "").toLowerCase();
-      const hasServiceMatch = b.booking_services?.some((s) =>
-        s.service_name.toLowerCase().includes(term)
-      );
-      return (
-        code.includes(term) ||
-        client.includes(term) ||
-        phone.includes(term) ||
-        hasServiceMatch
-      );
-    }
+      if (assignmentSearch) {
+        const term = assignmentSearch.toLowerCase();
+        const code = b.booking_code.toLowerCase();
+        const client = `${b.client_first_name} ${b.client_last_name}`.toLowerCase();
+        const phone = (b.client_phone || "").toLowerCase();
+        const targetServices = getBookingServicesForEmployee(b, selectedEmpFilter);
+        const hasServiceMatch = targetServices.some((s) =>
+          s.service_name.toLowerCase().includes(term)
+        );
+        return (
+          code.includes(term) ||
+          client.includes(term) ||
+          phone.includes(term) ||
+          hasServiceMatch
+        );
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [
+    assignedBookings,
+    selectedEmpFilter,
+    assignmentStatusFilter,
+    assignmentDateFilter,
+    assignmentSearch,
+    getBookingServicesForEmployee,
+  ]);
 
   // Today string for calculations
   const todayStr = new Date().toISOString().split("T")[0];
 
   // Stats for the selected employee in Tab 2
-  const selectedEmpBookings = assignedBookings.filter((b) => {
-    if (selectedEmpFilter === "all") return true;
-    if (selectedEmpFilter === "unassigned") return b.assigned_employee_id === null;
-    return b.assigned_employee_id === selectedEmpFilter;
-  });
+  const selectedEmpBookings = useMemo(() => {
+    return assignedBookings.filter((b) => {
+      if (selectedEmpFilter === "all") return true;
+      if (selectedEmpFilter === "unassigned") {
+        return b.assigned_employee_id === null || getBookingServicesForEmployee(b, "unassigned").length > 0;
+      }
+      return getBookingServicesForEmployee(b, selectedEmpFilter).length > 0;
+    });
+  }, [assignedBookings, selectedEmpFilter, getBookingServicesForEmployee]);
 
   const empTotalAssignments = selectedEmpBookings.length;
   const empTodayAssignments = selectedEmpBookings.filter(
@@ -544,9 +623,18 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
     (b) => b.status === "completada"
   ).length;
 
-  const empTotalRevenue = selectedEmpBookings
-    .filter((b) => b.status === "completada" || b.payment_status === "total")
-    .reduce((sum, b) => sum + b.total_price_cents, 0);
+  const empTotalRevenue = useMemo(() => {
+    return selectedEmpBookings
+      .filter((b) => b.status === "completada" || b.payment_status === "total")
+      .reduce((sum, b) => {
+        if (selectedEmpFilter === "all") {
+          return sum + b.total_price_cents;
+        }
+        const targetServices = getBookingServicesForEmployee(b, selectedEmpFilter);
+        const targetSum = targetServices.reduce((sSum, s) => sSum + (s.service_price_cents || 0), 0);
+        return sum + (targetSum > 0 ? targetSum : b.total_price_cents);
+      }, 0);
+  }, [selectedEmpBookings, selectedEmpFilter, getBookingServicesForEmployee]);
 
   const totalEmployees = employees.length;
   const spaCount = employees.filter((e) => e.type === "spa").length;
@@ -558,8 +646,33 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
   const handleExportAgendaPdf = () => {
     try {
       setIsExportingPdf(true);
+      const preparedBookings = filteredAssignedBookings.map((b) => {
+        const targetServices = getBookingServicesForEmployee(b, selectedEmpFilter);
+        const targetDuration =
+          targetServices.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) ||
+          b.total_duration_minutes;
+        const targetPrice =
+          selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned"
+            ? targetServices.reduce((sum, s) => sum + (s.service_price_cents || 0), 0) || b.total_price_cents
+            : b.total_price_cents;
+        return {
+          ...b,
+          total_duration_minutes: targetDuration,
+          total_price_cents: targetPrice,
+          assigned_employee_id:
+            selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned"
+              ? selectedEmpFilter
+              : b.assigned_employee_id,
+          booking_services: targetServices.map((s) => ({
+            service_name: s.service_name,
+            service_price_cents: s.service_price_cents,
+            duration_minutes: s.duration_minutes,
+          })),
+        };
+      });
+
       generateEmployeeAgendaPdf({
-        bookings: filteredAssignedBookings,
+        bookings: preparedBookings,
         employees,
         selectedEmployeeId: selectedEmpFilter,
         dateFilter: assignmentDateFilter,
@@ -1248,12 +1361,13 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                 <option value="unassigned">⚠️ Citas Sin Asignar</option>
                 <optgroup label="Especialistas y Barberos">
                   {employees.map((emp) => {
-                    const count = assignedBookings.filter(
-                      (b) => b.assigned_employee_id === emp.id && b.status !== "cancelada"
-                    ).length;
+                    const count = assignedBookings.filter((b) => {
+                      if (b.status === "cancelada") return false;
+                      return getBookingServicesForEmployee(b, emp.id).length > 0;
+                    }).length;
                     return (
                       <option key={emp.id} value={emp.id}>
-                        {emp.type === "barberia" ? "💈" : "Spa:"} {emp.first_name}{" "}
+                        {emp.type === "barberia" ? "💈" : "💆 Spa:"} {emp.first_name}{" "}
                         {emp.last_name} ({count} citas)
                       </option>
                     );
@@ -1362,9 +1476,23 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {filteredAssignedBookings.map((b) => {
-                const assignedEmpName = b.assigned_employee_id
-                  ? employeeMap.get(b.assigned_employee_id) || "Desconocido"
-                  : "Sin asignar";
+                const displayedServices = getBookingServicesForEmployee(b, selectedEmpFilter);
+                const targetEmpName =
+                  selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned"
+                    ? employeeMap.get(selectedEmpFilter) || "Especialista"
+                    : b.assigned_employee_id
+                    ? employeeMap.get(b.assigned_employee_id) || "Desconocido"
+                    : "Sin asignar";
+
+                const displayedDuration =
+                  displayedServices.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) ||
+                  b.total_duration_minutes ||
+                  30;
+
+                const displayedPriceCents =
+                  selectedEmpFilter !== "all" && selectedEmpFilter !== "unassigned"
+                    ? displayedServices.reduce((sum, s) => sum + (s.service_price_cents || 0), 0) || b.total_price_cents
+                    : b.total_price_cents;
 
                 return (
                   <div
@@ -1421,7 +1549,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                             style={{
                               fontSize: "0.875rem",
                               fontWeight: 700,
-                              color: b.assigned_employee_id
+                              color: targetEmpName !== "Sin asignar"
                                 ? "#FFFFFF"
                                 : "var(--color-warning)",
                               display: "inline-flex",
@@ -1431,7 +1559,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                           >
                             👤 Trabajador asignado:{" "}
                             <strong style={{ color: "var(--color-primary)" }}>
-                              {assignedEmpName}
+                              {targetEmpName}
                             </strong>
                           </span>
                         </div>
@@ -1447,7 +1575,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                             ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
                           </span>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(b.total_duration_minutes || 30)}
+                            <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(displayedDuration)}
                           </span>
                         </p>
                       </div>
@@ -1489,10 +1617,10 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                           marginBottom: 8,
                         }}
                       >
-                        ✂️ Servicios Asignados ({b.booking_services?.length || 0}):
+                        ✂️ Servicios Asignados ({displayedServices.length}):
                       </p>
 
-                      {b.booking_services && b.booking_services.length > 0 ? (
+                      {displayedServices.length > 0 ? (
                         <div
                           style={{
                             display: "grid",
@@ -1501,40 +1629,58 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                             gap: 8,
                           }}
                         >
-                          {b.booking_services.map((svc) => (
-                            <div
-                              key={svc.id}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                padding: "6px 12px",
-                                background: "rgba(255,255,255,0.04)",
-                                borderRadius: "var(--radius-sm)",
-                                border: "1px solid var(--color-border)",
-                                fontSize: "0.8125rem",
-                              }}
-                            >
-                              <div>
-                                <span style={{ fontWeight: 600, color: "#FFFFFF" }}>
-                                  {svc.service_name}
-                                </span>
-                                <span
-                                  className="text-muted"
-                                  style={{ fontSize: "0.75rem", marginLeft: 6 }}
-                                >
-                                  ({formatDuration(svc.duration_minutes)})
-                                </span>
+                          {displayedServices.map((svc) => {
+                            const svcWorkerName = svc.assigned_employee_id
+                              ? employeeMap.get(svc.assigned_employee_id)
+                              : null;
+
+                            return (
+                              <div
+                                key={svc.id}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "6px 12px",
+                                  background: "rgba(255,255,255,0.04)",
+                                  borderRadius: "var(--radius-sm)",
+                                  border: "1px solid var(--color-border)",
+                                  fontSize: "0.8125rem",
+                                }}
+                              >
+                                <div>
+                                  <span style={{ fontWeight: 600, color: "#FFFFFF" }}>
+                                    {svc.service_name}
+                                  </span>
+                                  <span
+                                    className="text-muted"
+                                    style={{ fontSize: "0.75rem", marginLeft: 6 }}
+                                  >
+                                    ({formatDuration(svc.duration_minutes)})
+                                  </span>
+                                  {selectedEmpFilter === "all" && svcWorkerName && (
+                                    <span
+                                      style={{
+                                        fontSize: "0.7rem",
+                                        color: "var(--color-primary)",
+                                        display: "block",
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      👤 {svcWorkerName}
+                                    </span>
+                                  )}
+                                </div>
+                                <strong style={{ color: "var(--color-primary)" }}>
+                                  S/ {(svc.service_price_cents / 100).toFixed(2)}
+                                </strong>
                               </div>
-                              <strong style={{ color: "var(--color-primary)" }}>
-                                S/ {(svc.service_price_cents / 100).toFixed(2)}
-                              </strong>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-muted" style={{ fontSize: "0.8125rem" }}>
-                          Sin servicios detallados
+                          Sin servicios detallados para este trabajador
                         </p>
                       )}
                     </div>
@@ -1562,7 +1708,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                               /\D/g,
                               ""
                             )}?text=${encodeURIComponent(
-                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)} con ${assignedEmpName}.`
+                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)} con ${targetEmpName}.`
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -1599,7 +1745,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                             color: "var(--color-primary)",
                           }}
                         >
-                          Total: S/ {(b.total_price_cents / 100).toFixed(2)}
+                          Total: S/ {(displayedPriceCents / 100).toFixed(2)}
                         </span>
                       </div>
                     </div>
