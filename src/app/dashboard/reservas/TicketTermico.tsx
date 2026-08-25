@@ -65,12 +65,15 @@ export function TicketTermico({
     };
   }, [booking]);
 
+  const clientFullName = useMemo(() => {
+    if (!booking) return "";
+    return `${booking.client_first_name || ""} ${booking.client_last_name || ""}`.trim();
+  }, [booking]);
+
   const items = useMemo(() => {
     if (booking?.booking_services && booking.booking_services.length > 0) {
       return booking.booking_services.map((bs, idx) => ({
-        codigo: bs.service_id
-          ? `SERV-${bs.service_id.slice(0, 6).toUpperCase()}`
-          : `SERV-${String(idx + 1).padStart(2, "0")}`,
+        codigo: String(idx + 1).padStart(7, "0"),
         cantidad: 1,
         nombre: bs.service_name,
         precio: (bs.service_price_cents / 100).toFixed(2),
@@ -79,7 +82,7 @@ export function TicketTermico({
     if (booking) {
       return [
         {
-          codigo: `SERV-${booking.service_type.toUpperCase()}`,
+          codigo: String(1).padStart(7, "0"),
           cantidad: 1,
           nombre: `Servicio ${
             booking.service_type === "barberia"
@@ -123,6 +126,7 @@ export function TicketTermico({
 
       <div className="meta-data">
         <div>TICKET CORRELATIVO      : {booking.booking_code}</div>
+        <div>CLIENTE         : {clientFullName}</div>
         <br />
         <div>FECHA EMISIÓN : {emissionDate.fecha}</div>
         <div>HORA EMISIÓN  : {emissionDate.hora}</div>
