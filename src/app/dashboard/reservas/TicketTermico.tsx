@@ -162,16 +162,15 @@ export function TicketTermico({
           textAlign: "center",
           fontSize: "9.5px",
           marginTop: "4px",
-          lineHeight: "1.2",
+          lineHeight: "1.25",
           borderBottom: "1px dashed #000000",
           paddingBottom: "5px",
         }}
       >
         <div><strong>R.U.C.:</strong> 10436217574</div>
-        <div>Av. Kimbiri s/n (Frente a la Plaza de Armas)</div>
-        <div>Pichari, VRAEM - Cusco, Perú</div>
-        <div><strong>Tel / WhatsApp:</strong> +51 997 766 828</div>
-        <div><strong>Web:</strong> www.acicalados.com</div>
+        <div>Av. Arriba Perú Nro. 263 - Pichari</div>
+        <div><strong>Telf / WhatsApp:</strong> +51 997 766 828</div>
+        <div>www.spaacicalados.com</div>
       </div>
 
       {/* 3. Identificador de Ticket / Código de Reserva */}
@@ -363,76 +362,90 @@ export function TicketTermico({
         </div>
       </div>
 
-      {/* 7. Slogan y Mensaje de Agradecimiento */}
+      {/* 7. Slogan Oficial y Mensaje de Agradecimiento */}
       <div style={{ textAlign: "center", padding: "6px 0 4px 0" }}>
         <div style={{ fontSize: "11px", fontWeight: 900, textTransform: "uppercase" }}>
           ¡GRACIAS POR TU PREFERENCIA!
         </div>
-        <div style={{ fontSize: "9px", fontStyle: "italic", marginTop: "2px" }}>
-          &quot;Tu estilo y confort en las mejores manos&quot;
-        </div>
-      </div>
-
-      {/* 8. Bloque de Redes Sociales */}
-      <div
-        style={{
-          borderTop: "1px dashed #000000",
-          paddingTop: "5px",
-          marginTop: "3px",
-          fontSize: "8.5px",
-          lineHeight: "1.25",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: "2px", fontSize: "9px" }}>
-          SÍGUENOS EN NUESTRAS REDES:
-        </div>
-        <div>🌐 <strong>Facebook:</strong> @SpaAcicaladosBarberShop</div>
-        <div>📸 <strong>Instagram:</strong> @spaacicaladosbarbershop</div>
-        <div>🎵 <strong>TikTok:</strong> @spa_acicalados</div>
-        <div>▶️ <strong>YouTube:</strong> @AcicaladosSPA</div>
-        <div>💬 <strong>WhatsApp:</strong> +51 997 766 828</div>
-      </div>
-
-      {/* 9. Simulación de Código de Barras / Footer de Comprobante */}
-      <div
-        style={{
-          textAlign: "center",
-          marginTop: "8px",
-          paddingTop: "6px",
-          borderTop: "1px dashed #000000",
-        }}
-      >
-        {/* Gráfico de código de barras CSS */}
         <div
           style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "stretch",
-            height: "26px",
-            gap: "1.5px",
-            margin: "0 auto 4px auto",
-            maxWidth: "180px",
+            fontSize: "9.5px",
+            fontStyle: "italic",
+            marginTop: "3px",
+            lineHeight: "1.25",
+            padding: "0 4px",
           }}
         >
-          {Array.from({ length: 42 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: i % 3 === 0 ? "3px" : i % 2 === 0 ? "2px" : "1px",
-                backgroundColor: "#000000",
-              }}
+          &quot;Verte brillar es nuestro propósito; verte volver, nuestro mayor orgullo&quot;
+        </div>
+      </div>
+
+      {/* 8. Bloque de Redes Sociales con Iconos Locales (/public/icons) */}
+      <div
+        style={{
+          borderTop: "1px dashed #000000",
+          paddingTop: "6px",
+          marginTop: "4px",
+          fontSize: "9px",
+          lineHeight: "1.35",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: "4px", fontSize: "9.5px", textTransform: "uppercase" }}>
+          SÍGUENOS EN NUESTRAS REDES:
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <img
+              src="/icons/Facebook.svg"
+              alt="Facebook"
+              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
             />
-          ))}
+            <span><strong>Facebook:</strong> @SpaAcicaladosBarberShop</span>
+          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <img
+              src="/icons/Instagram.svg"
+              alt="Instagram"
+              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
+            />
+            <span><strong>Instagram:</strong> @spaacicaladosbarbershop</span>
+          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <img
+              src="/icons/Tiktok.svg"
+              alt="TikTok"
+              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
+            />
+            <span><strong>TikTok:</strong> @spa_acicalados</span>
+          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <img
+              src="/icons/Youtube.svg"
+              alt="YouTube"
+              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
+            />
+            <span><strong>YouTube:</strong> @AcicaladosSPA</span>
+          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <img
+              src="/icons/whatsApp.svg"
+              alt="WhatsApp"
+              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
+            />
+            <span><strong>WhatsApp:</strong> +51 997 766 828</span>
+          </div>
         </div>
-        <div style={{ fontSize: "9px", letterSpacing: "2px", fontWeight: 700 }}>
-          *{booking.booking_code}*
-        </div>
-        <div style={{ fontSize: "8px", color: "#444", marginTop: "4px" }}>
+        <div
+          style={{
+            fontSize: "8px",
+            color: "#333333",
+            marginTop: "6px",
+            borderTop: "1px dashed #000000",
+            paddingTop: "4px",
+          }}
+        >
           Comprobante no oficial para control interno y atención de citas.
-        </div>
-        <div style={{ fontSize: "8px", color: "#444" }}>
-          Conserve este ticket como constancia.
         </div>
       </div>
     </div>
