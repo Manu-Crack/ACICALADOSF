@@ -6,6 +6,7 @@ import { formatDuration } from "@/lib/utils/format";
 import { PaymentModal } from "./PaymentModal";
 import { PaymentSettingsModal } from "./PaymentSettingsModal";
 import { NewBookingModal } from "./NewBookingModal";
+import { TicketTermico } from "./TicketTermico";
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHOD_ICONS,
@@ -118,6 +119,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const [paymentModalBooking, setPaymentModalBooking] = useState<BookingSummaryForPayment | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
+  const [ticketBooking, setTicketBooking] = useState<Booking | null>(null);
+  const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -495,6 +498,18 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
       booking_status: b.status,
       payment_method: b.payment_method,
     });
+  }
+
+  // Helper para impresión directa o vista previa de ticket térmico
+  function handlePrintTicket(b: Booking, preview = false) {
+    setTicketBooking(b);
+    if (preview) {
+      setIsTicketModalOpen(true);
+    } else {
+      setTimeout(() => {
+        window.print();
+      }, 120);
+    }
   }
 
   return (
@@ -1286,6 +1301,26 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                           </button>
                         )}
 
+                        {/* Botón rápido: Imprimir Ticket (admin + recepcionista) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePrintTicket(b, false);
+                          }}
+                          className="btn btn-ghost btn-sm"
+                          title="Imprimir ticket térmico físico de 80mm"
+                          style={{
+                            padding: "4px 7px",
+                            color: "var(--color-primary, #C8A45C)",
+                            borderColor: "rgba(200, 164, 92, 0.3)",
+                            fontSize: "0.8125rem",
+                          }}
+                          id={`quick-print-btn-${b.id}`}
+                        >
+                          🖨️
+                        </button>
+
                         {/* Botón: Eliminar (solo admin, el recepcionista no lo ve) */}
                         {isAdmin && (
                           <button
@@ -1690,6 +1725,55 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                         alignItems: "center",
                       }}
                     >
+                      {/* Botón Principal: Imprimir Ticket Térmico (Admin + Recepcionista) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrintTicket(b, false);
+                        }}
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          padding: "8px 15px",
+                          fontSize: "0.8125rem",
+                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          background: "rgba(200, 164, 92, 0.12)",
+                          color: "var(--color-primary, #C8A45C)",
+                          borderColor: "rgba(200, 164, 92, 0.4)",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                        }}
+                        title="Imprimir ticket físico de 80mm para ticketera térmica"
+                        id={`print-ticket-btn-${b.id}`}
+                      >
+                        <span style={{ fontSize: "1rem" }}>🖨️</span>
+                        <span>Imprimir Ticket</span>
+                      </button>
+
+                      {/* Botón: Vista Previa Ticket (Admin + Recepcionista) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrintTicket(b, true);
+                        }}
+                        className="btn btn-ghost btn-sm"
+                        style={{
+                          padding: "8px 12px",
+                          fontSize: "0.78rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                        title="Previsualizar ticket térmico antes de imprimir"
+                        id={`preview-ticket-btn-${b.id}`}
+                      >
+                        <span>👁️</span>
+                        <span>Vista Previa Ticket</span>
+                      </button>
+
                       {/* Action 3: Cancel appointment */}
                       {isAdmin &&
                         b.status !== "cancelada" &&
@@ -1811,6 +1895,14 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           loadBookings(false);
         }}
         employees={employees}
+      />
+
+      {/* Componente de Ticket Térmico de 80mm (Impresión y Modal de Vista Previa) */}
+      <TicketTermico
+        booking={ticketBooking}
+        employeeMap={employeeMap}
+        isOpen={isTicketModalOpen}
+        onClose={() => setIsTicketModalOpen(false)}
       />
     </div>
   );
