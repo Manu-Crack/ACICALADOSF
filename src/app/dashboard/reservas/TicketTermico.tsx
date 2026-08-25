@@ -2,7 +2,6 @@
 
 import React, { useMemo } from "react";
 import type { BookingServiceItem } from "./ReservasManager";
-import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/types/payments";
 
 export interface TicketBookingData {
   id: string;
@@ -46,406 +45,148 @@ interface TicketTermicoProps {
 
 export function TicketTermico({
   booking,
-  employeeMap = new Map(),
   isOpen = false,
   onClose,
 }: TicketTermicoProps) {
-  const emissionDateStr = useMemo(() => {
+  const emissionDate = useMemo(() => {
     const now = new Date();
-    return now.toLocaleString("es-PE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
+    return {
+      fecha: now.toLocaleDateString("es-PE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }),
+      hora: now.toLocaleTimeString("es-PE", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }),
+    };
+  }, [booking]);
+
+  const items = useMemo(() => {
+    if (booking?.booking_services && booking.booking_services.length > 0) {
+      return booking.booking_services.map((bs, idx) => ({
+        codigo: bs.service_id
+          ? `SERV-${bs.service_id.slice(0, 6).toUpperCase()}`
+          : `SERV-${String(idx + 1).padStart(2, "0")}`,
+        cantidad: 1,
+        nombre: bs.service_name,
+        precio: (bs.service_price_cents / 100).toFixed(2),
+      }));
+    }
+    if (booking) {
+      return [
+        {
+          codigo: `SERV-${booking.service_type.toUpperCase()}`,
+          cantidad: 1,
+          nombre: `Servicio ${
+            booking.service_type === "barberia"
+              ? "de Barbería"
+              : booking.service_type === "spa"
+              ? "de Spa"
+              : "Mixto"
+          }`,
+          precio: (booking.total_price_cents / 100).toFixed(2),
+        },
+      ];
+    }
+    return [];
   }, [booking]);
 
   if (!booking) return null;
 
-  const generalEmployee = booking.assigned_employee_id
-    ? employeeMap.get(booking.assigned_employee_id)
-    : null;
+  const totalReserva = (booking.total_price_cents / 100).toFixed(2);
 
-  const generalEmployeeName = generalEmployee
-    ? `${generalEmployee.first_name} ${generalEmployee.last_name}`
-    : "Sin asignar";
-
-  const totalSoles = (booking.total_price_cents / 100).toFixed(2);
-  const paidSoles = ((booking.advance_amount_cents || 0) / 100).toFixed(2);
-  const balanceSoles = (
-    (booking.balance_cents !== undefined
-      ? booking.balance_cents
-      : Math.max(0, booking.total_price_cents - (booking.advance_amount_cents || 0))) / 100
-  ).toFixed(2);
-
-  const isFullPaid =
-    booking.payment_status === "total" ||
-    (booking.advance_amount_cents || 0) >= booking.total_price_cents;
-
-  const isPartialPaid =
-    booking.payment_status === "parcial" ||
-    ((booking.advance_amount_cents || 0) > 0 &&
-      (booking.advance_amount_cents || 0) < booking.total_price_cents);
-
-  const paymentStatusText = isFullPaid
-    ? "PAGADO COMPLETO"
-    : isPartialPaid
-    ? "SALDO PENDIENTE"
-    : "SIN PAGO / PENDIENTE";
-
-  const paymentMethodLabel = booking.payment_method
-    ? PAYMENT_METHOD_LABELS[booking.payment_method as PaymentMethod] || booking.payment_method.toUpperCase()
-    : "NO REGISTRADO";
-
-  const serviceTypeLabel =
-    booking.service_type === "barberia"
-      ? "BARBERÍA"
-      : booking.service_type === "spa"
-      ? "SPA"
-      : "MIXTO";
-
-  // Estructura del contenido del ticket (compartida entre preview e impresión real)
+  // Estructura HTML exacta según la plantilla base
   const ticketContent = (
-    <div
-      className="thermal-ticket-root"
-      style={{
-        width: "100%",
-        maxWidth: "76mm",
-        margin: "0 auto",
-        backgroundColor: "#ffffff",
-        color: "#000000",
-        fontFamily: "'Courier New', Courier, 'Lucida Console', monospace, sans-serif",
-        fontSize: "11px",
-        lineHeight: "1.25",
-        padding: "4mm 2mm 8mm 2mm",
-        boxSizing: "border-box",
-        textAlign: "left",
-      }}
-    >
-      {/* 1. Logotipo oficial B/N en cabecera */}
-      <div style={{ textAlign: "center", marginBottom: "4px" }}>
-        <img
-          src="/BN_acica.png"
-          alt="Acicalados Logo"
-          style={{
-            maxWidth: "140px",
-            width: "70%",
-            height: "auto",
-            margin: "0 auto 4px auto",
-            display: "block",
-            filter: "grayscale(100%) contrast(140%)",
-            imageRendering: "crisp-edges",
-          }}
-        />
-        <div
-          style={{
-            fontSize: "13px",
-            fontWeight: 900,
-            letterSpacing: "0.5px",
-            textTransform: "uppercase",
-            lineHeight: "1.1",
-          }}
-        >
-          SPA ACICALADOS BARBER SHOP
+    <div className="ticket-thermal-body">
+      <div className="header">
+        <div className="divider-solid"></div>
+
+        <div className="logo-container">
+          <img
+            src="/BN_acica.png"
+            alt="Logo Spa Acicalados"
+            className="ticket-logo"
+          />
         </div>
-        <div style={{ fontSize: "9px", fontWeight: 700, marginTop: "2px", letterSpacing: "0.5px" }}>
-          EXCELENCIA EN CORTE & CUIDADO PERSONAL
-        </div>
+
+        <div className="center bold">HUAMANI AZURZA, JORGE ROBERT</div>
+        <div className="center bold">&quot;SPA ACICALADOS BARBER SHOP&quot;</div>
+        <div className="center">RUC: 10436217574</div>
+        <div className="center">Av. Arriba Perú Nro. 263 - Pichari</div>
+        <div className="center">Telf: 997766828 | www.spaacicalados.com</div>
+        <div className="divider-solid"></div>
       </div>
 
-      {/* 2. Datos fiscales y de contacto del negocio */}
-      <div
-        style={{
-          textAlign: "center",
-          fontSize: "9.5px",
-          marginTop: "4px",
-          lineHeight: "1.25",
-          borderBottom: "1px dashed #000000",
-          paddingBottom: "5px",
-        }}
-      >
-        <div><strong>R.U.C.:</strong> 10436217574</div>
-        <div>Av. Arriba Perú Nro. 263 - Pichari</div>
-        <div><strong>Telf / WhatsApp:</strong> +51 997 766 828</div>
-        <div>www.spaacicalados.com</div>
+      <div className="meta-data">
+        <div>TICKET CORRELATIVO      : {booking.booking_code}</div>
+        <br />
+        <div>FECHA EMISIÓN : {emissionDate.fecha}</div>
+        <div>HORA EMISIÓN  : {emissionDate.hora}</div>
       </div>
 
-      {/* 3. Identificador de Ticket / Código de Reserva */}
-      <div
-        style={{
-          textAlign: "center",
-          padding: "5px 0",
-          borderBottom: "1px dashed #000000",
-        }}
-      >
-        <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>
-          TICKET DE VENTA Y RESERVA
-        </div>
-        <div
-          style={{
-            fontSize: "14px",
-            fontWeight: 900,
-            letterSpacing: "1px",
-            margin: "2px 0",
-          }}
-        >
-          #{booking.booking_code}
-        </div>
-        <div style={{ fontSize: "9px", color: "#222" }}>
-          Emisión: {emissionDateStr}
-        </div>
+      <table>
+        <thead>
+          <tr>
+            <th colSpan={2}>CÓDIGO / DETALLE DEL SERVICIO</th>
+            <th className="right">IMPORTE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, idx) => (
+            <React.Fragment key={idx}>
+              <tr>
+                <td colSpan={3} className="item-code">
+                  {item.codigo}
+                </td>
+              </tr>
+              <tr>
+                <td className="td-qty">{item.cantidad} x</td>
+                <td>{item.nombre}</td>
+                <td className="td-price">S/. {item.precio}</td>
+              </tr>
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="total-container">
+        <span>TOTAL A PAGAR:</span>
+        <span>S/. {totalReserva}</span>
       </div>
 
-      {/* 4. Datos de la Cita y del Cliente */}
-      <div
-        style={{
-          padding: "5px 0",
-          fontSize: "10px",
-          lineHeight: "1.3",
-          borderBottom: "1px dashed #000000",
-        }}
-      >
-        <div>
-          <strong>FECHA CITA :</strong> {booking.booking_date}
-        </div>
-        <div>
-          <strong>HORARIO    :</strong> {booking.start_time?.slice(0, 5)} – {booking.end_time?.slice(0, 5)} {booking.total_duration_minutes ? `(${booking.total_duration_minutes} min)` : ""}
-        </div>
-        <div>
-          <strong>CLIENTE    :</strong> {booking.client_first_name} {booking.client_last_name}
-        </div>
-        {booking.client_dni && (
-          <div>
-            <strong>DNI        :</strong> {booking.client_dni}
-          </div>
-        )}
-        {booking.client_phone && (
-          <div>
-            <strong>TELÉFONO   :</strong> {booking.client_phone}
-          </div>
-        )}
-        <div>
-          <strong>TIPO       :</strong> {serviceTypeLabel}
-        </div>
-        <div>
-          <strong>PERSONAL   :</strong> {generalEmployeeName}
-        </div>
+      <div className="divider-solid" style={{ marginTop: "6px" }}></div>
+
+      <div className="slogan">
+        Verte brillar es nuestro propósito; verte volver, nuestro mayor orgullo
       </div>
+      <div className="divider-dashed"></div>
 
-      {/* 5. Desglose de Servicios / Productos */}
-      <div style={{ padding: "6px 0", borderBottom: "1px dashed #000000" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "24px 1fr 58px",
-            fontSize: "9.5px",
-            fontWeight: 800,
-            borderBottom: "1px solid #000000",
-            paddingBottom: "3px",
-            marginBottom: "4px",
-          }}
-        >
-          <span>CT</span>
-          <span>DESCRIPCIÓN</span>
-          <span style={{ textAlign: "right" }}>TOTAL</span>
+      <div className="social-container">
+        <div className="social-icons-row">
+          <svg className="social-icon" viewBox="0 0 24 24">
+            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+          </svg>
+          <svg className="social-icon" viewBox="0 0 24 24">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.07M12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+          </svg>
+          <svg className="social-icon" viewBox="0 0 24 24">
+            <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" />
+          </svg>
+          <svg className="social-icon" viewBox="0 0 24 24">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+          </svg>
         </div>
-
-        {booking.booking_services && booking.booking_services.length > 0 ? (
-          booking.booking_services.map((bs, index) => {
-            const emp = bs.assigned_employee_id
-              ? employeeMap.get(bs.assigned_employee_id)
-              : generalEmployee;
-            const empName = emp ? `${emp.first_name} ${emp.last_name}` : null;
-
-            return (
-              <div key={bs.id || index} style={{ marginBottom: "4px", fontSize: "10px" }}>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "24px 1fr 58px",
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <span style={{ fontWeight: 700 }}>1x</span>
-                  <span style={{ fontWeight: 700, wordBreak: "break-word" }}>
-                    {bs.service_name}
-                  </span>
-                  <span style={{ textAlign: "right", fontWeight: 700 }}>
-                    S/ {(bs.service_price_cents / 100).toFixed(2)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    paddingLeft: "24px",
-                    fontSize: "8.5px",
-                    color: "#333",
-                    lineHeight: "1.1",
-                  }}
-                >
-                  ⏱️ {bs.duration_minutes} min {empName ? `| 👤 ${empName}` : ""}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "24px 1fr 58px",
-              alignItems: "flex-start",
-              fontSize: "10px",
-            }}
-          >
-            <span style={{ fontWeight: 700 }}>1x</span>
-            <span style={{ fontWeight: 700 }}>Servicio {serviceTypeLabel}</span>
-            <span style={{ textAlign: "right", fontWeight: 700 }}>
-              S/ {totalSoles}
-            </span>
-          </div>
-        )}
+        <div className="social-name">Spa Acicalados Barber Shop</div>
       </div>
+      <div className="divider-solid"></div>
 
-      {/* 6. Totales y Resumen Financiero */}
-      <div
-        style={{
-          padding: "6px 0",
-          fontSize: "10px",
-          lineHeight: "1.35",
-          borderBottom: "1px dashed #000000",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>SUBTOTAL:</span>
-          <span>S/ {totalSoles}</span>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: "12.5px",
-            fontWeight: 900,
-            margin: "3px 0",
-            borderTop: "1px solid #000000",
-            borderBottom: "1px solid #000000",
-            padding: "2px 0",
-          }}
-        >
-          <span>TOTAL A PAGAR:</span>
-          <span>S/ {totalSoles}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "3px" }}>
-          <strong>ESTADO DE PAGO:</strong>
-          <strong style={{ textDecoration: isFullPaid ? "none" : "underline" }}>
-            {paymentStatusText}
-          </strong>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>MÉTODO DE PAGO:</span>
-          <span>{paymentMethodLabel}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>MONTO ABONADO:</span>
-          <span>S/ {paidSoles}</span>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontWeight: isFullPaid ? 400 : 800,
-          }}
-        >
-          <span>SALDO RESTANTE:</span>
-          <span>S/ {balanceSoles}</span>
-        </div>
-      </div>
-
-      {/* 7. Slogan Oficial y Mensaje de Agradecimiento */}
-      <div style={{ textAlign: "center", padding: "6px 0 4px 0" }}>
-        <div style={{ fontSize: "11px", fontWeight: 900, textTransform: "uppercase" }}>
-          ¡GRACIAS POR TU PREFERENCIA!
-        </div>
-        <div
-          style={{
-            fontSize: "9.5px",
-            fontStyle: "italic",
-            marginTop: "3px",
-            lineHeight: "1.25",
-            padding: "0 4px",
-          }}
-        >
-          &quot;Verte brillar es nuestro propósito; verte volver, nuestro mayor orgullo&quot;
-        </div>
-      </div>
-
-      {/* 8. Bloque de Redes Sociales con Iconos Locales (/public/icons) */}
-      <div
-        style={{
-          borderTop: "1px dashed #000000",
-          paddingTop: "6px",
-          marginTop: "4px",
-          fontSize: "9px",
-          lineHeight: "1.35",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: "4px", fontSize: "9.5px", textTransform: "uppercase" }}>
-          SÍGUENOS EN NUESTRAS REDES:
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "center" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <img
-              src="/icons/Facebook.svg"
-              alt="Facebook"
-              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
-            />
-            <span><strong>Facebook:</strong> @SpaAcicaladosBarberShop</span>
-          </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <img
-              src="/icons/Instagram.svg"
-              alt="Instagram"
-              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
-            />
-            <span><strong>Instagram:</strong> @spaacicaladosbarbershop</span>
-          </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <img
-              src="/icons/Tiktok.svg"
-              alt="TikTok"
-              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
-            />
-            <span><strong>TikTok:</strong> @spa_acicalados</span>
-          </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <img
-              src="/icons/Youtube.svg"
-              alt="YouTube"
-              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
-            />
-            <span><strong>YouTube:</strong> @AcicaladosSPA</span>
-          </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <img
-              src="/icons/whatsApp.svg"
-              alt="WhatsApp"
-              style={{ width: "11px", height: "11px", filter: "brightness(0)", objectFit: "contain", display: "inline-block" }}
-            />
-            <span><strong>WhatsApp:</strong> +51 997 766 828</span>
-          </div>
-        </div>
-        <div
-          style={{
-            fontSize: "8px",
-            color: "#333333",
-            marginTop: "6px",
-            borderTop: "1px dashed #000000",
-            paddingTop: "4px",
-          }}
-        >
-          Comprobante no oficial para control interno y atención de citas.
+      <div className="center footer">
+        <div className="bold" style={{ marginTop: "5px" }}>
+          ¡Gracias por tu preferencia!
         </div>
       </div>
     </div>
@@ -453,23 +194,96 @@ export function TicketTermico({
 
   return (
     <>
-      {/* Reglas de estilo para impresión térmica pura de 80mm */}
-      <style dangerouslySetInnerHTML={{ __html: `
+      {/* Estilos CSS exactos de la plantilla ticket-barberia.html */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .ticket-thermal-body {
+          width: 80mm;
+          max-width: 80mm;
+          margin: 0 auto;
+          padding: 2mm;
+          background-color: #ffffff;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+          color: #000000 !important;
+          font-size: 12px;
+          font-family: 'Courier New', Courier, monospace;
+          line-height: 1.25;
+          text-align: left;
+          box-sizing: border-box;
+        }
+
+        .ticket-thermal-body * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          font-family: 'Courier New', Courier, monospace;
+          color: #000000 !important;
+        }
+
+        .ticket-thermal-body .center { text-align: center; }
+        .ticket-thermal-body .left { text-align: left; }
+        .ticket-thermal-body .right { text-align: right; }
+        .ticket-thermal-body .bold { font-weight: bold; }
+
+        .ticket-thermal-body .logo-container {
+          text-align: center;
+          margin: -15px 0 -10px 0;
+          padding: 0;
+        }
+        .ticket-thermal-body .ticket-logo {
+          width: 90%;
+          height: auto;
+          display: block;
+          margin: 0 auto;
+          filter: grayscale(100%) contrast(150%);
+        }
+
+        .ticket-thermal-body .divider-dashed { border-bottom: 1px dashed #000000; margin: 4px 0; }
+        .ticket-thermal-body .divider-solid { border-bottom: 2px solid #000000; margin: 4px 0; }
+
+        .ticket-thermal-body .header, .ticket-thermal-body .footer { margin-bottom: 5px; }
+        .ticket-thermal-body .meta-data { margin: 5px 0; font-size: 12px; }
+
+        .ticket-thermal-body table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+        .ticket-thermal-body th { border-bottom: 2px solid #000000; border-top: 2px solid #000000; padding: 4px 0; text-align: left; font-size: 11px; }
+        .ticket-thermal-body td { padding: 2px 0; vertical-align: top; }
+        .ticket-thermal-body .td-qty { width: 28px; white-space: nowrap; }
+        .ticket-thermal-body .td-price { text-align: right; white-space: nowrap; }
+        .ticket-thermal-body .item-code { font-weight: bold; padding-top: 4px; }
+
+        .ticket-thermal-body .total-container {
+          border-top: 1px dashed #000000;
+          display: flex;
+          justify-content: space-between;
+          font-size: 14px;
+          font-weight: bold;
+          padding-top: 5px;
+          margin-top: 5px;
+        }
+
+        .ticket-thermal-body .slogan {
+          text-align: center;
+          font-size: 11px;
+          font-weight: bold;
+          margin: 6px 0;
+          padding: 0 4px;
+          line-height: 1.2;
+        }
+        .ticket-thermal-body .social-container { text-align: center; margin: 6px 0; }
+        .ticket-thermal-body .social-icons-row { display: flex; justify-content: center; gap: 15px; margin-bottom: 4px; }
+        .ticket-thermal-body .social-icon { width: 18px; height: 18px; fill: #000000; }
+        .ticket-thermal-body .social-name { font-size: 11px; font-weight: bold; }
+
         @media print {
-          @page {
-            size: 80mm auto;
-            margin: 0mm !important;
-          }
+          @page { margin: 0; size: 80mm auto; }
           html, body {
+            background-color: #ffffff !important;
             width: 80mm !important;
             min-width: 80mm !important;
             max-width: 80mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: #ffffff !important;
-            color: #000000 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
           }
           body * {
             visibility: hidden !important;
@@ -482,11 +296,12 @@ export function TicketTermico({
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
+            margin: 0 !important;
+            padding: 2mm !important;
+            box-shadow: none !important;
             width: 80mm !important;
             max-width: 80mm !important;
-            margin: 0 !important;
-            padding: 2mm 3mm !important;
-            background: #ffffff !important;
+            background-color: #ffffff !important;
             color: #000000 !important;
             display: block !important;
             z-index: 999999 !important;
@@ -495,19 +310,16 @@ export function TicketTermico({
             display: none !important;
           }
         }
-      `}} />
-
-      {/* Contenedor invisible en pantalla que se activa únicamente en @media print */}
-      <div
-        id="thermal-ticket-print-area"
-        style={{
-          display: "none",
+      `,
         }}
-      >
+      />
+
+      {/* Contenedor invisible en pantalla que se imprime directamente en @media print */}
+      <div id="thermal-ticket-print-area" style={{ display: "none" }}>
         {ticketContent}
       </div>
 
-      {/* Modal de Vista Previa en Pantalla (si está abierto) */}
+      {/* Modal de Vista Previa en Pantalla */}
       {isOpen && (
         <div
           style={{
@@ -590,33 +402,21 @@ export function TicketTermico({
               )}
             </div>
 
-            {/* Cuerpo del Modal con scroll y aspecto de papel térmico */}
+            {/* Cuerpo del Modal con el ticket idéntico a la plantilla base */}
             <div
               style={{
                 padding: "18px",
                 overflowY: "auto",
-                background: "#1c1917",
+                background: "#e0e0e0",
                 display: "flex",
                 justifyContent: "center",
                 flex: 1,
               }}
             >
-              <div
-                style={{
-                  background: "#ffffff",
-                  color: "#000000",
-                  borderRadius: "4px",
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-                  width: "100%",
-                  maxWidth: "340px",
-                  border: "1px solid #d6d3d1",
-                }}
-              >
-                {ticketContent}
-              </div>
+              {ticketContent}
             </div>
 
-            {/* Footer con Botones de Acción */}
+            {/* Footer del Modal */}
             <div
               style={{
                 display: "flex",
