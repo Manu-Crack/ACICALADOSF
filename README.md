@@ -31,6 +31,7 @@
 - **🛠️ Panel de Administración:** Área protegida por roles para administrar servicios, inventario y citas (`/dashboard`).
 
 ---
+- a
 
 ## 🚀 Stack Tecnológico
 
