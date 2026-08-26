@@ -44,55 +44,42 @@ const statusColors: Record<string, string> = {
   cancelada: "badge-error",
 };
 
-function getLocalDateString(d: Date = new Date()): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function getPeruDateString(d: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(d);
+  } catch {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
 }
 
 /**
  * REGLA ESTRICTA:
- * Solo se suman ingresos de reservas en estado confirmado o completado.
- * Se ignora por completo cualquier registro en estado 'pendiente', 'cancelada' o 'expirada'.
+ * Coincidencia exacta con el módulo Reservas:
+ * Solo se suman ingresos de reservas en estado 'confirmada' o 'completada'.
+ * El monto de ingreso cobrado corresponde estrictamente al dinero efectivamente recaudado y verificado (advance_amount_cents).
+ * Si payment_status es 'total' y advance_amount_cents no estuviera seteado o fuera 0, se usa total_price_cents como respaldo.
+ * Si una reserva está confirmada con 'sin_pago' (advance_amount_cents = 0), genera S/ 0.00 de ingreso cobrado.
+ * Reservas en estado 'pendiente', 'cancelada' o 'expirada' retornan 0.
  */
-function calculateValidIncomeForBooking(b: FinancialBooking): number {
-  if (
-    b.status === "pendiente" ||
-    b.status === "cancelada" ||
-    b.status === "expirada" ||
-    b.status === "borrador"
-  ) {
+export function calculateValidIncomeForBooking(b: FinancialBooking): number {
+  if (b.status !== "confirmada" && b.status !== "completada") {
     return 0;
   }
 
-  if (b.status === "confirmada" || b.status === "completada") {
-    if (b.payment_status === "total") {
-      return b.total_price_cents || 0;
-    }
-    if (b.payment_status === "parcial") {
-      return (
-        b.advance_amount_cents ||
-        (b.total_price_cents ? Math.round(b.total_price_cents * 0.3) : 0)
-      );
-    }
-    if (b.status === "completada") {
-      return b.total_price_cents || 0;
-    }
-    if (b.advance_amount_cents && b.advance_amount_cents > 0) {
-      return b.advance_amount_cents;
-    }
-    return b.total_price_cents || 0;
+  // Dinero verificado efectivamente cobrado
+  if (b.advance_amount_cents !== undefined && b.advance_amount_cents !== null && b.advance_amount_cents > 0) {
+    return b.advance_amount_cents;
   }
 
+  // Si está marcado como pago total
   if (b.payment_status === "total") {
     return b.total_price_cents || 0;
   }
-  if (b.payment_status === "parcial") {
-    return b.advance_amount_cents || 0;
-  }
 
-  return 0;
+  return b.advance_amount_cents || 0;
 }
 
 export function DashboardHome({
@@ -106,34 +93,33 @@ export function DashboardHome({
   const [weekCount, setWeekCount] = useState<number>(initialWeekCount);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
-  // Financial Panel state
-  const [financialRange, setFinancialRange] = useState<"day" | "week" | "month">("day");
+  // Financial Panel state: 'day' | 'week' | 'month' | 'all'
+  const [financialRange, setFinancialRange] = useState<"day" | "week" | "month" | "all">("day");
   const [financialBookings, setFinancialBookings] = useState<FinancialBooking[]>(initialFinancialBookings);
   const [financialEgresos, setFinancialEgresos] = useState<Egreso[]>(initialFinancialEgresos);
   const [financialTab, setFinancialTab] = useState<"todos" | "ingresos" | "egresos">("todos");
 
   const supabase = useMemo(() => createClient(), []);
 
-  // Compute date strings for current range
+  // Calcular límites de fecha en Zona Horaria Perú (America/Lima)
   const dateBounds = useMemo(() => {
     const now = new Date();
-    const todayStr = getLocalDateString(now);
+    const todayStr = getPeruDateString(now);
 
-    // Week start (Monday) and end (Sunday)
-    const cur = new Date();
-    const dayOfWeek = cur.getDay();
-    const diffToMonday = cur.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(cur.setDate(diffToMonday));
-    const mondayStr = getLocalDateString(monday);
+    // Semana Lunes a Domingo en Perú
+    const [y, m, d] = todayStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d, 12, 0, 0);
+    const dayOfWeek = dt.getDay(); // 0 = Domingo, 1 = Lunes
+    const diffToMonday = dt.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const mondayDate = new Date(y, m - 1, diffToMonday, 12, 0, 0);
+    const sundayDate = new Date(y, m - 1, diffToMonday + 6, 12, 0, 0);
 
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const sundayStr = getLocalDateString(sunday);
+    const mondayStr = getPeruDateString(mondayDate);
+    const sundayStr = getPeruDateString(sundayDate);
 
-    // Month start and end
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+    // Mes actual en Perú
+    const [year, month] = todayStr.split("-");
+    const lastDay = new Date(Number(year), Number(month), 0, 12, 0, 0).getDate();
     const monthStartStr = `${year}-${month}-01`;
     const monthEndStr = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
 
@@ -149,9 +135,9 @@ export function DashboardHome({
   // Recargar datos de la agenda y de finanzas
   const loadData = useCallback(async () => {
     try {
-      const { todayStr, mondayStr, monthStartStr } = dateBounds;
+      const { todayStr, mondayStr, sundayStr } = dateBounds;
 
-      const [todayRes, weekRes, monthBookingsRes, monthExpensesRes, monthEgresosRes] = await Promise.all([
+      const [todayRes, weekRes, financialBookingsRes, expensesRes, egresosRes] = await Promise.all([
         supabase
           .from("bookings")
           .select(
@@ -164,24 +150,26 @@ export function DashboardHome({
           .from("bookings")
           .select("id", { count: "exact", head: true })
           .gte("booking_date", mondayStr)
+          .lte("booking_date", sundayStr)
           .in("status", ["confirmada", "completada"]),
         supabase
           .from("bookings")
           .select(
             "id, booking_code, client_first_name, client_last_name, start_time, status, payment_status, service_type, booking_date, total_price_cents, advance_amount_cents, balance_cents, created_at"
           )
-          .gte("booking_date", monthStartStr)
-          .order("booking_date", { ascending: false }),
+          .in("status", ["confirmada", "completada", "pendiente"])
+          .order("booking_date", { ascending: false })
+          .limit(200),
         supabase
           .from("expenses")
           .select("*")
-          .gte("expense_date", monthStartStr)
-          .order("expense_date", { ascending: false }),
+          .order("expense_date", { ascending: false })
+          .limit(200),
         supabase
           .from("egresos")
           .select("*")
-          .gte("expense_date", monthStartStr)
-          .order("expense_date", { ascending: false }),
+          .order("expense_date", { ascending: false })
+          .limit(200),
       ]);
 
       if (todayRes.data) {
@@ -190,27 +178,29 @@ export function DashboardHome({
       if (typeof weekRes.count === "number") {
         setWeekCount(weekRes.count);
       }
-      if (monthBookingsRes.data) {
-        setFinancialBookings(monthBookingsRes.data as unknown as FinancialBooking[]);
+      if (financialBookingsRes.data) {
+        setFinancialBookings(financialBookingsRes.data as unknown as FinancialBooking[]);
       }
 
-      const rawExpenses = (monthExpensesRes.data || []).filter((e: { status?: string }) => e.status !== "voided").map((e: { id: string; description: string; category: string; amount_cents: number; expense_date: string; payment_method: string; receipt_url?: string; supplier?: string; notes?: string; created_at: string }) => ({
-        id: e.id,
-        description: e.description,
-        category: e.category,
-        amount_cents: e.amount_cents,
-        currency: "PEN",
-        expense_date: e.expense_date,
-        payment_method: e.payment_method,
-        receipt_type: e.receipt_url ? "comprobante" : "ninguno",
-        receipt_number: null,
-        supplier: e.supplier || null,
-        notes: e.notes || null,
-        created_at: e.created_at,
-        updated_at: e.created_at,
-      }));
+      const rawExpenses = (expensesRes.data || [])
+        .filter((e: { status?: string }) => e.status !== "voided")
+        .map((e: { id: string; description: string; category: string; amount_cents: number; expense_date: string; payment_method: string; receipt_url?: string; supplier?: string; notes?: string; created_at: string }) => ({
+          id: e.id,
+          description: e.description,
+          category: e.category,
+          amount_cents: e.amount_cents,
+          currency: "PEN",
+          expense_date: e.expense_date,
+          payment_method: e.payment_method,
+          receipt_type: e.receipt_url ? "comprobante" : "ninguno",
+          receipt_number: null,
+          supplier: e.supplier || null,
+          notes: e.notes || null,
+          created_at: e.created_at,
+          updated_at: e.created_at,
+        }));
 
-      const rawEgresos = (monthEgresosRes.data || []) as unknown as Egreso[];
+      const rawEgresos = (egresosRes.data || []) as unknown as Egreso[];
       setFinancialEgresos([...rawExpenses, ...rawEgresos]);
     } catch (err) {
       console.error("[DashboardHome] Error recargando datos:", err);
@@ -222,7 +212,7 @@ export function DashboardHome({
     loadDataRef.current = loadData;
   }, [loadData]);
 
-  // Suscripción protegida y autenticada a Supabase Realtime para reservas y egresos
+  // Suscripción protegida y autenticada a Supabase Realtime para reservas, pagos y egresos
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let isMounted = true;
@@ -254,6 +244,19 @@ export function DashboardHome({
               event: "*",
               schema: "public",
               table: "bookings",
+            },
+            () => {
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "payment_logs",
             },
             () => {
               if (loadDataRef.current) {
@@ -419,7 +422,8 @@ export function DashboardHome({
   const periodLabel = useMemo(() => {
     if (financialRange === "day") return "Hoy";
     if (financialRange === "week") return "Esta Semana";
-    return "Este Mes";
+    if (financialRange === "month") return "Este Mes";
+    return "Todas las Fechas";
   }, [financialRange]);
 
   return (
@@ -580,7 +584,7 @@ export function DashboardHome({
             </div>
           </div>
 
-          {/* Time Selector Tabs: Día, Semana, Mes */}
+          {/* Time Selector Tabs: Día, Semana, Mes, Todas */}
           <div
             style={{
               display: "inline-flex",
@@ -589,6 +593,7 @@ export function DashboardHome({
               borderRadius: "var(--radius-md)",
               padding: "4px",
               gap: 4,
+              flexWrap: "wrap",
             }}
           >
             <button
@@ -641,6 +646,23 @@ export function DashboardHome({
               }}
             >
               🗓️ Mes
+            </button>
+            <button
+              type="button"
+              onClick={() => setFinancialRange("all")}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+                background: financialRange === "all" ? "var(--color-primary)" : "transparent",
+                color: financialRange === "all" ? "#000" : "var(--color-text-muted)",
+                transition: "all var(--transition-fast)",
+              }}
+            >
+              🌐 Todas
             </button>
           </div>
         </div>
@@ -702,8 +724,8 @@ export function DashboardHome({
             <p className="text-muted" style={{ fontSize: "0.775rem", margin: 0 }}>
               {filteredFinancialData.validConfirmedBookings.length}{" "}
               {filteredFinancialData.validConfirmedBookings.length === 1
-                ? "reserva confirmada/pagada"
-                : "reservas confirmadas/pagadas"}
+                ? "reserva confirmada con cobro"
+                : "reservas confirmadas con cobro"}
             </p>
           </div>
 
@@ -977,6 +999,12 @@ export function DashboardHome({
                   {(financialTab === "todos" || financialTab === "ingresos") &&
                     filteredFinancialData.validConfirmedBookings.map((b) => {
                       const amount = calculateValidIncomeForBooking(b);
+                      const isPartial =
+                        b.payment_status === "parcial" ||
+                        (b.advance_amount_cents !== undefined &&
+                          b.total_price_cents !== undefined &&
+                          b.advance_amount_cents > 0 &&
+                          b.advance_amount_cents < b.total_price_cents);
                       return (
                         <tr
                           key={`income-${b.id}`}
@@ -1010,6 +1038,22 @@ export function DashboardHome({
                             <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
                               ({b.booking_code})
                             </span>
+                            {isPartial && (
+                              <span
+                                className="badge badge-warning"
+                                style={{ fontSize: "0.65rem", marginLeft: 6, padding: "1px 5px" }}
+                              >
+                                Adelanto
+                              </span>
+                            )}
+                            {b.payment_status === "total" && (
+                              <span
+                                className="badge badge-success"
+                                style={{ fontSize: "0.65rem", marginLeft: 6, padding: "1px 5px" }}
+                              >
+                                Total
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: "8px 10px" }}>
                             <span className="badge badge-gold" style={{ fontSize: "0.7rem" }}>

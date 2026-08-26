@@ -6,20 +6,36 @@ export const metadata = {
   title: "Inicio — Panel Acicalados",
 };
 
+function getPeruDateString(d: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(d);
+  } catch {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  // Fecha local de hoy en formato YYYY-MM-DD
+  // Fecha actual en Zona Horaria Perú (America/Lima, UTC-5)
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const today = `${year}-${month}-${day}`;
+  const today = getPeruDateString(now);
 
-  // Inicio de mes actual (para panel consolidado financiero inicial)
-  const monthStartStr = `${year}-${month}-01`;
+  // Calcular inicio de semana (Lunes) y de mes en Perú
+  const [y, m, d] = today.split("-").map(Number);
+  const dt = new Date(y, m - 1, d, 12, 0, 0);
+  const dayOfWeek = dt.getDay(); // 0 = Domingo, 1 = Lunes
+  const diffToMonday = dt.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  const mondayDate = new Date(y, m - 1, diffToMonday, 12, 0, 0);
+  const weekStartStr = getPeruDateString(mondayDate);
 
-  // Cargar reservas del día de hoy (para agenda)
+  const sundayDate = new Date(y, m - 1, diffToMonday + 6, 12, 0, 0);
+  const weekEndStr = getPeruDateString(sundayDate);
+
+  // Cargar reservas del día de hoy (para agenda operativa)
   const { data: todayBookings } = await supabase
     .from("bookings")
     .select(
@@ -29,41 +45,36 @@ export default async function DashboardPage() {
     .in("status", ["confirmada", "completada", "pendiente"])
     .order("start_time");
 
-  // Conteo de reservas de esta semana
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  const wsYear = weekStart.getFullYear();
-  const wsMonth = String(weekStart.getMonth() + 1).padStart(2, "0");
-  const wsDay = String(weekStart.getDate()).padStart(2, "0");
-  const weekStartStr = `${wsYear}-${wsMonth}-${wsDay}`;
-
+  // Conteo de reservas confirmadas de esta semana
   const { count: weekCount } = await supabase
     .from("bookings")
     .select("id", { count: "exact", head: true })
     .gte("booking_date", weekStartStr)
+    .lte("booking_date", weekEndStr)
     .in("status", ["confirmada", "completada"]);
 
-  // Cargar reservas de este mes para el consolidado financiero
-  const { data: monthBookings } = await supabase
+  // Cargar reservas activas y confirmadas para el consolidado financiero (unificadas con Reservas)
+  const { data: financialBookings } = await supabase
     .from("bookings")
     .select(
       "id, booking_code, client_first_name, client_last_name, start_time, status, payment_status, service_type, booking_date, total_price_cents, advance_amount_cents, balance_cents, created_at"
     )
-    .gte("booking_date", monthStartStr)
-    .order("booking_date", { ascending: false });
+    .in("status", ["confirmada", "completada", "pendiente"])
+    .order("booking_date", { ascending: false })
+    .limit(200);
 
-  // Cargar egresos de este mes (consultando expenses y egresos)
+  // Cargar egresos (consultando expenses y egresos)
   const [expensesRes, egresosRes] = await Promise.all([
     supabase
       .from("expenses")
       .select("*")
-      .gte("expense_date", monthStartStr)
-      .order("expense_date", { ascending: false }),
+      .order("expense_date", { ascending: false })
+      .limit(200),
     supabase
       .from("egresos")
       .select("*")
-      .gte("expense_date", monthStartStr)
-      .order("expense_date", { ascending: false }),
+      .order("expense_date", { ascending: false })
+      .limit(200),
   ]);
 
   const rawExpenses = expensesRes.data || [];
@@ -109,7 +120,7 @@ export default async function DashboardPage() {
     <DashboardHome
       initialBookings={(todayBookings as unknown as FinancialBooking[]) ?? []}
       initialWeekCount={weekCount ?? 0}
-      initialFinancialBookings={(monthBookings as unknown as FinancialBooking[]) ?? []}
+      initialFinancialBookings={(financialBookings as unknown as FinancialBooking[]) ?? []}
       initialFinancialEgresos={combinedEgresos}
     />
   );
