@@ -110,6 +110,10 @@ export function NewBookingModal({
   const [yapeAmount, setYapeAmount] = useState<string>("");
   const [cashAmount, setCashAmount] = useState<string>("");
 
+  // Monto personalizado de "Total a Cobrar"
+  const [customTotalPrice, setCustomTotalPrice] = useState<string>("");
+  const [isCustomPrice, setIsCustomPrice] = useState(false);
+
   // Feedback & Envío
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -124,6 +128,8 @@ export function NewBookingModal({
     setErrorMsg(null);
     setSuccessMsg(null);
     setSearchQuery("");
+    setIsCustomPrice(false);
+    setCustomTotalPrice("");
 
     async function loadData() {
       setLoadingInitial(true);
@@ -163,7 +169,7 @@ export function NewBookingModal({
     return services.filter((s) => selectedServiceIds.includes(s.id));
   }, [services, selectedServiceIds]);
 
-  const totalPriceCents = useMemo(() => {
+  const catalogTotalPriceCents = useMemo(() => {
     return selectedServices.reduce((sum, s) => sum + (s.price_cents || 0), 0);
   }, [selectedServices]);
 
@@ -171,7 +177,39 @@ export function NewBookingModal({
     return selectedServices.reduce((sum, s) => sum + (s.duration_minutes || 30), 0);
   }, [selectedServices]);
 
-  const totalPriceSoles = (totalPriceCents / 100).toFixed(2);
+  const catalogTotalPriceSoles = (catalogTotalPriceCents / 100).toFixed(2);
+
+  // Sincronizar automáticamente customTotalPrice con el total del catálogo mientras no haya edición manual
+  useEffect(() => {
+    if (!isCustomPrice) {
+      if (selectedServiceIds.length === 0) {
+        setCustomTotalPrice("");
+      } else {
+        setCustomTotalPrice((catalogTotalPriceCents / 100).toFixed(2));
+      }
+    }
+  }, [catalogTotalPriceCents, isCustomPrice, selectedServiceIds.length]);
+
+  // Si se vacía la selección de servicios, reiniciar estado de personalización
+  useEffect(() => {
+    if (selectedServiceIds.length === 0) {
+      setIsCustomPrice(false);
+      setCustomTotalPrice("");
+    }
+  }, [selectedServiceIds.length]);
+
+  // Monto efectivo final a cobrar (calculado o personalizado)
+  const effectiveTotalPriceCents = useMemo(() => {
+    if (customTotalPrice.trim() !== "") {
+      const parsed = parseFloat(customTotalPrice);
+      if (!isNaN(parsed) && parsed >= 0) {
+        return Math.round(parsed * 100);
+      }
+    }
+    return catalogTotalPriceCents;
+  }, [customTotalPrice, catalogTotalPriceCents]);
+
+  const effectiveTotalPriceSoles = (effectiveTotalPriceCents / 100).toFixed(2);
 
   // Conteo de catálogo por rubro
   const barberiaCount = useMemo(() => services.filter((s) => s.type === "barberia").length, [services]);
@@ -231,22 +269,22 @@ export function NewBookingModal({
     });
   }, [startTime, selectedServices]);
 
-  // Sincronizar montos de pago mixto cuando cambie el total o se elija mixto
+  // Sincronizar montos de pago mixto cuando cambie el total efectivo o se elija mixto
   useEffect(() => {
     if (paymentMethod === "mixto") {
-      const totalNum = totalPriceCents / 100;
+      const totalNum = effectiveTotalPriceCents / 100;
       const half = (totalNum / 2).toFixed(2);
       const otherHalf = (totalNum - parseFloat(half)).toFixed(2);
       setYapeAmount(half);
       setCashAmount(otherHalf);
     }
-  }, [paymentMethod, totalPriceCents]);
+  }, [paymentMethod, effectiveTotalPriceCents]);
 
   // Manejador bidireccional de Yape en Pago Mixto
   const handleYapeChange = (val: string) => {
     setYapeAmount(val);
     const yNum = parseFloat(val) || 0;
-    const totalNum = totalPriceCents / 100;
+    const totalNum = effectiveTotalPriceCents / 100;
     const diff = Math.max(0, totalNum - yNum);
     setCashAmount(diff.toFixed(2));
   };
@@ -255,7 +293,7 @@ export function NewBookingModal({
   const handleCashChange = (val: string) => {
     setCashAmount(val);
     const cNum = parseFloat(val) || 0;
-    const totalNum = totalPriceCents / 100;
+    const totalNum = effectiveTotalPriceCents / 100;
     const diff = Math.max(0, totalNum - cNum);
     setYapeAmount(diff.toFixed(2));
   };
@@ -335,6 +373,15 @@ export function NewBookingModal({
       return;
     }
 
+    // Validar total a cobrar personalizado
+    if (customTotalPrice.trim() !== "") {
+      const parsedCustom = parseFloat(customTotalPrice);
+      if (isNaN(parsedCustom) || parsedCustom < 0) {
+        setErrorMsg("El campo Total a Cobrar debe ser un número válido mayor o igual a S/ 0.00.");
+        return;
+      }
+    }
+
     // Validar montos en pago mixto
     let yapeCents = 0;
     let cashCents = 0;
@@ -344,9 +391,9 @@ export function NewBookingModal({
       const cNum = parseFloat(cashAmount) || 0;
       const sum = Math.round((yNum + cNum) * 100);
 
-      if (sum !== totalPriceCents) {
+      if (sum !== effectiveTotalPriceCents) {
         setErrorMsg(
-          `La suma de Yape (S/ ${yNum.toFixed(2)}) y Efectivo (S/ ${cNum.toFixed(2)}) debe ser exactamente igual al total de S/ ${totalPriceSoles}.`
+          `La suma de Yape (S/ ${yNum.toFixed(2)}) y Efectivo (S/ ${cNum.toFixed(2)}) debe ser exactamente igual al total de S/ ${effectiveTotalPriceSoles}.`
         );
         return;
       }
@@ -365,6 +412,7 @@ export function NewBookingModal({
         client_dni: clientDni.trim() || null,
         client_email: clientEmail.trim() || null,
         service_ids: selectedServiceIds,
+        total_price_cents: effectiveTotalPriceCents,
         assigned_employee_id: assignedEmployeeId || null,
         service_assignments: assignmentMode === "custom" ? serviceAssignments : undefined,
         booking_date: bookingDate,
@@ -400,6 +448,8 @@ export function NewBookingModal({
         setAssignedEmployeeId("");
         setPaymentMethod("efectivo");
         setSearchQuery("");
+        setIsCustomPrice(false);
+        setCustomTotalPrice("");
         onBookingCreated();
         onClose();
       }, 1000);
@@ -758,7 +808,7 @@ export function NewBookingModal({
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--color-primary, #C8A45C)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      ✓ {selectedServices.length} {selectedServices.length === 1 ? "Servicio Seleccionado" : "Servicios Seleccionados"} (S/ {totalPriceSoles} · {totalDurationMinutes} min):
+                      ✓ {selectedServices.length} {selectedServices.length === 1 ? "Servicio Seleccionado" : "Servicios Seleccionados"} (Total: S/ {effectiveTotalPriceSoles} · {totalDurationMinutes} min):
                     </span>
                     <button
                       type="button"
@@ -1237,7 +1287,7 @@ export function NewBookingModal({
                 >
                   <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: 6 }}>
                     <span>🔄</span>
-                    <span>Desglose de Pago Mixto (Total: S/ {totalPriceSoles})</span>
+                    <span>Desglose de Pago Mixto (Total: S/ {effectiveTotalPriceSoles})</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
@@ -1248,7 +1298,7 @@ export function NewBookingModal({
                         type="number"
                         step="0.10"
                         min="0"
-                        max={totalPriceSoles}
+                        max={effectiveTotalPriceSoles}
                         className="input"
                         placeholder="0.00"
                         value={yapeAmount}
@@ -1264,7 +1314,7 @@ export function NewBookingModal({
                         type="number"
                         step="0.10"
                         min="0"
-                        max={totalPriceSoles}
+                        max={effectiveTotalPriceSoles}
                         className="input"
                         placeholder="0.00"
                         value={cashAmount}
@@ -1274,7 +1324,7 @@ export function NewBookingModal({
                     </div>
                   </div>
                   <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted, #a1a1aa)", margin: 0 }}>
-                    💡 Al ingresar el monto de uno de los métodos, el otro se calcula automáticamente para cuadrar con el total de S/ {totalPriceSoles}.
+                    💡 Al ingresar el monto de uno de los métodos, el otro se calcula automáticamente para cuadrar con el total de S/ {effectiveTotalPriceSoles}.
                   </p>
                 </div>
               )}
@@ -1282,7 +1332,7 @@ export function NewBookingModal({
               {/* Mensaje de confirmación del método */}
               <div style={{ marginTop: 8, fontSize: "0.75rem", color: "#22c55e" }}>
                 <span>
-                  ✓ Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {totalPriceSoles})</strong> con comprobante de cobro registrado.
+                  ✓ Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {effectiveTotalPriceSoles})</strong> con comprobante de cobro registrado.
                 </span>
               </div>
             </div>
@@ -1320,13 +1370,93 @@ export function NewBookingModal({
                 </span>
               </div>
 
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block" }}>
-                  Total a Cobrar
-                </span>
-                <span style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--color-success, #22c55e)" }}>
-                  S/ {totalPriceSoles}
-                </span>
+              <div style={{ textAlign: "right", minWidth: "180px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 4 }}>
+                  <label
+                    htmlFor="booking-custom-total-input"
+                    style={{
+                      fontSize: "0.72rem",
+                      color: "var(--color-text-muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                      cursor: "pointer",
+                      margin: 0,
+                    }}
+                  >
+                    Total a Cobrar
+                  </label>
+                  {isCustomPrice && customTotalPrice !== catalogTotalPriceSoles && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomPrice(false);
+                        setCustomTotalPrice(catalogTotalPriceSoles);
+                      }}
+                      style={{
+                        background: "rgba(200, 164, 92, 0.15)",
+                        border: "1px solid rgba(200, 164, 92, 0.4)",
+                        color: "var(--color-primary, #C8A45C)",
+                        borderRadius: "4px",
+                        fontSize: "0.65rem",
+                        padding: "1px 6px",
+                        cursor: "pointer",
+                        lineHeight: "1.2",
+                      }}
+                      title="Restablecer al monto calculado referencial del catálogo"
+                    >
+                      ↺ Sugerido (S/ {catalogTotalPriceSoles})
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "inline-flex", alignItems: "center", position: "relative" }}>
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: 10,
+                      fontWeight: 800,
+                      fontSize: "1.1rem",
+                      color: "var(--color-success, #22c55e)",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    S/
+                  </span>
+                  <input
+                    id="booking-custom-total-input"
+                    type="number"
+                    step="0.50"
+                    min="0"
+                    value={customTotalPrice}
+                    onChange={(e) => {
+                      setCustomTotalPrice(e.target.value);
+                      setIsCustomPrice(true);
+                    }}
+                    placeholder="0.00"
+                    disabled={submitting || selectedServiceIds.length === 0}
+                    style={{
+                      width: "140px",
+                      padding: "5px 10px 5px 34px",
+                      fontSize: "1.25rem",
+                      fontWeight: 800,
+                      color: "var(--color-success, #22c55e)",
+                      background: "rgba(0, 0, 0, 0.4)",
+                      border: isCustomPrice && customTotalPrice !== catalogTotalPriceSoles
+                        ? "1.5px solid var(--color-primary, #C8A45C)"
+                        : "1px solid var(--color-border, rgba(255,255,255,0.18))",
+                      borderRadius: "var(--radius-sm, 8px)",
+                      textAlign: "right",
+                      outline: "none",
+                      boxShadow: isCustomPrice && customTotalPrice !== catalogTotalPriceSoles
+                        ? "0 0 8px rgba(200, 164, 92, 0.3)"
+                        : "none",
+                    }}
+                  />
+                </div>
+                {isCustomPrice && customTotalPrice !== catalogTotalPriceSoles && (
+                  <span style={{ display: "block", fontSize: "0.68rem", color: "var(--color-primary, #C8A45C)", marginTop: 2 }}>
+                    ✏️ Monto personalizado (Ref: S/ {catalogTotalPriceSoles})
+                  </span>
+                )}
               </div>
             </div>
           </div>

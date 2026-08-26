@@ -402,7 +402,26 @@ export async function POST(request: NextRequest) {
     // 3. Determinar rubro (barbería, spa o mixto) y calcular totales
     const types = new Set(orderedServices.map((s) => s.type));
     const serviceType = types.size > 1 ? "mixto" : orderedServices[0].type;
-    const totalPriceCents = orderedServices.reduce((sum, s) => sum + (s.price_cents || 0), 0);
+    const defaultCatalogTotalCents = orderedServices.reduce((sum, s) => sum + (s.price_cents || 0), 0);
+
+    // Permitir monto personalizado editado por el usuario en "Total a Cobrar"
+    let totalPriceCents = defaultCatalogTotalCents;
+    if (body.total_price_cents !== undefined && body.total_price_cents !== null) {
+      const parsed = Math.round(Number(body.total_price_cents));
+      if (!isNaN(parsed) && parsed >= 0) {
+        totalPriceCents = parsed;
+      }
+    } else if (body.custom_total_cents !== undefined && body.custom_total_cents !== null) {
+      const parsed = Math.round(Number(body.custom_total_cents));
+      if (!isNaN(parsed) && parsed >= 0) {
+        totalPriceCents = parsed;
+      }
+    } else if (body.price_soles !== undefined && body.price_soles !== null) {
+      const parsed = Math.round(Number(body.price_soles) * 100);
+      if (!isNaN(parsed) && parsed >= 0) {
+        totalPriceCents = parsed;
+      }
+    }
 
     // 4. Asignación automática inteligente por servicio y validación de horarios
     const assignmentResult = await assignMultiServiceEmployees({
@@ -513,7 +532,34 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. Insertar detalle de servicios en 'booking_services' con empleados asignados
-    const bookingServices = assignmentResult.items.map((item) => ({
+    // Distribuir el total definido entre los servicios sin alterar el catálogo maestro
+    const numServices = assignmentResult.items.length;
+    let distributedServices = assignmentResult.items.map((item) => ({ ...item }));
+
+    if (numServices === 1) {
+      distributedServices[0].service_price_cents = totalPriceCents;
+    } else if (numServices > 1 && totalPriceCents !== defaultCatalogTotalCents) {
+      let runningSum = 0;
+      distributedServices = assignmentResult.items.map((item, idx) => {
+        let price = 0;
+        if (idx === numServices - 1) {
+          price = Math.max(0, totalPriceCents - runningSum);
+        } else {
+          if (defaultCatalogTotalCents > 0) {
+            price = Math.round((item.service_price_cents / defaultCatalogTotalCents) * totalPriceCents);
+          } else {
+            price = Math.floor(totalPriceCents / numServices);
+          }
+          runningSum += price;
+        }
+        return {
+          ...item,
+          service_price_cents: price,
+        };
+      });
+    }
+
+    const bookingServices = distributedServices.map((item) => ({
       booking_id: newBooking.id,
       service_id: item.service_id,
       service_name: item.service_name,
@@ -523,9 +569,6 @@ export async function POST(request: NextRequest) {
     }));
 
     const { error: bsError } = await admin.from("booking_services").insert(bookingServices);
-    if (bsError) {
-      console.error("Error al insertar booking_services:", bsError);
-    }
     if (bsError) {
       console.error("Error al insertar booking_services:", bsError);
     }
