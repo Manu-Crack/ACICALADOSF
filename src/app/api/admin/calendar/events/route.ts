@@ -242,7 +242,7 @@ export async function GET(request: NextRequest) {
             (sum, bs) => sum + (bs.service_price_cents || 0),
             0
           );
-          const priceToShow = empServicesPriceCents > 0 ? empServicesPriceCents : b.total_price_cents;
+          const priceToShow = empServices.length > 0 ? empServicesPriceCents : b.total_price_cents;
           const eventId = servicesByEmp.size > 1 ? `booking-${b.id}-${empId}` : `booking-${b.id}`;
 
           events.push({

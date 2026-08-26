@@ -90,20 +90,36 @@ export function ServiceCard({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-end",
           marginBottom: 16,
+          gap: 8,
+          flexWrap: "wrap",
         }}
       >
-        <span
-          style={{
-            fontWeight: 700,
-            fontSize: "1.125rem",
-            color: "var(--color-primary)",
-          }}
-        >
-          S/ {priceFormatted}
-        </span>
-        <span className="badge badge-neutral" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <span
+            style={{
+              fontSize: "0.72rem",
+              color: "var(--color-text-muted)",
+              fontWeight: 500,
+              letterSpacing: "0.02em",
+              marginBottom: 2,
+            }}
+          >
+            Precio referencial desde
+          </span>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: "1.15rem",
+              color: "var(--color-primary)",
+              lineHeight: 1.1,
+            }}
+          >
+            S/ {priceFormatted}
+          </span>
+        </div>
+        <span className="badge badge-neutral" style={{ display: "inline-flex", alignItems: "center", gap: 5, alignSelf: "flex-end", marginBottom: 2 }}>
           <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(service.duration_minutes)}
         </span>
       </div>

@@ -225,16 +225,30 @@ export function CartDrawer() {
                     </p>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span
-                      style={{
-                        fontWeight: 800,
-                        color: "var(--color-primary)",
-                        fontSize: "1rem",
-                      }}
-                    >
-                      S/ {(item.price_cents / 100).toFixed(2)}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ textAlign: "right" }}>
+                      <span
+                        style={{
+                          fontSize: "0.62rem",
+                          color: "var(--color-text-muted)",
+                          display: "block",
+                          lineHeight: 1.1,
+                          marginBottom: 1,
+                        }}
+                      >
+                        Ref. desde
+                      </span>
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          color: "var(--color-primary)",
+                          fontSize: "0.95rem",
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        S/ {(item.price_cents / 100).toFixed(2)}
+                      </span>
+                    </div>
 
                     <button
                       type="button"
@@ -310,7 +324,7 @@ export function CartDrawer() {
                   color: "#FFFFFF",
                 }}
               >
-                <span>Monto acumulado:</span>
+                <span>Total referencial:</span>
                 <span style={{ color: "var(--color-primary)" }}>
                   S/ {(totalCents / 100).toFixed(2)}
                 </span>

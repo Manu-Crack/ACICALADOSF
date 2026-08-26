@@ -176,6 +176,51 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
     setEmployees(data ?? []);
   }, [supabase]);
 
+  // Estado de edición de precio por servicio individual
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editPriceValue, setEditPriceValue] = useState<string>("");
+  const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
+
+  // Guardar nuevo precio de un servicio específico de una reserva
+  async function handleSaveServicePrice(bookingId: string, bookingServiceId: string, newPriceSoles: number) {
+    if (isNaN(newPriceSoles) || newPriceSoles < 0) {
+      alert("Por favor ingresa un precio válido (mayor o igual a S/ 0.00).");
+      return;
+    }
+
+    setSavingPriceId(bookingServiceId);
+    try {
+      const res = await fetch("/api/admin/bookings/service-price", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_id: bookingId,
+          booking_service_id: bookingServiceId,
+          price_soles: newPriceSoles,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo actualizar el precio del servicio.");
+      } else if (data.booking) {
+        // Actualización instantánea local
+        setBookings((prev) =>
+          prev.map((b) => (b.id === bookingId ? { ...b, ...data.booking } : b))
+        );
+        setEditingPriceId(null);
+      } else {
+        await loadBookings(true);
+        setEditingPriceId(null);
+      }
+    } catch (err) {
+      console.error("Error al guardar precio del servicio:", err);
+      alert("Error de conexión al actualizar el precio del servicio.");
+    } finally {
+      setSavingPriceId(null);
+    }
+  }
+
   // Actualizar asignación de un servicio individual dentro de una reserva
   async function updateBookingServiceEmployee(bookingServiceId: string, employeeId: string | null) {
     try {
@@ -1623,20 +1668,38 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                         >
                           <span>📋</span>
                           <span>
-                            Servicios Contratados ({b.booking_services?.length || 1}) · Asignación de Personal
+                            Servicios Contratados ({b.booking_services?.length || 1}) · Edición de Precios y Personal
                           </span>
                         </span>
-                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                          Total: S/ {(b.total_price_cents / 100).toFixed(2)} ({formatDuration(b.total_duration_minutes)})
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                              color: "var(--color-primary, #C8A45C)",
+                              background: "rgba(200, 164, 92, 0.1)",
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(200, 164, 92, 0.25)",
+                            }}
+                          >
+                            Total Cita: S/ {(b.total_price_cents / 100).toFixed(2)}
+                          </span>
+                          <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                            ({formatDuration(b.total_duration_minutes)})
+                          </span>
+                        </div>
                       </div>
 
                       {b.booking_services && b.booking_services.length > 0 ? (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 10 }}>
                           {b.booking_services.map((bs, idx) => {
                             const assignedEmp = bs.assigned_employee_id
                               ? employeeMap.get(bs.assigned_employee_id)
                               : (b.assigned_employee_id ? employeeMap.get(b.assigned_employee_id) : null);
+
+                            const isEditingPrice = editingPriceId === bs.id;
+                            const isSavingPrice = savingPriceId === bs.id;
 
                             return (
                               <div
@@ -1644,30 +1707,149 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                 style={{
                                   padding: "10px 12px",
                                   background: "rgba(255, 255, 255, 0.03)",
-                                  border: "1px solid rgba(255, 255, 255, 0.07)",
+                                  border: isEditingPrice
+                                    ? "1px solid var(--color-primary, #C8A45C)"
+                                    : "1px solid rgba(255, 255, 255, 0.07)",
                                   borderRadius: "var(--radius-sm, 6px)",
                                   display: "flex",
                                   flexDirection: "column",
                                   gap: 6,
+                                  boxShadow: isEditingPrice ? "0 0 12px rgba(200, 164, 92, 0.15)" : "none",
+                                  transition: "all var(--transition-fast)",
                                 }}
                               >
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                                  <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#fff" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#fff", flex: 1, minWidth: 120 }}>
                                     <span style={{ color: "var(--color-primary, #C8A45C)", marginRight: 4 }}>
                                       {idx + 1}.
                                     </span>
                                     {bs.service_name}
                                   </div>
-                                  <span
-                                    style={{
-                                      fontWeight: 700,
-                                      fontSize: "0.8rem",
-                                      color: "var(--color-success, #22c55e)",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    S/ {(bs.service_price_cents / 100).toFixed(2)}
-                                  </span>
+
+                                  {/* Sección de Precio con Edición Inline */}
+                                  {isEditingPrice ? (
+                                    <div
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        background: "rgba(0, 0, 0, 0.7)",
+                                        padding: "3px 6px",
+                                        borderRadius: 6,
+                                        border: "1px solid var(--color-primary, #C8A45C)",
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <span style={{ fontSize: "0.75rem", color: "var(--color-primary, #C8A45C)", fontWeight: 800 }}>S/</span>
+                                      <input
+                                        type="number"
+                                        step="0.50"
+                                        min="0"
+                                        value={editPriceValue}
+                                        onChange={(e) => setEditPriceValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleSaveServicePrice(b.id, bs.id, parseFloat(editPriceValue));
+                                          }
+                                          if (e.key === "Escape") {
+                                            e.preventDefault();
+                                            setEditingPriceId(null);
+                                          }
+                                        }}
+                                        autoFocus
+                                        placeholder="0.00"
+                                        style={{
+                                          width: 68,
+                                          padding: "2px 6px",
+                                          fontSize: "0.8rem",
+                                          fontWeight: 700,
+                                          color: "#fff",
+                                          background: "#18181b",
+                                          border: "1px solid rgba(255,255,255,0.25)",
+                                          borderRadius: 4,
+                                          outline: "none",
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={isSavingPrice}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSaveServicePrice(b.id, bs.id, parseFloat(editPriceValue));
+                                        }}
+                                        className="btn btn-primary btn-sm"
+                                        style={{
+                                          padding: "2px 7px",
+                                          fontSize: "0.72rem",
+                                          fontWeight: 700,
+                                          lineHeight: 1.2,
+                                          minHeight: "auto",
+                                        }}
+                                        title="Guardar nuevo precio"
+                                      >
+                                        {isSavingPrice ? "⏳" : "✓"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isSavingPrice}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingPriceId(null);
+                                        }}
+                                        className="btn btn-ghost btn-sm"
+                                        style={{
+                                          padding: "2px 5px",
+                                          fontSize: "0.72rem",
+                                          color: "var(--color-text-muted)",
+                                          lineHeight: 1.2,
+                                          minHeight: "auto",
+                                        }}
+                                        title="Cancelar edición"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                      <span
+                                        style={{
+                                          fontWeight: 800,
+                                          fontSize: "0.84rem",
+                                          color: "var(--color-success, #22c55e)",
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        S/ {(bs.service_price_cents / 100).toFixed(2)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingPriceId(bs.id);
+                                          setEditPriceValue((bs.service_price_cents / 100).toFixed(2));
+                                        }}
+                                        className="btn btn-ghost btn-sm"
+                                        style={{
+                                          padding: "2px 6px",
+                                          fontSize: "0.7rem",
+                                          color: "var(--color-primary, #C8A45C)",
+                                          borderRadius: "4px",
+                                          border: "1px solid rgba(200, 164, 92, 0.3)",
+                                          background: "rgba(200, 164, 92, 0.08)",
+                                          lineHeight: 1.2,
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 3,
+                                          fontWeight: 600,
+                                        }}
+                                        title="Editar precio individual para esta cita"
+                                      >
+                                        <span>✏️</span>
+                                        <span>Editar</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", color: "var(--color-text-muted)" }}>

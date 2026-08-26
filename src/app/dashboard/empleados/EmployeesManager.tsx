@@ -580,7 +580,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
               : "Sin asignar",
             services: svcs,
             totalDurationMinutes: duration,
-            totalPriceCents: price > 0 ? price : b.total_price_cents,
+            totalPriceCents: svcs.length > 0 ? price : b.total_price_cents,
           });
         }
       } else {

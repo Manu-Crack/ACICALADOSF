@@ -711,15 +711,31 @@ export default function ReservarPage() {
                       </p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                      <span
-                        style={{
-                          fontWeight: 800,
-                          color: "var(--color-primary)",
-                          fontSize: "1.125rem",
-                        }}
-                      >
-                        S/ {(service.price_cents / 100).toFixed(2)}
-                      </span>
+                      <div style={{ textAlign: "right" }}>
+                        <span
+                          style={{
+                            fontSize: "0.68rem",
+                            color: "var(--color-text-muted)",
+                            display: "block",
+                            fontWeight: 500,
+                            letterSpacing: "0.02em",
+                            lineHeight: 1.2,
+                            marginBottom: 2,
+                          }}
+                        >
+                          Precio referencial desde
+                        </span>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            color: "var(--color-primary)",
+                            fontSize: "1.125rem",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          S/ {(service.price_cents / 100).toFixed(2)}
+                        </span>
+                      </div>
                       <div
                         style={{
                           width: 26,
