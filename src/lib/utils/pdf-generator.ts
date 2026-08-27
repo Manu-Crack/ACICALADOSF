@@ -56,6 +56,12 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
   // =========================================================================
   // SECCIÓN 1: BALANCE FINANCIERO Y RESULTADO NETO (TABLA RESUMEN)
   // =========================================================================
+  const paymentMethodsDetails = [
+    data.summary.yape_collected_cents > 0 ? `Yape: ${fmtSoles(data.summary.yape_collected_cents)}` : null,
+    data.summary.cash_collected_cents > 0 ? `Efectivo: ${fmtSoles(data.summary.cash_collected_cents)}` : null,
+    data.summary.transfer_collected_cents > 0 ? `Transf: ${fmtSoles(data.summary.transfer_collected_cents)}` : null,
+  ].filter(Boolean).join(" | ") || "Sin cobros registrados";
+
   const summaryBody = [
     [
       "Total Reservas:",
@@ -68,18 +74,28 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     [
       "Confirmadas / Comp.:",
       `${data.summary.confirmed_bookings} / ${data.summary.completed_bookings}`,
-      "• Por Yape:",
-      fmtSoles(data.summary.yape_collected_cents),
+      "• Ingresos Spa:",
+      fmtSoles(data.summary.spa_collected_cents),
       "Saldos Pendientes:",
       fmtSoles(data.summary.pending_balance_cents),
     ],
     [
-      "Valor Contratado:",
-      fmtSoles(data.summary.total_services_value_cents),
-      "• En Efectivo:",
-      fmtSoles(data.summary.cash_collected_cents),
+      "Pendientes / Canc.:",
+      `${data.summary.pending_bookings} / ${data.summary.cancelled_bookings}`,
+      "• Ingresos Barbería:",
+      fmtSoles(data.summary.barberia_collected_cents),
       "RESULTADO NETO:",
       fmtSoles(data.summary.net_result_cents),
+    ],
+    [
+      "Valor Contratado:",
+      fmtSoles(data.summary.total_services_value_cents),
+      "• Desglose Canales:",
+      paymentMethodsDetails,
+      "Margen Operativo:",
+      data.summary.total_collected_cents > 0
+        ? `${Math.round((data.summary.net_result_cents / data.summary.total_collected_cents) * 100)}%`
+        : "0%",
     ],
   ];
 
@@ -102,8 +118,8 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     columnStyles: {
       0: { fontStyle: "bold", cellWidth: 38 },
       1: { cellWidth: 32 },
-      2: { fontStyle: "bold", cellWidth: 48 },
-      3: { cellWidth: 38, fontStyle: "bold" },
+      2: { fontStyle: "bold", cellWidth: 46 },
+      3: { cellWidth: 54, fontStyle: "bold" },
       4: { fontStyle: "bold", cellWidth: 42 },
       5: { cellWidth: 42, fontStyle: "bold" },
     },
@@ -310,6 +326,17 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     theme: "striped",
     headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
     bodyStyles: { fontSize: 7 },
+    columnStyles: {
+      0: { cellWidth: 20 },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 54 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 30 },
+      5: { cellWidth: 30 },
+      6: { cellWidth: 30 },
+      7: { halign: "right", cellWidth: 24 },
+      8: { cellWidth: 20 },
+    },
     margin: { left: 14, right: 14 },
   });
 

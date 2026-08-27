@@ -10,7 +10,7 @@
     "lint": "eslint",
     "test": "tsx tests/unit/comprehensive-audit-test.ts",
     "test:reports": "tsx tests/integration/physical-report-verification.ts",
-    "test:all": "tsx tests/unit/comprehensive-audit-test.ts && tsx tests/unit/service-price-edit-audit-test.ts && tsx tests/integration/physical-report-verification.ts"
+    "test:all": "tsx tests/unit/comprehensive-audit-test.ts && tsx tests/unit/service-price-edit-audit-test.ts && tsx tests/unit/income-synchronization-test.ts && tsx tests/integration/physical-report-verification.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

@@ -113,8 +113,13 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
 
   addFinRow("1. Valor de Servicios Reservados (Pactado)", data.summary.total_services_value_cents, "Valor total de servicios en las reservas del rango");
   addFinRow("2. INGRESOS REALMENTE COBRADOS", data.summary.total_collected_cents, "Dinero verificado y recibido en caja/cuentas", true);
+  addFinRow("   • Ingresos Spa", data.summary.spa_collected_cents, "Recaudación del rubro Spa");
+  addFinRow("   • Ingresos Barbería", data.summary.barberia_collected_cents, "Recaudación del rubro Barbería");
   addFinRow("   • Cobrado por Yape", data.summary.yape_collected_cents, "Transferencias verificadas por Yape");
   addFinRow("   • Cobrado en Efectivo", data.summary.cash_collected_cents, "Efectivo recibido en caja");
+  if (data.summary.transfer_collected_cents && data.summary.transfer_collected_cents > 0) {
+    addFinRow("   • Cobrado por Transferencia Bancaria", data.summary.transfer_collected_cents, "Transferencias bancarias directas");
+  }
   if (data.summary.culqi_collected_cents && data.summary.culqi_collected_cents > 0) {
     addFinRow("   • Cobrado por Culqi (Histórico)", data.summary.culqi_collected_cents, "Pagos con tarjeta procesados exitosamente por Culqi");
   }

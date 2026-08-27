@@ -15,12 +15,23 @@ interface EmployeeOption {
 type PeriodType = "day" | "week" | "month" | "year" | "custom";
 type ModuleFilter = "all" | "spa" | "barberia";
 
+function getPeruDateString(d: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(d);
+  } catch {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+}
+
 export function ReportsManager() {
   // Modal de Cierre de Caja WhatsApp
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
 
   // ---------------------------------------------------------------------------
-  // Helpers de fechas y rangos
+  // Helpers de fechas y rangos (Zona Horaria Perú America/Lima)
   // ---------------------------------------------------------------------------
   const [currentDateReference, setCurrentDateReference] = useState<Date>(new Date());
   const [periodType, setPeriodType] = useState<PeriodType>("month");
@@ -28,43 +39,40 @@ export function ReportsManager() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
 
-  // Calcular fechas basadas en periodType y currentDateReference
+  // Calcular fechas basadas en periodType y currentDateReference en America/Lima
   const calculateDates = useCallback((type: PeriodType, refDate: Date) => {
-    const y = refDate.getFullYear();
-    const m = refDate.getMonth();
-    const d = refDate.getDate();
+    const todayStr = getPeruDateString(refDate);
+    const [y, m, d] = todayStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d, 12, 0, 0);
 
     if (type === "day") {
-      const dayStr = refDate.toISOString().split("T")[0];
-      return { start: dayStr, end: dayStr };
+      return { start: todayStr, end: todayStr };
     }
 
     if (type === "week") {
-      const currentDay = refDate.getDay();
-      const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-      const monday = new Date(y, m, d + diffToMonday);
-      const sunday = new Date(y, m, d + diffToMonday + 6);
+      const dayOfWeek = dt.getDay(); // 0 = Domingo, 1 = Lunes
+      const diffToMonday = dt.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const monday = new Date(y, m - 1, diffToMonday, 12, 0, 0);
+      const sunday = new Date(y, m - 1, diffToMonday + 6, 12, 0, 0);
       return {
-        start: monday.toISOString().split("T")[0],
-        end: sunday.toISOString().split("T")[0],
+        start: getPeruDateString(monday),
+        end: getPeruDateString(sunday),
       };
     }
 
     if (type === "month") {
-      const firstDay = new Date(y, m, 1);
-      const lastDay = new Date(y, m + 1, 0);
+      const monthStr = String(m).padStart(2, "0");
+      const lastDay = new Date(y, m, 0, 12, 0, 0).getDate();
       return {
-        start: firstDay.toISOString().split("T")[0],
-        end: lastDay.toISOString().split("T")[0],
+        start: `${y}-${monthStr}-01`,
+        end: `${y}-${monthStr}-${String(lastDay).padStart(2, "0")}`,
       };
     }
 
     if (type === "year") {
-      const firstDay = new Date(y, 0, 1);
-      const lastDay = new Date(y, 11, 31);
       return {
-        start: firstDay.toISOString().split("T")[0],
-        end: lastDay.toISOString().split("T")[0],
+        start: `${y}-01-01`,
+        end: `${y}-12-31`,
       };
     }
 
@@ -80,14 +88,17 @@ export function ReportsManager() {
     }
   }, [periodType, currentDateReference, calculateDates]);
 
-  // Navegación de periodos (Anterior / Siguiente / Hoy)
+  // Navegación de periodos (Anterior / Siguiente / Hoy) en Perú
   const navigatePeriod = (direction: -1 | 1 | 0) => {
     if (direction === 0) {
       setCurrentDateReference(new Date());
       return;
     }
 
-    const newDate = new Date(currentDateReference);
+    const curPeruStr = getPeruDateString(currentDateReference);
+    const [y, m, d] = curPeruStr.split("-").map(Number);
+    const newDate = new Date(y, m - 1, d, 12, 0, 0);
+
     if (periodType === "day") {
       newDate.setDate(newDate.getDate() + direction);
     } else if (periodType === "week") {
@@ -102,8 +113,12 @@ export function ReportsManager() {
 
   // Texto legible del periodo activo
   const periodLabel = useMemo(() => {
+    const curPeruStr = getPeruDateString(currentDateReference);
+    const [y, m, d] = curPeruStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d, 12, 0, 0);
+
     if (periodType === "day") {
-      return currentDateReference.toLocaleDateString("es-PE", {
+      return dt.toLocaleDateString("es-PE", {
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -115,13 +130,13 @@ export function ReportsManager() {
       return `Semana: ${start} al ${end}`;
     }
     if (periodType === "month") {
-      return currentDateReference.toLocaleDateString("es-PE", {
+      return dt.toLocaleDateString("es-PE", {
         month: "long",
         year: "numeric",
       });
     }
     if (periodType === "year") {
-      return `Año ${currentDateReference.getFullYear()}`;
+      return `Año ${y}`;
     }
     return `${startDate || "Inicio"} — ${endDate || "Fin"}`;
   }, [periodType, currentDateReference, calculateDates, startDate, endDate]);
