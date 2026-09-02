@@ -138,8 +138,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
             )`
           )
           .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
-          .order("booking_date", { ascending: false })
-          .order("start_time", { ascending: true });
+          .order("created_at", { ascending: false });
 
         if (filterStatus) {
           query = query.eq("status", filterStatus);
@@ -311,10 +310,9 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
 
                 const next = [newBooking, ...prev];
                 return next.sort((a, b) => {
-                  if (a.booking_date !== b.booking_date) {
-                    return b.booking_date.localeCompare(a.booking_date);
-                  }
-                  return (a.start_time || "").localeCompare(b.start_time || "");
+                  const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                  const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                  return timeB - timeA;
                 });
               });
 
@@ -355,10 +353,9 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                 } else {
                   const next = [updatedBooking, ...prev];
                   return next.sort((a, b) => {
-                    if (a.booking_date !== b.booking_date) {
-                      return b.booking_date.localeCompare(a.booking_date);
-                    }
-                    return (a.start_time || "").localeCompare(b.start_time || "");
+                    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                    return timeB - timeA;
                   });
                 }
               });
