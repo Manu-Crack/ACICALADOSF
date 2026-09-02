@@ -60,6 +60,13 @@ export function NewBookingModal({
   // Selección de servicios (IDs seleccionados se preservan siempre)
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
 
+  // Precios personalizados por servicio seleccionado: { [serviceId]: priceInCents }
+  const [customServicePrices, setCustomServicePrices] = useState<Record<string, number>>({});
+  // Servicio cuyo precio está siendo editado inline en el chip
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  // Valor temporal de texto mientras se edita el precio
+  const [tempEditingPrice, setTempEditingPrice] = useState<string>("");
+
   // Asignación de personal por servicio: { [serviceId]: employeeId }
   const [serviceAssignments, setServiceAssignments] = useState<Record<string, string>>({});
   const [assignmentMode, setAssignmentMode] = useState<"auto" | "custom">("auto");
@@ -130,6 +137,9 @@ export function NewBookingModal({
     setSearchQuery("");
     setIsCustomPrice(false);
     setCustomTotalPrice("");
+    setCustomServicePrices({});
+    setEditingServiceId(null);
+    setTempEditingPrice("");
 
     async function loadData() {
       setLoadingInitial(true);
@@ -173,28 +183,37 @@ export function NewBookingModal({
     return selectedServices.reduce((sum, s) => sum + (s.price_cents || 0), 0);
   }, [selectedServices]);
 
+  const selectedServicesTotalPriceCents = useMemo(() => {
+    return selectedServices.reduce((sum, s) => {
+      const pCents = customServicePrices[s.id] !== undefined ? customServicePrices[s.id] : (s.price_cents || 0);
+      return sum + pCents;
+    }, 0);
+  }, [selectedServices, customServicePrices]);
+
   const totalDurationMinutes = useMemo(() => {
     return selectedServices.reduce((sum, s) => sum + (s.duration_minutes || 30), 0);
   }, [selectedServices]);
 
   const catalogTotalPriceSoles = (catalogTotalPriceCents / 100).toFixed(2);
 
-  // Sincronizar automáticamente customTotalPrice con el total del catálogo mientras no haya edición manual
+  // Sincronizar automáticamente customTotalPrice con el total de seleccionados (incluyendo precios editados) mientras no haya sobreescritura manual abajo
   useEffect(() => {
     if (!isCustomPrice) {
       if (selectedServiceIds.length === 0) {
         setCustomTotalPrice("");
       } else {
-        setCustomTotalPrice((catalogTotalPriceCents / 100).toFixed(2));
+        setCustomTotalPrice((selectedServicesTotalPriceCents / 100).toFixed(2));
       }
     }
-  }, [catalogTotalPriceCents, isCustomPrice, selectedServiceIds.length]);
+  }, [selectedServicesTotalPriceCents, isCustomPrice, selectedServiceIds.length]);
 
   // Si se vacía la selección de servicios, reiniciar estado de personalización
   useEffect(() => {
     if (selectedServiceIds.length === 0) {
       setIsCustomPrice(false);
       setCustomTotalPrice("");
+      setCustomServicePrices({});
+      setEditingServiceId(null);
     }
   }, [selectedServiceIds.length]);
 
@@ -206,8 +225,8 @@ export function NewBookingModal({
         return Math.round(parsed * 100);
       }
     }
-    return catalogTotalPriceCents;
-  }, [customTotalPrice, catalogTotalPriceCents]);
+    return selectedServicesTotalPriceCents;
+  }, [customTotalPrice, selectedServicesTotalPriceCents]);
 
   const effectiveTotalPriceSoles = (effectiveTotalPriceCents / 100).toFixed(2);
 
@@ -320,12 +339,34 @@ export function NewBookingModal({
   const removeService = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setSelectedServiceIds((prev) => prev.filter((item) => item !== id));
+    setCustomServicePrices((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    if (editingServiceId === id) {
+      setEditingServiceId(null);
+    }
     // Limpiar asignación individual si existía
     setServiceAssignments((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
+  };
+
+  const handleSaveCustomServicePrice = (serviceId: string) => {
+    if (tempEditingPrice.trim() !== "") {
+      const parsed = parseFloat(tempEditingPrice);
+      if (!isNaN(parsed) && parsed >= 0) {
+        const cents = Math.round(parsed * 100);
+        setCustomServicePrices((prev) => ({
+          ...prev,
+          [serviceId]: cents,
+        }));
+      }
+    }
+    setEditingServiceId(null);
   };
 
   const handlePerServiceEmployeeChange = (serviceId: string, employeeId: string) => {
@@ -405,6 +446,14 @@ export function NewBookingModal({
     setSubmitting(true);
 
     try {
+      const servicePricesMap: Record<string, number> = {};
+      for (const id of selectedServiceIds) {
+        const svc = services.find((s) => s.id === id);
+        servicePricesMap[id] = customServicePrices[id] !== undefined
+          ? customServicePrices[id]
+          : (svc?.price_cents || 0);
+      }
+
       const payload = {
         client_first_name: clientFirstName.trim(),
         client_last_name: clientLastName.trim() || "Presencial",
@@ -412,6 +461,7 @@ export function NewBookingModal({
         client_dni: clientDni.trim() || null,
         client_email: clientEmail.trim() || null,
         service_ids: selectedServiceIds,
+        service_prices: servicePricesMap,
         total_price_cents: effectiveTotalPriceCents,
         assigned_employee_id: assignedEmployeeId || null,
         service_assignments: assignmentMode === "custom" ? serviceAssignments : undefined,
@@ -450,6 +500,9 @@ export function NewBookingModal({
         setSearchQuery("");
         setIsCustomPrice(false);
         setCustomTotalPrice("");
+        setCustomServicePrices({});
+        setEditingServiceId(null);
+        setTempEditingPrice("");
         onBookingCreated();
         onClose();
       }, 1000);
@@ -830,45 +883,156 @@ export function NewBookingModal({
                     </button>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {selectedServices.map((s) => (
-                      <span
-                        key={s.id}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          background: "rgba(200, 164, 92, 0.2)",
-                          border: "1px solid rgba(200, 164, 92, 0.4)",
-                          color: "#fff",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          padding: "3px 8px",
-                          borderRadius: "var(--radius-sm, 6px)",
-                        }}
-                      >
-                        <span>{s.type === "barberia" ? "💈" : "💆‍♀️"}</span>
-                        <span>{s.name}</span>
-                        <span style={{ color: "var(--color-success, #22c55e)", fontWeight: 700 }}>
-                          S/ {(s.price_cents / 100).toFixed(2)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => removeService(s.id, e)}
+                    {selectedServices.map((s) => {
+                      const curPriceCents = customServicePrices[s.id] !== undefined ? customServicePrices[s.id] : (s.price_cents || 0);
+                      const isPriceEdited = customServicePrices[s.id] !== undefined && customServicePrices[s.id] !== s.price_cents;
+                      const isEditingThis = editingServiceId === s.id;
+
+                      return (
+                        <span
+                          key={s.id}
                           style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "var(--color-text-muted, #a1a1aa)",
-                            cursor: "pointer",
-                            padding: "0 2px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            background: isPriceEdited ? "rgba(200, 164, 92, 0.28)" : "rgba(200, 164, 92, 0.16)",
+                            border: isPriceEdited ? "1px solid var(--color-primary, #C8A45C)" : "1px solid rgba(200, 164, 92, 0.35)",
+                            color: "#fff",
                             fontSize: "0.75rem",
-                            lineHeight: 1,
+                            fontWeight: 600,
+                            padding: "3px 8px",
+                            borderRadius: "var(--radius-sm, 6px)",
+                            transition: "all 0.15s ease",
                           }}
-                          title="Quitar servicio"
                         >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
+                          <span>{s.type === "barberia" ? "💈" : "💆‍♀️"}</span>
+                          <span>{s.name}</span>
+
+                          {/* Edición interactiva por clic en el monto */}
+                          {isEditingThis ? (
+                            <div
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                background: "rgba(0, 0, 0, 0.8)",
+                                padding: "1px 4px",
+                                borderRadius: "4px",
+                                border: "1px solid var(--color-primary, #C8A45C)",
+                                boxShadow: "0 0 8px rgba(200, 164, 92, 0.5)",
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span style={{ fontSize: "0.7rem", color: "var(--color-primary, #C8A45C)", fontWeight: 700 }}>
+                                S/
+                              </span>
+                              <input
+                                type="number"
+                                step="0.50"
+                                min="0"
+                                autoFocus
+                                value={tempEditingPrice}
+                                onChange={(e) => setTempEditingPrice(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleSaveCustomServicePrice(s.id);
+                                  } else if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setEditingServiceId(null);
+                                  }
+                                }}
+                                onBlur={() => handleSaveCustomServicePrice(s.id)}
+                                style={{
+                                  width: "62px",
+                                  padding: "1px 2px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 800,
+                                  color: "var(--color-success, #22c55e)",
+                                  background: "transparent",
+                                  border: "none",
+                                  outline: "none",
+                                  textAlign: "right",
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSaveCustomServicePrice(s.id);
+                                }}
+                                style={{
+                                  background: "var(--color-primary, #C8A45C)",
+                                  color: "#000",
+                                  border: "none",
+                                  borderRadius: "3px",
+                                  padding: "1px 4px",
+                                  fontSize: "0.68rem",
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                  lineHeight: 1,
+                                }}
+                                title="Confirmar nuevo precio"
+                              >
+                                ✓
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingServiceId(s.id);
+                                setTempEditingPrice((curPriceCents / 100).toFixed(2));
+                              }}
+                              style={{
+                                color: "var(--color-success, #22c55e)",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                padding: "1px 5px",
+                                borderRadius: "4px",
+                                background: isPriceEdited ? "rgba(200, 164, 92, 0.25)" : "rgba(34, 197, 94, 0.12)",
+                                border: isPriceEdited ? "1px dashed var(--color-primary, #C8A45C)" : "1px solid transparent",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                transition: "all 0.15s ease",
+                              }}
+                              title="Clic sobre el monto para editar el precio de este servicio"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "rgba(200, 164, 92, 0.35)";
+                                e.currentTarget.style.borderColor = "var(--color-primary, #C8A45C)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = isPriceEdited ? "rgba(200, 164, 92, 0.25)" : "rgba(34, 197, 94, 0.12)";
+                                e.currentTarget.style.borderColor = isPriceEdited ? "var(--color-primary, #C8A45C)" : "transparent";
+                              }}
+                            >
+                              <span>S/ {(curPriceCents / 100).toFixed(2)}</span>
+                              <span style={{ fontSize: "0.65rem", opacity: 0.8 }} title="Editar monto">✏️</span>
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={(e) => removeService(s.id, e)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--color-text-muted, #a1a1aa)",
+                              cursor: "pointer",
+                              padding: "0 2px",
+                              fontSize: "0.75rem",
+                              lineHeight: 1,
+                            }}
+                            title="Quitar servicio"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}

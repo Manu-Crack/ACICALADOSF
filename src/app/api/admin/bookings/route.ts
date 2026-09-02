@@ -394,9 +394,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Ordenar los servicios según el orden solicitado
+    // Ordenar los servicios según el orden solicitado y respetar precios individuales personalizados si se enviaron
+    const customPricesMap: Record<string, number> =
+      body.service_prices && typeof body.service_prices === "object"
+        ? body.service_prices
+        : {};
+
     const orderedServices = service_ids
-      .map((id) => services.find((s) => s.id === id))
+      .map((id) => {
+        const s = services.find((srv) => srv.id === id);
+        if (!s) return null;
+        let pCents = s.price_cents;
+        if (customPricesMap[id] !== undefined) {
+          const parsed = Math.round(Number(customPricesMap[id]));
+          if (!isNaN(parsed) && parsed >= 0) {
+            pCents = parsed;
+          }
+        }
+        return {
+          ...s,
+          price_cents: pCents,
+        };
+      })
       .filter(Boolean) as typeof services;
 
     // 3. Determinar rubro (barbería, spa o mixto) y calcular totales
@@ -532,11 +551,26 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. Insertar detalle de servicios en 'booking_services' con empleados asignados
-    // Distribuir el total definido entre los servicios sin alterar el catálogo maestro
+    // Distribuir el total definido o aplicar precios individuales editados sin alterar el catálogo maestro
+    const hasCustomPerServicePrices = Object.keys(customPricesMap).length > 0;
     const numServices = assignmentResult.items.length;
     let distributedServices = assignmentResult.items.map((item) => ({ ...item }));
 
-    if (numServices === 1) {
+    if (hasCustomPerServicePrices) {
+      distributedServices = assignmentResult.items.map((item) => {
+        let finalPrice = item.service_price_cents;
+        if (customPricesMap[item.service_id] !== undefined) {
+          const parsed = Math.round(Number(customPricesMap[item.service_id]));
+          if (!isNaN(parsed) && parsed >= 0) {
+            finalPrice = parsed;
+          }
+        }
+        return {
+          ...item,
+          service_price_cents: finalPrice,
+        };
+      });
+    } else if (numServices === 1) {
       distributedServices[0].service_price_cents = totalPriceCents;
     } else if (numServices > 1 && totalPriceCents !== defaultCatalogTotalCents) {
       let runningSum = 0;
