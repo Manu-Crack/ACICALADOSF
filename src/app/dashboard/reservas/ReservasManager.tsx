@@ -260,6 +260,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           prev.map((b) => (b.id === bookingId ? { ...b, ...data.booking } : b))
         );
         setEditingPriceId(null);
+        await loadBookings(true);
       } else {
         await loadBookings(true);
         setEditingPriceId(null);
@@ -400,7 +401,15 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                 const exists = prev.some((b) => b.id === updatedBooking.id);
                 if (exists) {
                   return prev.map((b) =>
-                    b.id === updatedBooking.id ? { ...b, ...updatedBooking } : b
+                    b.id === updatedBooking.id
+                      ? {
+                          ...b,
+                          ...updatedBooking,
+                          booking_services: Array.isArray(updatedBooking.booking_services)
+                            ? updatedBooking.booking_services
+                            : b.booking_services,
+                        }
+                      : b
                   );
                 } else {
                   const next = [updatedBooking, ...prev];
@@ -431,6 +440,20 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                 setBookings((prev) => prev.filter((b) => b.id !== deletedId));
               }
 
+              if (loadBookingsRef.current) {
+                loadBookingsRef.current(true);
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "booking_services",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Bookings] ⚡ Cambio en booking_services:", payload);
               if (loadBookingsRef.current) {
                 loadBookingsRef.current(true);
               }

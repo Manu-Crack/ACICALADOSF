@@ -356,12 +356,19 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      events,
-      employees: employeesList,
-      startDate,
-      endDate,
-    });
+    return NextResponse.json(
+      {
+        events,
+        employees: employeesList,
+        startDate,
+        endDate,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error) {
     console.error("GET /api/admin/calendar/events error:", error);
     return NextResponse.json({ error: "Error al consultar eventos del calendario" }, { status: 500 });

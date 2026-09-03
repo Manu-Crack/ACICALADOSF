@@ -256,6 +256,19 @@ export function DashboardHome({
             {
               event: "*",
               schema: "public",
+              table: "booking_services",
+            },
+            () => {
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
               table: "payment_logs",
             },
             () => {

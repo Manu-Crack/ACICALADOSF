@@ -114,6 +114,7 @@ export async function buildFullReportData(
         service_name,
         service_price_cents,
         duration_minutes,
+        assigned_employee_id,
         services:service_id (name, type)
       )
     `)
@@ -236,6 +237,7 @@ export async function buildFullReportData(
     service_name: string | null;
     service_price_cents: number;
     duration_minutes: number;
+    assigned_employee_id?: string | null;
     services: {
       name: string;
       type: string;
@@ -514,7 +516,10 @@ export async function buildFullReportData(
           };
         }
         servicesMap[key].times_booked += 1;
-        servicesMap[key].total_revenue_cents += sPrice;
+        // Solo acumular en recaudación de servicios si la cita no está cancelada ni expirada
+        if (b.status !== "cancelada" && b.status !== "expirada") {
+          servicesMap[key].total_revenue_cents += sPrice;
+        }
 
         if (b.status !== "cancelada" && b.status !== "expirada") {
           completedServicesAuditList.push({
@@ -524,7 +529,9 @@ export async function buildFullReportData(
             client_name: clientName,
             service_name: sName,
             service_type: sType,
-            price_cents: sPrice || b.total_price_cents,
+            price_cents: bs.service_price_cents !== undefined && bs.service_price_cents !== null
+              ? bs.service_price_cents
+              : (b.total_price_cents || 0),
             employee_name: employeeName,
             date_exact: `${b.booking_date} ${b.start_time ? b.start_time.slice(0, 5) : ""}`.trim(),
             booking_date: b.booking_date,

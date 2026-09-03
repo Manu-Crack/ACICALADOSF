@@ -46,7 +46,14 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     const reportData = await buildFullReportData(admin, filters, userName);
 
-    return NextResponse.json({ data: reportData });
+    return NextResponse.json(
+      { data: reportData },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("GET /api/admin/reports/data exception:", msg);

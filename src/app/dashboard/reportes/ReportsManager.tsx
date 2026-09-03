@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { FullReportData } from "@/lib/types/reports";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS } from "@/lib/types/payments";
 import { DailyClosingWhatsAppModal } from "./DailyClosingWhatsAppModal";
@@ -223,6 +224,88 @@ export function ReportsManager() {
   useEffect(() => {
     loadReportData();
   }, [loadReportData]);
+
+  // ---------------------------------------------------------------------------
+  // Sincronización en Tiempo Real (Supabase Realtime)
+  // ---------------------------------------------------------------------------
+  const supabase = useMemo(() => createClient(), []);
+  const loadReportDataRef = useRef(loadReportData);
+  useEffect(() => {
+    loadReportDataRef.current = loadReportData;
+  }, [loadReportData]);
+
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let isMounted = true;
+
+    async function initRealtime() {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.access_token) {
+          supabase.realtime.setAuth(data.session.access_token);
+        }
+
+        if (!isMounted) return;
+
+        const channelName = "realtime-reports-changes";
+        const existing = supabase.getChannels().find(
+          (c: { topic: string }) => c.topic === `realtime:${channelName}` || c.topic === channelName
+        );
+        if (existing) {
+          supabase.removeChannel(existing);
+        }
+
+        channel = supabase
+          .channel(channelName)
+          .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
+            if (loadReportDataRef.current) {
+              loadReportDataRef.current();
+            }
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "booking_services" }, () => {
+            if (loadReportDataRef.current) {
+              loadReportDataRef.current();
+            }
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "payment_logs" }, () => {
+            if (loadReportDataRef.current) {
+              loadReportDataRef.current();
+            }
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => {
+            if (loadReportDataRef.current) {
+              loadReportDataRef.current();
+            }
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "egresos" }, () => {
+            if (loadReportDataRef.current) {
+              loadReportDataRef.current();
+            }
+          })
+          .subscribe();
+      } catch (err) {
+        console.error("[Supabase Realtime: Reports] Error inicializando suscripción:", err);
+      }
+    }
+
+    initRealtime();
+
+    const { data: authSubData } = supabase.auth.onAuthStateChange(
+      (_event: string, session: { access_token?: string } | null) => {
+        if (session?.access_token) {
+          supabase.realtime.setAuth(session.access_token);
+        }
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      authSubData?.subscription?.unsubscribe();
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [supabase]);
 
   // Exportar PDF
   const handleExportPdf = async () => {

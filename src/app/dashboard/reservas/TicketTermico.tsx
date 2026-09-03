@@ -162,6 +162,25 @@ export function TicketTermico({
         <span>S/. {totalReserva}</span>
       </div>
 
+      {booking.advance_amount_cents !== undefined && booking.advance_amount_cents > 0 && booking.payment_status === "parcial" && (
+        <div style={{ marginTop: "4px", fontSize: "11px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span>ADELANTO ABONADO:</span>
+            <span>S/. {(booking.advance_amount_cents / 100).toFixed(2)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderTop: "1px dashed #000000", marginTop: "2px", paddingTop: "2px" }}>
+            <span>SALDO PENDIENTE:</span>
+            <span>S/. {(((booking.balance_cents !== undefined && booking.balance_cents >= 0) ? booking.balance_cents : Math.max(0, booking.total_price_cents - booking.advance_amount_cents)) / 100).toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
+      {booking.payment_status === "total" && (
+        <div style={{ textAlign: "center", fontSize: "11px", fontWeight: "bold", marginTop: "4px" }}>
+          *** CANCELADO TOTAL ***
+        </div>
+      )}
+
       <div className="divider-solid" style={{ marginTop: "6px" }}></div>
 
       <div className="slogan">

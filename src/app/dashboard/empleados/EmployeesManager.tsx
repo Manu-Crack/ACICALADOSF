@@ -282,6 +282,20 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             {
               event: "*",
               schema: "public",
+              table: "booking_services",
+            },
+            (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+              console.log("[Supabase Realtime: Employees/Assignments] ⚡ Cambio en tabla booking_services:", payload.eventType, payload);
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
               table: "employees",
             },
             (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {

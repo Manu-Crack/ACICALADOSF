@@ -187,7 +187,13 @@ export async function DELETE(request: NextRequest) {
     if (verifiedPayments && verifiedPayments.length > 0) {
       amountPaidCents = verifiedPayments.reduce((sum, p) => sum + (p.amount_cents || 0), 0);
     } else {
-      amountPaidCents = Math.min(newTotalPriceCents, booking.advance_amount_cents || 0);
+      // Si no hay registros en payment_logs (ej. reservas presenciales sin logs previos),
+      // respetar advance_amount_cents si no excede el total, o mantener pago total si ya estaba liquidada
+      if (booking.payment_status === "total") {
+        amountPaidCents = newTotalPriceCents;
+      } else {
+        amountPaidCents = Math.min(newTotalPriceCents, booking.advance_amount_cents || 0);
+      }
     }
 
     const advancePercentage = booking.advance_percentage || 25;
@@ -237,7 +243,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 6. Actualizar la reserva en la tabla 'bookings'
-    const { data: updatedBooking, error: updateBookingErr } = await admin
+    const { error: updateBookingErr } = await admin
       .from("bookings")
       .update({
         total_price_cents: newTotalPriceCents,
@@ -250,7 +256,28 @@ export async function DELETE(request: NextRequest) {
         assigned_employee_id: newAssignedEmployeeId,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", bookingId)
+      .eq("id", bookingId);
+
+    if (updateBookingErr) {
+      console.error("Error al actualizar reserva tras eliminar servicio:", updateBookingErr);
+      return NextResponse.json(
+        { error: "Error al recalcular la reserva: " + updateBookingErr.message },
+        { status: 500 }
+      );
+    }
+
+    // 7. Sincronizar trigger en Postgres si hay payment_logs verificados
+    if (verifiedPayments && verifiedPayments.length > 0) {
+      try {
+        await admin.rpc("recalculate_booking_payment", { p_booking_id: bookingId });
+      } catch (rpcErr) {
+        console.warn("recalculate_booking_payment RPC warning (non-fatal):", rpcErr);
+      }
+    }
+
+    // 8. Obtener la reserva final completamente recalculada con sus servicios restantes
+    const { data: updatedBooking, error: fetchFinalErr } = await admin
+      .from("bookings")
       .select(`
         id,
         booking_code,
@@ -283,28 +310,20 @@ export async function DELETE(request: NextRequest) {
           assigned_employee_id
         )
       `)
+      .eq("id", bookingId)
       .single();
 
-    if (updateBookingErr || !updatedBooking) {
-      console.error("Error al actualizar reserva tras eliminar servicio:", updateBookingErr);
+    if (fetchFinalErr || !updatedBooking) {
+      console.error("Error al consultar reserva final tras eliminar servicio:", fetchFinalErr);
       return NextResponse.json(
-        { error: "Error al recalcular la reserva: " + (updateBookingErr?.message || "") },
+        { error: "Error al recuperar datos finales de la reserva: " + (fetchFinalErr?.message || "") },
         { status: 500 }
       );
     }
 
-    // 7. Sincronizar trigger en postgres si hay payment_logs
-    if (verifiedPayments && verifiedPayments.length > 0) {
-      try {
-        await admin.rpc("recalculate_booking_payment", { p_booking_id: bookingId });
-      } catch (rpcErr) {
-        console.warn("recalculate_booking_payment RPC warning:", rpcErr);
-      }
-    }
-
     return NextResponse.json({
       success: true,
-      message: `El servicio "${serviceToDelete.service_name}" fue eliminado de la reserva. Nuevo total: S/ ${(newTotalPriceCents / 100).toFixed(2)}.`,
+      message: `El servicio "${serviceToDelete.service_name}" fue eliminado de la reserva. Nuevo total: S/ ${(updatedBooking.total_price_cents / 100).toFixed(2)}.`,
       booking: updatedBooking,
     });
   } catch (err: unknown) {
