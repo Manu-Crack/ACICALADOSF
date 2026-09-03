@@ -257,3 +257,6 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
+// Permitir eliminación de servicio también desde este endpoint
+export { DELETE } from "../service/route";

@@ -188,6 +188,49 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editPriceValue, setEditPriceValue] = useState<string>("");
   const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
+  const [deletingServiceId, setDeletingServiceId] = useState<string | null>(null);
+
+  // Eliminar individualmente un servicio contratado de una reserva multi-servicio
+  async function handleRemoveServiceFromBooking(booking: Booking, serviceItem: BookingServiceItem) {
+    const totalServices = booking.booking_services?.length || 1;
+    if (totalServices <= 1) {
+      alert(
+        "Esta reserva solo tiene un servicio restante. Para cancelarla o eliminarla por completo, utiliza el botón 'Eliminar Definitivamente' al final de la cita o cambia su estado a 'Cancelada'."
+      );
+      return;
+    }
+
+    const confirmMsg = `¿Estás seguro de quitar el servicio "${serviceItem.service_name}" de esta reserva?\n\nEl precio total, la duración y el horario de fin se recalcularán automáticamente.`;
+    if (!confirm(confirmMsg)) return;
+
+    setDeletingServiceId(serviceItem.id);
+    try {
+      const res = await fetch("/api/admin/bookings/service", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_id: booking.id,
+          booking_service_id: serviceItem.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.booking) {
+        const updated = data.booking as unknown as Booking;
+        setBookings((prev) =>
+          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+        );
+        loadBookings(true);
+      } else {
+        alert(data.error || "No se pudo eliminar el servicio de la reserva.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Error de conexión al eliminar el servicio: " + msg);
+    } finally {
+      setDeletingServiceId(null);
+    }
+  }
 
   // Guardar nuevo precio de un servicio específico de una reserva
   async function handleSaveServicePrice(bookingId: string, bookingServiceId: string, newPriceSoles: number) {
@@ -1853,6 +1896,31 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                       >
                                         <span>✏️</span>
                                         <span>Editar</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={deletingServiceId === bs.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRemoveServiceFromBooking(b, bs);
+                                        }}
+                                        className="btn btn-ghost btn-sm"
+                                        style={{
+                                          padding: "2px 6px",
+                                          fontSize: "0.7rem",
+                                          color: "#ef4444",
+                                          borderRadius: "4px",
+                                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                                          background: "rgba(239, 68, 68, 0.08)",
+                                          lineHeight: 1.2,
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 3,
+                                          fontWeight: 600,
+                                        }}
+                                        title="Quitar este servicio de la reserva"
+                                      >
+                                        <span>{deletingServiceId === bs.id ? "⏳" : "🗑️"}</span>
                                       </button>
                                     </div>
                                   )}
