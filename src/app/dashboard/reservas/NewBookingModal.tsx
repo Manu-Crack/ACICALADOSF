@@ -360,10 +360,29 @@ export function NewBookingModal({
       const parsed = parseFloat(tempEditingPrice);
       if (!isNaN(parsed) && parsed >= 0) {
         const cents = Math.round(parsed * 100);
-        setCustomServicePrices((prev) => ({
-          ...prev,
+        const nextPrices = {
+          ...customServicePrices,
           [serviceId]: cents,
-        }));
+        };
+        setCustomServicePrices(nextPrices);
+
+        // Recalcular el total general de los servicios seleccionados con el nuevo precio pactado
+        const newTotalCents = selectedServices.reduce((sum, s) => {
+          const p = nextPrices[s.id] !== undefined ? nextPrices[s.id] : (s.price_cents || 0);
+          return sum + p;
+        }, 0);
+
+        const newTotalSoles = (newTotalCents / 100).toFixed(2);
+        setCustomTotalPrice(newTotalSoles);
+        setIsCustomPrice(false);
+
+        if (paymentMethod === "mixto") {
+          const totalNum = newTotalCents / 100;
+          const half = (totalNum / 2).toFixed(2);
+          const otherHalf = (totalNum - parseFloat(half)).toFixed(2);
+          setYapeAmount(half);
+          setCashAmount(otherHalf);
+        }
       }
     }
     setEditingServiceId(null);

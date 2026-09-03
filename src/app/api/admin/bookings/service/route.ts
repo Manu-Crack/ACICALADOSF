@@ -179,13 +179,46 @@ export async function DELETE(request: NextRequest) {
     // c) Recálculo de pagos y saldos
     const { data: verifiedPayments } = await admin
       .from("payment_logs")
-      .select("amount_cents")
+      .select("id, amount_cents, payment_type, payment_method, yape_amount_cents, cash_amount_cents")
       .eq("booking_id", bookingId)
       .eq("status", "verified");
 
     let amountPaidCents = 0;
     if (verifiedPayments && verifiedPayments.length > 0) {
-      amountPaidCents = verifiedPayments.reduce((sum, p) => sum + (p.amount_cents || 0), 0);
+      const totalVerifiedLogs = verifiedPayments.reduce((sum, p) => sum + (p.amount_cents || 0), 0);
+
+      // Si la cita estaba liquidada (total) o la suma de pagos supera el nuevo total pactado:
+      // Sincronizar los registros en payment_logs para que reflejen el nuevo precio cobrado real
+      if (booking.payment_status === "total" || totalVerifiedLogs > newTotalPriceCents) {
+        if (verifiedPayments.length === 1) {
+          const singleLog = verifiedPayments[0];
+          const updLog: Record<string, unknown> = { amount_cents: newTotalPriceCents };
+          const pMethod = (singleLog.payment_method || "").toLowerCase();
+          if (pMethod === "mixed" || pMethod === "mixto") {
+            const half = Math.floor(newTotalPriceCents / 2);
+            updLog.yape_amount_cents = half;
+            updLog.cash_amount_cents = newTotalPriceCents - half;
+          }
+          await admin.from("payment_logs").update(updLog).eq("id", singleLog.id);
+          amountPaidCents = newTotalPriceCents;
+        } else {
+          // Ajustar proporcionalmente o recortar los logs excedentes
+          let running = 0;
+          for (const p of verifiedPayments) {
+            const currAmt = p.amount_cents || 0;
+            if (running + currAmt > newTotalPriceCents) {
+              const allowed = Math.max(0, newTotalPriceCents - running);
+              await admin.from("payment_logs").update({ amount_cents: allowed }).eq("id", p.id);
+              running += allowed;
+            } else {
+              running += currAmt;
+            }
+          }
+          amountPaidCents = newTotalPriceCents;
+        }
+      } else {
+        amountPaidCents = Math.min(newTotalPriceCents, totalVerifiedLogs);
+      }
     } else {
       // Si no hay registros en payment_logs (ej. reservas presenciales sin logs previos),
       // respetar advance_amount_cents si no excede el total, o mantener pago total si ya estaba liquidada

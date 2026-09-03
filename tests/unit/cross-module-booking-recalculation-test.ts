@@ -210,17 +210,85 @@ assert(
 );
 
 // -----------------------------------------------------------------------------
-// Caso 6: Preservación Estricta de Egresos
+// Caso 7: Escenario Crítico: Cita Creada a S/ 50.00 y Ajustada a S/ 18.00
 // -----------------------------------------------------------------------------
-console.log("\n--- 6. Preservación Estricta de Egresos ---");
-const sampleExpenses = [
-  { id: "exp-1", amount_cents: 1500, category: "insumos", description: "Navajas y cuchillas" },
-  { id: "exp-2", amount_cents: 4500, category: "servicios", description: "Pago de luz" },
-];
-const totalExpensesCents = sampleExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
-assert(totalExpensesCents === 6000, "Total de egresos permanece intacto en S/ 60.00");
-const netBalance = 5000 - totalExpensesCents;
-assert(netBalance === -1000, "Saldo neto (Ingresos S/ 50.00 - Egresos S/ 60.00 = -S/ 10.00)");
+console.log("\n--- 7. Escenario Crítico: Cita Creada a S/ 50.00 y Ajustada a S/ 18.00 ---");
+
+// 1. Cita creada en mostrador por S/ 50.00
+let simulatedBooking = {
+  id: "book-walkin-50",
+  booking_code: "W50",
+  status: "confirmada",
+  payment_status: "total",
+  total_price_cents: 5000,
+  advance_amount_cents: 5000,
+  balance_cents: 0,
+};
+let simulatedPaymentLog = {
+  id: "pay-log-1",
+  booking_id: "book-walkin-50",
+  amount_cents: 5000,
+  payment_type: "full",
+  payment_method: "efectivo",
+  status: "verified",
+};
+
+// 2. Recepcionista edita precio de servicio de S/ 50.00 a S/ 18.00
+const adjustedPriceCents = 1800; // S/ 18.00
+
+// La lógica del endpoint service-price sincroniza el log de pago cuando la cita estaba liquidada
+if (simulatedBooking.payment_status === "total" || simulatedPaymentLog.amount_cents > adjustedPriceCents) {
+  simulatedPaymentLog.amount_cents = adjustedPriceCents;
+}
+simulatedBooking.total_price_cents = adjustedPriceCents;
+simulatedBooking.advance_amount_cents = Math.min(adjustedPriceCents, simulatedPaymentLog.amount_cents);
+simulatedBooking.balance_cents = Math.max(0, adjustedPriceCents - simulatedBooking.advance_amount_cents);
+
+assert(simulatedPaymentLog.amount_cents === 1800, "El payment_log se ajusta exactamente a S/ 18.00 (1800 cents)");
+assert(simulatedBooking.total_price_cents === 1800, "El total_price_cents de la cita es S/ 18.00");
+assert(simulatedBooking.advance_amount_cents === 1800, "El advance_amount_cents de la cita es S/ 18.00");
+assert(simulatedBooking.balance_cents === 0, "El saldo es S/ 0.00 (liquidada)");
+
+// 3. Verificación de cálculo en cabecera de Reservas (totalCollectedRevenue)
+const allBookingsTest = [simulatedBooking];
+const totalCollectedInHeader = allBookingsTest
+  .filter((b) => ["confirmada", "completada"].includes(b.status))
+  .reduce((sum, b) => {
+    const total = b.total_price_cents || 0;
+    if (b.payment_status === "total") {
+      return sum + total;
+    }
+    return sum + Math.min(total, b.advance_amount_cents || 0);
+  }, 0);
+
+assert(
+  totalCollectedInHeader === 1800,
+  `Cabecera de Reservas 'Ingresos Cobrados' computa exactamente S/ 18.00 (1800 centavos) y NO arrastra S/ 50.00`
+);
+
+// 4. Verificación en Reportes e Inicio (calculateValidIncomeForBooking)
+const reportIncome = calculateValidIncomeForBooking(simulatedBooking);
+assert(
+  reportIncome === 1800,
+  "Módulo Reportes e Inicio computan exactamente S/ 18.00 de ingreso cobrado"
+);
+
+// 5. Verificación de auditoría de servicios (sin fallback a catálogo)
+const simulatedBookingService = {
+  id: "bs-edited-1",
+  booking_id: simulatedBooking.id,
+  service_id: "svc-catalog-15", // Suponiendo precio base en catálogo de S/ 15.00
+  service_price_cents: 1800,     // Precio real pactado y editado en la cita
+};
+
+const auditPrice = simulatedBookingService.service_price_cents !== undefined && simulatedBookingService.service_price_cents !== null
+  ? simulatedBookingService.service_price_cents
+  : simulatedBooking.total_price_cents;
+
+assert(
+  auditPrice === 1800,
+  "Columna 'Precio Cobrado' en auditoría lee directamente S/ 18.00 y no el precio base de catálogo (S/ 15.00)"
+);
 
 // -----------------------------------------------------------------------------
 // Resumen

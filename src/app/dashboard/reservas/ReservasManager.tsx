@@ -582,11 +582,18 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const confirmedCount = bookings.filter((b) => b.status === "confirmada").length;
   const completedCount = bookings.filter((b) => b.status === "completada").length;
 
-  // Ingresos cobrados: suma de pagos verificados (advance_amount_cents) en reservas activas y completadas
-  // advance_amount_cents es recalculado por el trigger Postgres desde payment_logs verificados.
+  // Ingresos cobrados: suma de ingresos reales efectivamente cobrados en reservas confirmadas y completadas
+  // Si la cita está liquidada (payment_status === 'total'), computa directamente su total_price_cents real y vigente
+  // Si es un pago parcial (adelanto), computa advance_amount_cents con tope en total_price_cents
   const totalCollectedRevenue = bookings
     .filter((b) => ["confirmada", "completada"].includes(b.status))
-    .reduce((sum, b) => sum + (b.advance_amount_cents || 0), 0);
+    .reduce((sum, b) => {
+      const total = b.total_price_cents || 0;
+      if (b.payment_status === "total") {
+        return sum + total;
+      }
+      return sum + Math.min(total, b.advance_amount_cents || 0);
+    }, 0);
 
   // Saldo pendiente por cobrar en reservas activas con pago incompleto
   const pendingRevenueToCollect = bookings

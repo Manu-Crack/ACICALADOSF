@@ -291,11 +291,57 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
   });
 
   // =========================================================================
-  // SECCIÓN 4: EGRESOS OPERATIVOS
+  // SECCIÓN 4: DESGLOSE DE SERVICIOS POR MÓDULO (AUDITORÍA FINANCIERA)
   // =========================================================================
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lastSection3 = (doc as any).lastAutoTable;
   yPos = lastSection3 ? lastSection3.finalY + 8 : yPos + 40;
+
+  if (yPos > 140) {
+    doc.addPage();
+    yPos = 20;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...DARK_BG);
+  doc.text("Desglose de Servicios por Módulo (Auditoría)", 14, yPos);
+
+  const auditRows = (data.completed_services_audit || []).map((item) => [
+    item.service_name,
+    item.service_type === "spa" ? "Spa" : "Barbería",
+    fmtSoles(item.price_cents),
+    item.employee_name || "Sin asignar",
+    `${item.booking_date} ${item.start_time ? item.start_time.slice(0, 5) : ""}`.trim(),
+    `${item.booking_code} · ${item.client_name}`,
+    item.payment_method ? item.payment_method.toUpperCase() : "—",
+  ]);
+
+  autoTable(doc, {
+    startY: yPos + 3,
+    head: [["Servicio", "Módulo", "Precio Cobrado", "Especialista Asignado", "Fecha Exacta", "Cita / Cliente", "Método de Pago"]],
+    body: auditRows.length > 0 ? auditRows : [["No hay servicios auditados en el periodo consultado.", "", "", "", "", "", ""]],
+    theme: "striped",
+    headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: TEXT_DARK },
+    columnStyles: {
+      0: { cellWidth: 60, fontStyle: "bold" },
+      1: { cellWidth: 24 },
+      2: { halign: "right", cellWidth: 26, fontStyle: "bold" },
+      3: { cellWidth: 40 },
+      4: { cellWidth: 32 },
+      5: { cellWidth: 55 },
+      6: { cellWidth: 32 },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // =========================================================================
+  // SECCIÓN 5: EGRESOS OPERATIVOS
+  // =========================================================================
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lastSection4 = (doc as any).lastAutoTable;
+  yPos = lastSection4 ? lastSection4.finalY + 8 : yPos + 40;
 
   if (yPos > 150) {
     doc.addPage();

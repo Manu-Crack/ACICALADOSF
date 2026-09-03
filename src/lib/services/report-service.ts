@@ -30,17 +30,19 @@ export function calculateValidIncomeForBooking(b: {
     return 0;
   }
 
-  // Dinero verificado efectivamente cobrado
-  if (b.advance_amount_cents !== undefined && b.advance_amount_cents !== null && b.advance_amount_cents > 0) {
-    return b.advance_amount_cents;
-  }
+  const totalCents = b.total_price_cents || 0;
 
-  // Si está marcado como pago total
+  // Si está marcado como pago total, el ingreso cobrado es exactamente el total pactado de la cita
   if (b.payment_status === "total") {
-    return b.total_price_cents || 0;
+    return totalCents;
   }
 
-  return b.advance_amount_cents || 0;
+  // Si es un pago parcial (adelanto verificado), acotado estrictamente al valor total de la cita
+  if (b.advance_amount_cents !== undefined && b.advance_amount_cents !== null && b.advance_amount_cents > 0) {
+    return Math.min(totalCents, b.advance_amount_cents);
+  }
+
+  return 0;
 }
 
 export function normalizePaymentMethod(method: string | null | undefined): string {
