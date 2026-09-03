@@ -45,6 +45,9 @@ type BookingServiceItem = {
   service_price_cents: number;
   duration_minutes: number;
   assigned_employee_id?: string | null;
+  created_at?: string | null;
+  start_time?: string;
+  end_time?: string;
   services?: {
     id: string;
     name: string;
@@ -79,7 +82,25 @@ type EmployeeAssignmentCard = {
   services: BookingServiceItem[];
   totalDurationMinutes: number;
   totalPriceCents: number;
+  startTime: string;
+  endTime: string;
 };
+
+// Utilidades para cálculo genérico y dinámico de cronogramas en citas
+function parseTimeToMinutes(timeStr?: string | null): number {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(":");
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return h * 60 + m;
+}
+
+function formatMinutesToTime(totalMinutes: number): string {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
 
 const statusLabels: Record<string, string> = {
   pendiente: "Pendiente (WhatsApp)",
@@ -190,6 +211,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             service_price_cents,
             duration_minutes,
             assigned_employee_id,
+            created_at,
             services:service_id (
               id,
               name,
@@ -546,7 +568,8 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
     [employeeTypeMap, serviceTypeMap]
   );
 
-  // Desglosar estrictamente todas las reservas en tarjetas independientes por trabajador asignado
+  // Desglosar estrictamente todas las reservas en tarjetas independientes por trabajador asignado,
+  // calculando dinámicamente el cronograma interno, ventana horaria y duración real por colaborador.
   const allAssignmentCards = useMemo((): EmployeeAssignmentCard[] => {
     const cards: EmployeeAssignmentCard[] = [];
 
@@ -554,22 +577,75 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
       const services = b.booking_services || [];
 
       if (services.length > 0) {
-        const groups = new Map<string | null, BookingServiceItem[]>();
+        // 1. Ordenar servicios respetando la cronología de creación / secuencia contratada
+        const sortedServices = [...services].sort((a, bItem) => {
+          if (a.created_at && bItem.created_at) {
+            const diff = new Date(a.created_at).getTime() - new Date(bItem.created_at).getTime();
+            if (diff !== 0) return diff;
+          }
+          return 0;
+        });
 
-        for (const svc of services) {
+        // 2. Secuenciar cronológicamente los servicios iniciando en la hora de inicio de la cita
+        const baseStartMin = parseTimeToMinutes(b.start_time);
+        let currentMin = baseStartMin;
+
+        const scheduledServices: Array<{
+          service: BookingServiceItem;
+          workerId: string | null;
+          startMin: number;
+          endMin: number;
+          startTimeStr: string;
+          endTimeStr: string;
+        }> = [];
+
+        for (const svc of sortedServices) {
+          const duration = Math.max(1, Number(svc.duration_minutes) || 30);
+          const svcStartMin = currentMin;
+          const svcEndMin = svcStartMin + duration;
+          const startTimeStr = formatMinutesToTime(svcStartMin);
+          const endTimeStr = formatMinutesToTime(svcEndMin);
           const wId = getServiceWorkerId(svc, b);
-          const currentList = groups.get(wId) || [];
-          currentList.push(svc);
-          groups.set(wId, currentList);
+
+          scheduledServices.push({
+            service: {
+              ...svc,
+              start_time: startTimeStr,
+              end_time: endTimeStr,
+            },
+            workerId: wId,
+            startMin: svcStartMin,
+            endMin: svcEndMin,
+            startTimeStr,
+            endTimeStr,
+          });
+
+          currentMin = svcEndMin;
         }
 
-        for (const [wId, svcs] of groups.entries()) {
+        // 3. Agrupar los servicios secuenciados por cada trabajador asignado
+        const groups = new Map<string | null, typeof scheduledServices>();
+
+        for (const scheduled of scheduledServices) {
+          const currentList = groups.get(scheduled.workerId) || [];
+          currentList.push(scheduled);
+          groups.set(scheduled.workerId, currentList);
+        }
+
+        // 4. Construir la tarjeta individual para cada colaborador con su rango horario real
+        for (const [wId, workerScheduled] of groups.entries()) {
+          const svcs = workerScheduled.map((s) => s.service);
           const duration =
-            svcs.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) ||
-            b.total_duration_minutes ||
-            30;
+            svcs.reduce((sum, s) => sum + (Number(s.duration_minutes) || 0), 0) || 30;
           const price =
-            svcs.reduce((sum, s) => sum + (s.service_price_cents || 0), 0);
+            svcs.reduce((sum, s) => sum + (Number(s.service_price_cents) || 0), 0);
+
+          const firstService = workerScheduled[0];
+          const lastService = workerScheduled[workerScheduled.length - 1];
+
+          const workerStartTime = firstService?.startTimeStr || formatMinutesToTime(baseStartMin);
+          const workerEndTime =
+            lastService?.endTimeStr || formatMinutesToTime(baseStartMin + duration);
 
           cards.push({
             cardId: `${b.id}-${wId || "unassigned"}`,
@@ -581,10 +657,17 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             services: svcs,
             totalDurationMinutes: duration,
             totalPriceCents: svcs.length > 0 ? price : b.total_price_cents,
+            startTime: workerStartTime,
+            endTime: workerEndTime,
           });
         }
       } else {
         const wId = b.assigned_employee_id || null;
+        const fallbackStart = b.start_time ? b.start_time.slice(0, 5) : "00:00";
+        const fallbackEnd = b.end_time
+          ? b.end_time.slice(0, 5)
+          : formatMinutesToTime(parseTimeToMinutes(fallbackStart) + (b.total_duration_minutes || 30));
+
         cards.push({
           cardId: `${b.id}-${wId || "unassigned"}`,
           booking: b,
@@ -606,10 +689,14 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
               service_price_cents: b.total_price_cents,
               duration_minutes: b.total_duration_minutes || 30,
               assigned_employee_id: wId,
+              start_time: fallbackStart,
+              end_time: fallbackEnd,
             },
           ],
           totalDurationMinutes: b.total_duration_minutes || 30,
           totalPriceCents: b.total_price_cents,
+          startTime: fallbackStart,
+          endTime: fallbackEnd,
         });
       }
     }
@@ -710,8 +797,8 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
         id: card.booking.id,
         booking_code: card.booking.booking_code,
         booking_date: card.booking.booking_date,
-        start_time: card.booking.start_time,
-        end_time: card.booking.end_time,
+        start_time: card.startTime,
+        end_time: card.endTime,
         status: card.booking.status,
         payment_status: card.booking.payment_status,
         total_duration_minutes: card.totalDurationMinutes,
@@ -1617,7 +1704,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                             <img src="/calendario.svg" alt="Fecha" style={{ width: 14, height: 14, display: "inline-block" }} /> {b.booking_date}
                           </span>
                           <span>
-                            ⏰ {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
+                            ⏰ {card.startTime} – {card.endTime}
                           </span>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <img src="/Reloj.svg" alt="Duración" style={{ width: 14, height: 14, display: "inline-block" }} /> {formatDuration(displayedDuration)}
@@ -1696,7 +1783,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                                   className="text-muted"
                                   style={{ fontSize: "0.75rem", marginLeft: 6 }}
                                 >
-                                  ({formatDuration(svc.duration_minutes)})
+                                  ({svc.start_time && svc.end_time ? `${svc.start_time} – ${svc.end_time} · ` : ""}{formatDuration(svc.duration_minutes)})
                                 </span>
                               </div>
                               <strong style={{ color: "var(--color-primary)" }}>
@@ -1735,7 +1822,7 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                               /\D/g,
                               ""
                             )}?text=${encodeURIComponent(
-                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} del ${b.booking_date} a las ${b.start_time?.slice(0, 5)} con ${targetEmpName}.`
+                              `Hola ${b.client_first_name}, te saludamos de Acicalados respecto a tu cita ${b.booking_code} del ${b.booking_date} a las ${card.startTime} con ${targetEmpName}.`
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
