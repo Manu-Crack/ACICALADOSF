@@ -102,6 +102,15 @@ interface BookingSummaryForPayment {
   payment_method?: string | null;
 }
 
+// Helper seguro para obtener la fecha de hoy en formato YYYY-MM-DD en la zona horaria local
+function getTodayDateStr(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const isAdmin = userRole === "admin";
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -109,7 +118,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const [loading, setLoading] = useState(true);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>(getTodayDateStr);
   const [filterType, setFilterType] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
