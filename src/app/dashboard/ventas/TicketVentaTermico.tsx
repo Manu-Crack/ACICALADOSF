@@ -20,6 +20,180 @@ interface TicketVentaTermicoProps {
   onClose?: () => void;
 }
 
+const TICKET_CSS_RULES = `
+  .ticket-thermal-body {
+    width: 80mm;
+    max-width: 80mm;
+    margin: 0 auto;
+    padding: 3mm 4mm;
+    background-color: #ffffff;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    color: #000000 !important;
+    font-size: 12px;
+    font-family: 'Courier New', Courier, monospace;
+    line-height: 1.25;
+    text-align: left;
+    box-sizing: border-box;
+  }
+
+  .ticket-thermal-body * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Courier New', Courier, monospace;
+    color: #000000 !important;
+  }
+
+  .ticket-thermal-body .center { text-align: center; }
+  .ticket-thermal-body .left { text-align: left; }
+  .ticket-thermal-body .right { text-align: right; }
+  .ticket-thermal-body .bold { font-weight: bold; }
+
+  .ticket-thermal-body .logo-container {
+    text-align: center;
+    margin: 0 auto 6px auto;
+    padding: 0;
+  }
+
+  .ticket-thermal-body .ticket-logo {
+    width: 48mm;
+    max-width: 48mm;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    filter: none;
+    background-color: #ffffff;
+  }
+
+  .ticket-thermal-body .establishment-name {
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+  }
+
+  .ticket-thermal-body .establishment-subtitle {
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.02em;
+  }
+
+  .ticket-thermal-body .establishment-owner {
+    font-size: 10px;
+    margin-top: 2px;
+  }
+
+  .ticket-thermal-body .ticket-title {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 5px 0;
+    letter-spacing: 0.03em;
+  }
+
+  .ticket-thermal-body .divider-dashed {
+    border-bottom: 1px dashed #000000;
+    margin: 5px 0;
+  }
+
+  .ticket-thermal-body .divider-solid {
+    border-bottom: 2px solid #000000;
+    margin: 5px 0;
+  }
+
+  .ticket-thermal-body .header,
+  .ticket-thermal-body .footer {
+    margin-bottom: 4px;
+  }
+
+  .ticket-thermal-body .meta-data {
+    margin: 6px 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .ticket-thermal-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0;
+  }
+
+  .ticket-thermal-body th {
+    border-bottom: 2px solid #000000;
+    border-top: 2px solid #000000;
+    padding: 4px 0;
+    text-align: left;
+    font-size: 10px;
+  }
+
+  .ticket-thermal-body td {
+    padding: 3px 0;
+    vertical-align: top;
+    font-size: 11px;
+  }
+
+  .ticket-thermal-body .td-qty {
+    width: 38px;
+    white-space: nowrap;
+  }
+
+  .ticket-thermal-body .td-price {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .ticket-thermal-body .total-container {
+    border-top: 1px dashed #000000;
+    border-bottom: 1px dashed #000000;
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 5px 0;
+    margin: 6px 0;
+  }
+
+  .ticket-thermal-body .slogan {
+    text-align: center;
+    font-size: 10px;
+    font-weight: bold;
+    margin: 6px 0;
+    padding: 0 4px;
+    line-height: 1.25;
+  }
+
+  .ticket-thermal-body .social-container {
+    text-align: center;
+    margin: 6px 0;
+  }
+
+  .ticket-thermal-body .social-icons-row {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 4px;
+  }
+
+  .ticket-thermal-body .social-icon {
+    width: 16px;
+    height: 16px;
+    fill: #000000;
+  }
+
+  .ticket-thermal-body .social-name {
+    font-size: 10px;
+    font-weight: bold;
+  }
+
+  .ticket-thermal-body .footer-msg {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 6px 0 2px 0;
+    text-align: center;
+  }
+`;
+
 export function TicketVentaTermico({
   venta,
   isOpen = false,
@@ -44,27 +218,27 @@ export function TicketVentaTermico({
     };
   }, [venta]);
 
-  if (!venta || !isOpen) return null;
+  if (!venta) return null;
 
   const codigoVenta = `VP-${venta.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   const unitPriceFormatted = Number(venta.precio_unitario).toFixed(2);
   const totalFormatted = Number(venta.total).toFixed(2);
 
+  // Contenido idéntico y reutilizable tanto para la previsualización como para la impresión física
   const ticketContent = (
     <div className="ticket-thermal-body">
       <div className="header">
-        <div className="divider-solid"></div>
-
         <div className="logo-container">
           <img
             src="/BN_acica.png"
-            alt="Logo Spa Acicalados"
+            alt="Logo Acicalados Barber Shop & Spa"
             className="ticket-logo"
           />
         </div>
 
-        <div className="center bold">HUAMANI AZURZA, JORGE ROBERT</div>
-        <div className="center bold">&quot;SPA ACICALADOS BARBER SHOP&quot;</div>
+        <div className="center bold establishment-name">ACICALADOS</div>
+        <div className="center bold establishment-subtitle">&quot;SPA ACICALADOS BARBER SHOP&quot;</div>
+        <div className="center establishment-owner">HUAMANI AZURZA, JORGE ROBERT</div>
         <div className="center">RUC: 10436217574</div>
         <div className="center">Av. Arriba Perú Nro. 263 - Pichari</div>
         <div className="center">Telf: 997766828 | www.spaacicalados.com</div>
@@ -72,7 +246,7 @@ export function TicketVentaTermico({
       </div>
 
       <div className="center bold ticket-title">
-        TICKET DE VENTA DE PRODUCTOS / MOSTRADOR
+        TICKET DE VENTA DIRECTA
       </div>
       <div className="divider-dashed"></div>
 
@@ -86,10 +260,10 @@ export function TicketVentaTermico({
       <table>
         <thead>
           <tr>
-            <th style={{ width: "35px" }}>CANT</th>
-            <th>PRODUCTO / DESCRIPCIÓN</th>
+            <th style={{ width: "38px" }}>CANT</th>
+            <th>DESCRIPCIÓN</th>
             <th className="right" style={{ width: "65px" }}>P. UNIT</th>
-            <th className="right" style={{ width: "65px" }}>IMPORTE</th>
+            <th className="right" style={{ width: "65px" }}>TOTAL</th>
           </tr>
         </thead>
         <tbody>
@@ -101,7 +275,7 @@ export function TicketVentaTermico({
           </tr>
           {venta.notas && (
             <tr>
-              <td colSpan={4} style={{ fontSize: "10px", fontStyle: "italic", paddingTop: "2px" }}>
+              <td colSpan={4} style={{ fontSize: "10px", fontStyle: "italic", paddingTop: "3px" }}>
                 Nota: {venta.notas}
               </td>
             </tr>
@@ -110,8 +284,8 @@ export function TicketVentaTermico({
       </table>
 
       <div className="total-container">
-        <span>TOTAL A PAGAR:</span>
-        <span>S/. {totalFormatted}</span>
+        <span>TOTAL:</span>
+        <span>S/ {totalFormatted}</span>
       </div>
 
       <div style={{ marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" }}>
@@ -147,287 +321,283 @@ export function TicketVentaTermico({
       <div className="divider-solid"></div>
 
       <div className="center footer">
-        <div className="bold" style={{ marginTop: "5px" }}>
+        <div className="footer-msg">
           ¡Gracias por su compra y preferencia!
         </div>
       </div>
     </div>
   );
 
+  // Función de impresión aislada directa (WYSIWYG garantizado sin recortes del layout)
+  const handlePrint = () => {
+    try {
+      let iframe = document.getElementById("thermal-sales-print-iframe") as HTMLIFrameElement | null;
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = "thermal-sales-print-iframe";
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0px";
+        iframe.style.height = "0px";
+        iframe.style.border = "none";
+        document.body.appendChild(iframe);
+      }
+
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!doc) {
+        window.print();
+        return;
+      }
+
+      const printElement = document.getElementById("thermal-sales-ticket-print-area");
+      const htmlContent = printElement ? printElement.innerHTML : "";
+
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Ticket de Venta Directa - ${codigoVenta}</title>
+            <style>
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 80mm !important;
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                font-family: 'Courier New', Courier, monospace;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              ${TICKET_CSS_RULES}
+              .ticket-thermal-body {
+                box-shadow: none !important;
+                margin: 0 !important;
+                padding: 2mm 3mm !important;
+                width: 80mm !important;
+                max-width: 80mm !important;
+              }
+            </style>
+          </head>
+          <body>
+            ${htmlContent}
+          </body>
+        </html>
+      `);
+      doc.close();
+
+      setTimeout(() => {
+        iframe?.contentWindow?.focus();
+        iframe?.contentWindow?.print();
+      }, 250);
+    } catch (err) {
+      console.warn("Fallback to window.print():", err);
+      window.print();
+    }
+  };
+
   return (
     <>
       <style
         dangerouslySetInnerHTML={{
           __html: `
-        .ticket-thermal-body {
-          width: 80mm;
-          max-width: 80mm;
-          margin: 0 auto;
-          padding: 3mm;
-          background-color: #ffffff;
-          box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-          color: #000000 !important;
-          font-size: 12px;
-          font-family: 'Courier New', Courier, monospace;
-          line-height: 1.25;
-          text-align: left;
-          box-sizing: border-box;
-        }
-
-        .ticket-thermal-body * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-          font-family: 'Courier New', Courier, monospace;
-          color: #000000 !important;
-        }
-
-        .ticket-thermal-body .center { text-align: center; }
-        .ticket-thermal-body .left { text-align: left; }
-        .ticket-thermal-body .right { text-align: right; }
-        .ticket-thermal-body .bold { font-weight: bold; }
-
-        .ticket-thermal-body .logo-container {
-          text-align: center;
-          margin: -10px 0 -5px 0;
-          padding: 0;
-        }
-        .ticket-thermal-body .ticket-logo {
-          width: 85%;
-          height: auto;
-          display: block;
-          margin: 0 auto;
-          filter: grayscale(100%) contrast(150%);
-        }
-
-        .ticket-thermal-body .ticket-title {
-          font-size: 11px;
-          margin: 4px 0;
-          letter-spacing: 0.02em;
-        }
-
-        .ticket-thermal-body .divider-dashed { border-bottom: 1px dashed #000000; margin: 4px 0; }
-        .ticket-thermal-body .divider-solid { border-bottom: 2px solid #000000; margin: 4px 0; }
-
-        .ticket-thermal-body .header, .ticket-thermal-body .footer { margin-bottom: 5px; }
-        .ticket-thermal-body .meta-data { margin: 6px 0; font-size: 11px; line-height: 1.35; }
-
-        .ticket-thermal-body table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
-        .ticket-thermal-body th {
-          border-bottom: 2px solid #000000;
-          border-top: 2px solid #000000;
-          padding: 4px 0;
-          text-align: left;
-          font-size: 10px;
-        }
-        .ticket-thermal-body td { padding: 3px 0; vertical-align: top; font-size: 11px; }
-        .ticket-thermal-body .td-qty { width: 35px; white-space: nowrap; }
-        .ticket-thermal-body .td-price { text-align: right; white-space: nowrap; }
-
-        .ticket-thermal-body .total-container {
-          border-top: 1px dashed #000000;
-          border-bottom: 1px dashed #000000;
-          display: flex;
-          justify-content: space-between;
-          font-size: 13px;
-          font-weight: bold;
-          padding: 5px 0;
-          margin: 6px 0;
-        }
-
-        .ticket-thermal-body .slogan {
-          text-align: center;
-          font-size: 10px;
-          font-weight: bold;
-          margin: 6px 0;
-          padding: 0 4px;
-          line-height: 1.2;
-        }
-        .ticket-thermal-body .social-container { text-align: center; margin: 6px 0; }
-        .ticket-thermal-body .social-icons-row { display: flex; justify-content: center; gap: 15px; margin-bottom: 4px; }
-        .ticket-thermal-body .social-icon { width: 16px; height: 16px; fill: #000000; }
-        .ticket-thermal-body .social-name { font-size: 10px; font-weight: bold; }
+        ${TICKET_CSS_RULES}
 
         @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          .ticket-modal-backdrop, .ticket-modal-container {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            background: transparent !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          .ticket-thermal-body, .ticket-thermal-body * {
-            visibility: visible !important;
-          }
-          .ticket-thermal-body {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 80mm !important;
-            max-width: 80mm !important;
-            box-shadow: none !important;
-            margin: 0 !important;
-            padding: 2mm !important;
-          }
-          .no-print {
-            display: none !important;
-          }
           @page {
             size: 80mm auto;
             margin: 0;
+          }
+          html, body {
+            background-color: #ffffff !important;
+            width: 80mm !important;
+            min-width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #thermal-sales-ticket-print-area,
+          #thermal-sales-ticket-print-area * {
+            visibility: visible !important;
+          }
+          #thermal-sales-ticket-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            margin: 0 !important;
+            padding: 2mm 3mm !important;
+            box-shadow: none !important;
+            width: 80mm !important;
+            max-width: 80mm !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            display: block !important;
+            z-index: 999999 !important;
+          }
+          .no-print-in-sales-thermal {
+            display: none !important;
           }
         }
         `,
         }}
       />
 
-      <div
-        className="ticket-modal-backdrop"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.75)",
-          backdropFilter: "blur(4px)",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          zIndex: 99999,
-          padding: "16px",
-        }}
-        onClick={onClose}
-      >
+      {/* Contenedor dedicado de impresión física (fuera del árbol del modal) */}
+      <div id="thermal-sales-ticket-print-area" style={{ display: "none" }}>
+        {ticketContent}
+      </div>
+
+      {/* Modal de Vista Previa en Pantalla */}
+      {isOpen && (
         <div
-          className="ticket-modal-container"
+          className="no-print-in-sales-thermal"
           style={{
-            backgroundColor: "var(--color-bg-card, #1A1612)",
-            border: "1px solid var(--color-border, #332B20)",
-            borderRadius: "var(--radius-lg, 12px)",
-            width: "100%",
-            maxWidth: "420px",
-            maxHeight: "92vh",
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
+            backdropFilter: "blur(6px)",
             display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 99999,
+            padding: "16px",
           }}
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
+          onClick={onClose}
         >
-          {/* Header del Modal */}
           <div
-            className="no-print"
             style={{
+              backgroundColor: "var(--color-bg-card, #1A1612)",
+              border: "1px solid var(--color-border, #332B20)",
+              borderRadius: "var(--radius-lg, 12px)",
+              width: "100%",
+              maxWidth: "420px",
+              maxHeight: "92vh",
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "14px 18px",
-              borderBottom: "1px solid var(--color-border)",
-              background: "rgba(200, 164, 92, 0.06)",
+              flexDirection: "column",
+              overflow: "hidden",
+              boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)",
             }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: "1.25rem" }}>🖨️</span>
-              <div>
-                <h3
-                  style={{
-                    fontSize: "0.95rem",
-                    fontWeight: 800,
-                    color: "var(--color-text, #F2E8D0)",
-                    margin: 0,
-                  }}
-                >
-                  Ticket de Venta (58mm / 80mm)
-                </h3>
-                <p
-                  className="text-muted"
-                  style={{ fontSize: "0.72rem", margin: 0 }}
-                >
-                  Venta #{codigoVenta}
-                </p>
+            {/* Header del Modal */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "14px 18px",
+                borderBottom: "1px solid var(--color-border)",
+                background: "rgba(200, 164, 92, 0.06)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: "1.25rem" }}>🖨️</span>
+                <div>
+                  <h3
+                    style={{
+                      fontSize: "0.95rem",
+                      fontWeight: 800,
+                      color: "var(--color-text, #F2E8D0)",
+                      margin: 0,
+                    }}
+                  >
+                    Ticket de Venta Directa (80mm)
+                  </h3>
+                  <p
+                    className="text-muted"
+                    style={{ fontSize: "0.72rem", margin: 0 }}
+                  >
+                    Comprobante #{codigoVenta}
+                  </p>
+                </div>
               </div>
+
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: "1.1rem", padding: "2px 8px", lineHeight: 1 }}
+                  title="Cerrar"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
-            {onClose && (
+            {/* Vista previa del ticket */}
+            <div
+              style={{
+                padding: "18px",
+                overflowY: "auto",
+                background: "#dcdcdc",
+                display: "flex",
+                justifyContent: "center",
+                flex: 1,
+              }}
+            >
+              {ticketContent}
+            </div>
+
+            {/* Footer con botones de acción */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                padding: "14px 18px",
+                borderTop: "1px solid var(--color-border)",
+                background: "rgba(18, 16, 12, 0.95)",
+              }}
+            >
               <button
                 type="button"
                 onClick={onClose}
                 className="btn btn-ghost btn-sm"
-                style={{ fontSize: "1.1rem", padding: "2px 8px", lineHeight: 1 }}
-                title="Cerrar"
+                style={{ fontSize: "0.82rem" }}
               >
-                ✕
+                Cerrar
               </button>
-            )}
-          </div>
 
-          {/* Vista previa del ticket */}
-          <div
-            style={{
-              padding: "18px",
-              overflowY: "auto",
-              background: "#dcdcdc",
-              display: "flex",
-              justifyContent: "center",
-              flex: 1,
-            }}
-          >
-            {ticketContent}
-          </div>
-
-          {/* Footer con botones de acción */}
-          <div
-            className="no-print"
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              padding: "14px 18px",
-              borderTop: "1px solid var(--color-border)",
-              background: "rgba(18, 16, 12, 0.95)",
-            }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-ghost btn-sm"
-              style={{ fontSize: "0.82rem" }}
-            >
-              Cerrar
-            </button>
-
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="btn btn-primary btn-sm"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                fontWeight: 700,
-                fontSize: "0.85rem",
-                padding: "8px 18px",
-                boxShadow: "0 2px 10px rgba(200, 164, 92, 0.3)",
-              }}
-              id="btn-print-venta-ticket"
-            >
-              <span>🖨️</span>
-              <span>Imprimir Ticket</span>
-            </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="btn btn-primary btn-sm"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  padding: "8px 18px",
+                  boxShadow: "0 2px 10px rgba(200, 164, 92, 0.3)",
+                }}
+                id="btn-print-venta-ticket"
+              >
+                <span>🖨️</span>
+                <span>Imprimir Ticket</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
