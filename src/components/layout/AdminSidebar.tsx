@@ -165,26 +165,14 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
-                onMouseEnter={() => {
-                  try {
-                    router.prefetch(item.href);
-                  } catch {}
-                }}
-                onFocus={() => {
-                  try {
-                    router.prefetch(item.href);
-                  } catch {}
-                }}
-                onTouchStart={() => {
-                  try {
-                    router.prefetch(item.href);
-                  } catch {}
-                }}
+                prefetch={false}
                 onClick={() => {
                   setIsMobileOpen(false);
                   if (pathname !== item.href) {
                     setNavigatingTo(item.href);
+                    try {
+                      router.refresh();
+                    } catch {}
                   }
                 }}
                 style={{

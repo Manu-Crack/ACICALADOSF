@@ -1,7 +1,7 @@
 /**
  * Bus de Sincronización en Tiempo Real para Ventas de Mostrador
  * Proporciona comunicación instantánea (<1ms) entre pestañas y componentes
- * mediante BroadcastChannel y eventos del DOM del navegador.
+ * mediante BroadcastChannel, localStorage y eventos del DOM del navegador.
  */
 
 export interface VentaSyncPayload {
@@ -29,6 +29,7 @@ export interface VentaSyncEvent {
 
 const CHANNEL_NAME = "acicalados-ventas-sync-bus";
 const CUSTOM_EVENT_NAME = "acicalados-ventas-event";
+const STORAGE_KEY = "acicalados_last_venta_sync";
 
 let broadcastChannel: BroadcastChannel | null = null;
 
@@ -47,9 +48,24 @@ function getBroadcastChannel(): BroadcastChannel | null {
   return broadcastChannel;
 }
 
+export function getLastVentaSyncTimestamp(): number {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    return Number(parsed?.timestamp) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Emite una notificación de evento de venta (creación, edición o eliminación).
- * Se propaga tanto a otras pestañas (BroadcastChannel) como al documento actual (CustomEvent).
+ * Se propaga a través de:
+ * 1. BroadcastChannel (entre pestañas/ventanas de alta velocidad)
+ * 2. CustomEvent (mismo documento DOM)
+ * 3. localStorage (para persistir la última actualización entre navegaciones client-side)
  */
 export function emitVentaChange(params: {
   eventType: VentaSyncEventType;
@@ -65,7 +81,16 @@ export function emitVentaChange(params: {
     timestamp: Date.now(),
   };
 
-  // 1. Enviar a través de BroadcastChannel a otras pestañas del navegador
+  // 1. Persistir en localStorage para componentes que se monten posteriormente tras navegación
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(eventData));
+    } catch (err) {
+      console.warn("[ventas-sync] Error saving to localStorage:", err);
+    }
+  }
+
+  // 2. Enviar a través de BroadcastChannel a otras pestañas del navegador
   try {
     const bc = getBroadcastChannel();
     if (bc) {
@@ -75,7 +100,7 @@ export function emitVentaChange(params: {
     console.warn("[ventas-sync] Error posting message to BroadcastChannel:", err);
   }
 
-  // 2. Enviar a través de CustomEvent para componentes montados en la pestaña actual
+  // 3. Enviar a través de CustomEvent para componentes montados en la pestaña actual
   try {
     const customEvt = new CustomEvent(CUSTOM_EVENT_NAME, { detail: eventData });
     window.dispatchEvent(customEvt);
@@ -95,7 +120,7 @@ export function subscribeVentasSync(
     return () => {};
   }
 
-  // Handler para la misma pestaña
+  // Handler para la misma pestaña vía CustomEvent
   const handleCustomEvent = (e: Event) => {
     const customEvt = e as CustomEvent<VentaSyncEvent>;
     if (customEvt && customEvt.detail) {
@@ -104,6 +129,20 @@ export function subscribeVentasSync(
   };
 
   window.addEventListener(CUSTOM_EVENT_NAME, handleCustomEvent);
+
+  // Handler para evento storage de window
+  const handleStorageEvent = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (parsed && parsed.eventType) {
+          callback(parsed);
+        }
+      } catch {}
+    }
+  };
+
+  window.addEventListener("storage", handleStorageEvent);
 
   // Handler para otras pestañas vía BroadcastChannel
   const bc = getBroadcastChannel();
@@ -119,6 +158,7 @@ export function subscribeVentasSync(
 
   return () => {
     window.removeEventListener(CUSTOM_EVENT_NAME, handleCustomEvent);
+    window.removeEventListener("storage", handleStorageEvent);
     if (bc) {
       bc.removeEventListener("message", handleBroadcastMessage);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { TicketVentaTermico, TicketVentaData } from "./TicketVentaTermico";
 import { createClient } from "@/lib/supabase/client";
 import { emitVentaChange, subscribeVentasSync } from "@/lib/utils/ventas-sync";
@@ -59,6 +60,7 @@ function getPeruDateTimeLocal(date: Date = new Date()): string {
 }
 
 export function VentasManager({ userRole }: VentasManagerProps) {
+  const router = useRouter();
   const [ventas, setVentas] = useState<VentaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -253,6 +255,11 @@ export function VentasManager({ userRole }: VentasManagerProps) {
         venta: createdSale,
       });
 
+      // Purgar la caché del router de Next.js para que Inicio y Reportes se actualicen de inmediato al navegar
+      try {
+        router.refresh();
+      } catch {}
+
       setSuccessMessage(`✅ Venta de "${createdSale.producto_nombre}" registrada correctamente por S/ ${Number(createdSale.total).toFixed(2)}.`);
 
       // Limpiar formulario y resetear a valores predeterminados
@@ -331,6 +338,11 @@ export function VentasManager({ userRole }: VentasManagerProps) {
         oldVenta: editingVenta,
       });
 
+      // Purgar la caché del router de Next.js para que Inicio y Reportes se actualicen de inmediato al navegar
+      try {
+        router.refresh();
+      } catch {}
+
       setEditingVenta(null);
       setSuccessMessage(`✅ Venta actualizada: Total recalculado a S/ ${Number(updatedSale.total).toFixed(2)}.`);
     } catch (err: unknown) {
@@ -378,6 +390,11 @@ export function VentasManager({ userRole }: VentasManagerProps) {
         eventType: "DELETE",
         venta: v,
       });
+
+      // Purgar la caché del router de Next.js para que Inicio y Reportes se actualicen de inmediato al navegar
+      try {
+        router.refresh();
+      } catch {}
 
       setSuccessMessage("Venta eliminada del registro.");
     } catch (err: unknown) {

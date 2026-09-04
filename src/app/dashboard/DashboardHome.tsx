@@ -115,6 +115,13 @@ export function DashboardHome({
   const [financialVentas, setFinancialVentas] = useState<FinancialVenta[]>(initialFinancialVentas);
   const [financialTab, setFinancialTab] = useState<"todos" | "ingresos" | "ventas" | "egresos">("todos");
 
+  // Sincronizar estado cuando cambian las props del servidor
+  useEffect(() => {
+    if (initialFinancialVentas) {
+      setFinancialVentas(initialFinancialVentas);
+    }
+  }, [initialFinancialVentas]);
+
   const supabase = useMemo(() => createClient(), []);
 
   // Calcular límites de fecha en Zona Horaria Perú (America/Lima)
@@ -153,7 +160,7 @@ export function DashboardHome({
     try {
       const { todayStr, mondayStr, sundayStr } = dateBounds;
 
-      const [todayRes, weekRes, financialBookingsRes, expensesRes, egresosRes, ventasRes] = await Promise.all([
+      const [todayRes, weekRes, financialBookingsRes, expensesRes, egresosRes, ventasData] = await Promise.all([
         supabase
           .from("bookings")
           .select(
@@ -186,11 +193,13 @@ export function DashboardHome({
           .select("*")
           .order("expense_date", { ascending: false })
           .limit(200),
-        supabase
-          .from("ventas_mostrador")
-          .select("id, cliente_nombre, producto_nombre, cantidad, precio_unitario, total, metodo_pago, fecha, notas")
-          .order("fecha", { ascending: false })
-          .limit(300),
+        fetch(`/api/admin/ventas?limit=300&_t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
+        })
+          .then((r) => (r.ok ? r.json() : { data: null }))
+          .then((json) => (json?.data as FinancialVenta[]) || null)
+          .catch(() => null),
       ]);
 
       if (todayRes.data) {
@@ -202,8 +211,8 @@ export function DashboardHome({
       if (financialBookingsRes.data) {
         setFinancialBookings(financialBookingsRes.data as unknown as FinancialBooking[]);
       }
-      if (ventasRes.data) {
-        setFinancialVentas(ventasRes.data as unknown as FinancialVenta[]);
+      if (Array.isArray(ventasData)) {
+        setFinancialVentas(ventasData);
       }
 
       const rawExpenses = (expensesRes.data || [])
@@ -236,9 +245,26 @@ export function DashboardHome({
     loadDataRef.current = loadData;
   }, [loadData]);
 
-  // Refresco garantizado de datos al montar la pantalla (evita datos obsoletos por router cache)
+  // Refresco garantizado de datos al montar la pantalla o al enfocar la pestaña
   useEffect(() => {
     loadData();
+
+    const handleFocus = () => {
+      loadData();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [loadData]);
 
   // Suscripción al bus de sincronización instantánea de ventas (<1ms entre pestañas y local)

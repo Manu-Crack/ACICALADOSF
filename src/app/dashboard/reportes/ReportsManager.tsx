@@ -47,8 +47,20 @@ export function ReportsManager() {
   const [currentDateReference, setCurrentDateReference] = useState<Date>(new Date());
   const [periodType, setPeriodType] = useState<PeriodType>("month");
 
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  // Fechas iniciales por defecto (Mes actual en Perú)
+  const initialDates = useMemo(() => {
+    const now = new Date();
+    const todayStr = getPeruDateString(now);
+    const [y, m] = todayStr.split("-");
+    const lastDay = new Date(Number(y), Number(m), 0, 12, 0, 0).getDate();
+    return {
+      start: `${y}-${m}-01`,
+      end: `${y}-${m}-${String(lastDay).padStart(2, "0")}`,
+    };
+  }, []);
+
+  const [startDate, setStartDate] = useState<string>(initialDates.start);
+  const [endDate, setEndDate] = useState<string>(initialDates.end);
 
   // Calcular fechas basadas en periodType y currentDateReference en America/Lima
   const calculateDates = useCallback((type: PeriodType, refDate: Date) => {
@@ -243,8 +255,31 @@ export function ReportsManager() {
     }
   }, [startDate, endDate, bookingStatus, paymentStatus, employeeId, paymentMethod, searchTerm, periodType]);
 
+  // Refresco de datos cuando cambian filtros
   useEffect(() => {
     loadReportData();
+  }, [loadReportData]);
+
+  // Refresco garantizado de datos al montar la pantalla o al reenfocar la pestaña
+  useEffect(() => {
+    loadReportData(true);
+
+    const handleFocus = () => {
+      loadReportData(true);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadReportData(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [loadReportData]);
 
   // ---------------------------------------------------------------------------
