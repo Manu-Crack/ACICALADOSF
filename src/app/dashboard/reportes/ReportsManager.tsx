@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { FullReportData } from "@/lib/types/reports";
+import type { FullReportData, CounterSaleReportItem } from "@/lib/types/reports";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS } from "@/lib/types/payments";
 import { DailyClosingWhatsAppModal } from "./DailyClosingWhatsAppModal";
+import { subscribeVentasSync, VentaSyncEvent } from "@/lib/utils/ventas-sync";
 
 interface EmployeeOption {
   id: string;
@@ -201,9 +202,11 @@ export function ReportsManager() {
   }, []);
 
   // Cargar datos completos del reporte
-  const loadReportData = useCallback(async () => {
+  const loadReportData = useCallback(async (isSilent: boolean = false) => {
     if (!startDate && periodType !== "custom") return;
-    setLoading(true);
+    if (!isSilent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -214,8 +217,15 @@ export function ReportsManager() {
       if (employeeId && employeeId !== "all") params.set("employeeId", employeeId);
       if (paymentMethod && paymentMethod !== "all") params.set("paymentMethod", paymentMethod);
       if (searchTerm.trim()) params.set("searchTerm", searchTerm.trim());
+      params.set("_t", Date.now().toString());
 
-      const res = await fetch(`/api/admin/reports/data?${params.toString()}`);
+      const res = await fetch(`/api/admin/reports/data?${params.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      });
       const result = await res.json();
 
       if (!res.ok) {
@@ -227,7 +237,9 @@ export function ReportsManager() {
     } catch {
       setError("Error de conexión al cargar los datos del reporte.");
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   }, [startDate, endDate, bookingStatus, paymentStatus, employeeId, paymentMethod, searchTerm, periodType]);
 
@@ -243,6 +255,153 @@ export function ReportsManager() {
   useEffect(() => {
     loadReportDataRef.current = loadReportData;
   }, [loadReportData]);
+
+  // Aplicación inmediata e interactiva de cambios en ventas de mostrador
+  const applyVentaUpdate = useCallback(
+    (eventType: "INSERT" | "UPDATE" | "DELETE", venta: any, oldVenta?: any) => {
+      if (!venta || !venta.id) return;
+
+      setReportData((prev) => {
+        if (!prev) return prev;
+
+        const totalCents = Math.round((Number(venta.total) || 0) * 100);
+        const ventaDateStr = venta.fecha ? getPeruDateString(new Date(venta.fecha)) : "";
+
+        // Verificar si la fecha de la venta se encuentra en el rango actual del reporte
+        const isInRange =
+          (!startDate || !ventaDateStr || ventaDateStr >= startDate) &&
+          (!endDate || !ventaDateStr || ventaDateStr <= endDate);
+
+        let newCounterSales: CounterSaleReportItem[] = prev.counter_sales ? [...prev.counter_sales] : [];
+        let newSummary = { ...prev.summary };
+
+        if (eventType === "INSERT") {
+          if (isInRange) {
+            if (!newCounterSales.some((s) => s.id === venta.id)) {
+              newCounterSales = [
+                {
+                  id: venta.id,
+                  cliente_nombre: venta.cliente_nombre || "",
+                  producto_nombre: venta.producto_nombre || "",
+                  cantidad: Number(venta.cantidad) || 1,
+                  precio_unitario: Number(venta.precio_unitario) || 0,
+                  total: Number(venta.total) || 0,
+                  total_cents: totalCents,
+                  metodo_pago: venta.metodo_pago || "Efectivo",
+                  fecha: venta.fecha || new Date().toISOString(),
+                  registrado_por: venta.registrado_por || null,
+                  notas: venta.notas || null,
+                },
+                ...newCounterSales,
+              ];
+              newSummary.counter_sales_collected_cents =
+                (newSummary.counter_sales_collected_cents || 0) + totalCents;
+              newSummary.counter_sales_count = (newSummary.counter_sales_count || 0) + 1;
+              newSummary.total_collected_cents = (newSummary.total_collected_cents || 0) + totalCents;
+              newSummary.net_result_cents = (newSummary.net_result_cents || 0) + totalCents;
+
+              const normPay = (venta.metodo_pago || "").toLowerCase();
+              if (normPay.includes("yape")) {
+                newSummary.yape_collected_cents = (newSummary.yape_collected_cents || 0) + totalCents;
+              } else if (normPay.includes("efectivo")) {
+                newSummary.cash_collected_cents = (newSummary.cash_collected_cents || 0) + totalCents;
+              } else if (normPay.includes("transferencia")) {
+                newSummary.transfer_collected_cents = (newSummary.transfer_collected_cents || 0) + totalCents;
+              } else if (normPay.includes("mixto")) {
+                newSummary.mixed_collected_cents = (newSummary.mixed_collected_cents || 0) + totalCents;
+              }
+            }
+          }
+        } else if (eventType === "UPDATE") {
+          const index = newCounterSales.findIndex((s) => s.id === venta.id);
+          if (index !== -1) {
+            const oldItem = newCounterSales[index];
+            const oldTotalCents = oldItem.total_cents || Math.round(Number(oldItem.total) * 100);
+            const deltaCents = totalCents - oldTotalCents;
+
+            newCounterSales[index] = {
+              ...oldItem,
+              cliente_nombre: venta.cliente_nombre ?? oldItem.cliente_nombre,
+              producto_nombre: venta.producto_nombre ?? oldItem.producto_nombre,
+              cantidad: Number(venta.cantidad) || oldItem.cantidad,
+              precio_unitario: Number(venta.precio_unitario) || oldItem.precio_unitario,
+              total: Number(venta.total) || oldItem.total,
+              total_cents: totalCents,
+              metodo_pago: venta.metodo_pago ?? oldItem.metodo_pago,
+              fecha: venta.fecha ?? oldItem.fecha,
+              notas: venta.notas ?? oldItem.notas,
+            };
+
+            newSummary.counter_sales_collected_cents =
+              (newSummary.counter_sales_collected_cents || 0) + deltaCents;
+            newSummary.total_collected_cents = (newSummary.total_collected_cents || 0) + deltaCents;
+            newSummary.net_result_cents = (newSummary.net_result_cents || 0) + deltaCents;
+
+            const normPay = (venta.metodo_pago || "").toLowerCase();
+            if (normPay.includes("yape")) {
+              newSummary.yape_collected_cents = Math.max(0, (newSummary.yape_collected_cents || 0) + deltaCents);
+            } else if (normPay.includes("efectivo")) {
+              newSummary.cash_collected_cents = Math.max(0, (newSummary.cash_collected_cents || 0) + deltaCents);
+            } else if (normPay.includes("transferencia")) {
+              newSummary.transfer_collected_cents = Math.max(0, (newSummary.transfer_collected_cents || 0) + deltaCents);
+            } else if (normPay.includes("mixto")) {
+              newSummary.mixed_collected_cents = Math.max(0, (newSummary.mixed_collected_cents || 0) + deltaCents);
+            }
+          }
+        } else if (eventType === "DELETE") {
+          const existing = newCounterSales.find((s) => s.id === venta.id);
+          if (existing) {
+            const existingTotalCents = existing.total_cents || Math.round(Number(existing.total) * 100);
+            newCounterSales = newCounterSales.filter((s) => s.id !== venta.id);
+            newSummary.counter_sales_collected_cents = Math.max(
+              0,
+              (newSummary.counter_sales_collected_cents || 0) - existingTotalCents
+            );
+            newSummary.counter_sales_count = Math.max(0, (newSummary.counter_sales_count || 1) - 1);
+            newSummary.total_collected_cents = Math.max(
+              0,
+              (newSummary.total_collected_cents || 0) - existingTotalCents
+            );
+            newSummary.net_result_cents = (newSummary.net_result_cents || 0) - existingTotalCents;
+
+            const normPay = (existing.metodo_pago || "").toLowerCase();
+            if (normPay.includes("yape")) {
+              newSummary.yape_collected_cents = Math.max(0, (newSummary.yape_collected_cents || 0) - existingTotalCents);
+            } else if (normPay.includes("efectivo")) {
+              newSummary.cash_collected_cents = Math.max(0, (newSummary.cash_collected_cents || 0) - existingTotalCents);
+            } else if (normPay.includes("transferencia")) {
+              newSummary.transfer_collected_cents = Math.max(0, (newSummary.transfer_collected_cents || 0) - existingTotalCents);
+            } else if (normPay.includes("mixto")) {
+              newSummary.mixed_collected_cents = Math.max(0, (newSummary.mixed_collected_cents || 0) - existingTotalCents);
+            }
+          }
+        }
+
+        return {
+          ...prev,
+          summary: newSummary,
+          counter_sales: newCounterSales,
+        };
+      });
+    },
+    [startDate, endDate]
+  );
+
+  // Suscripción al bus de sincronización instantánea de ventas (<1ms entre pestañas)
+  useEffect(() => {
+    const unsubscribe = subscribeVentasSync((event: VentaSyncEvent) => {
+      if (event.venta) {
+        applyVentaUpdate(event.eventType, event.venta, event.oldVenta);
+      }
+      if (loadReportDataRef.current) {
+        loadReportDataRef.current(true);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [applyVentaUpdate]);
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -269,34 +428,43 @@ export function ReportsManager() {
           .channel(channelName)
           .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
             if (loadReportDataRef.current) {
-              loadReportDataRef.current();
+              loadReportDataRef.current(true);
             }
           })
           .on("postgres_changes", { event: "*", schema: "public", table: "booking_services" }, () => {
             if (loadReportDataRef.current) {
-              loadReportDataRef.current();
+              loadReportDataRef.current(true);
             }
           })
           .on("postgres_changes", { event: "*", schema: "public", table: "payment_logs" }, () => {
             if (loadReportDataRef.current) {
-              loadReportDataRef.current();
+              loadReportDataRef.current(true);
             }
           })
           .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => {
             if (loadReportDataRef.current) {
-              loadReportDataRef.current();
+              loadReportDataRef.current(true);
             }
           })
           .on("postgres_changes", { event: "*", schema: "public", table: "egresos" }, () => {
             if (loadReportDataRef.current) {
-              loadReportDataRef.current();
+              loadReportDataRef.current(true);
             }
           })
-          .on("postgres_changes", { event: "*", schema: "public", table: "ventas_mostrador" }, () => {
-            if (loadReportDataRef.current) {
-              loadReportDataRef.current();
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "ventas_mostrador" },
+            (payload: { eventType: string; new?: any; old?: any }) => {
+              const evtType = payload.eventType as "INSERT" | "UPDATE" | "DELETE";
+              const targetVenta = payload.new || payload.old;
+              if (targetVenta) {
+                applyVentaUpdate(evtType, targetVenta, payload.old);
+              }
+              if (loadReportDataRef.current) {
+                loadReportDataRef.current(true);
+              }
             }
-          })
+          )
           .subscribe();
       } catch (err) {
         console.error("[Supabase Realtime: Reports] Error inicializando suscripción:", err);

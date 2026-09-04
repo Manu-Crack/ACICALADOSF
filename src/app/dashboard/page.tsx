@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { DashboardHome, FinancialBooking, FinancialVenta } from "./DashboardHome";
 import { Egreso } from "@/lib/types/expense";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata = {
   title: "Inicio — Panel Acicalados",
 };

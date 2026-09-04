@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { TicketVentaTermico, TicketVentaData } from "./TicketVentaTermico";
 import { createClient } from "@/lib/supabase/client";
+import { emitVentaChange, subscribeVentasSync } from "@/lib/utils/ventas-sync";
 
 export interface VentaItem {
   id: string;
@@ -161,6 +162,16 @@ export function VentasManager({ userRole }: VentasManagerProps) {
     };
   }, [supabase, fetchVentas]);
 
+  // Sincronización instantánea cross-tab entre instancias de VentasManager
+  useEffect(() => {
+    const unsubscribe = subscribeVentasSync(() => {
+      fetchVentas();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchVentas]);
+
   // Si el usuario selecciona un producto del datalist, autocompletar precio si no se ha modificado
   const handleProductChange = (val: string) => {
     setProductoNombre(val);
@@ -236,6 +247,12 @@ export function VentasManager({ userRole }: VentasManagerProps) {
       // Actualizar estado local inmediatamente
       setVentas((prev) => [createdSale, ...prev]);
 
+      // Emitir evento de sincronización instantánea para Inicio y Reportes
+      emitVentaChange({
+        eventType: "INSERT",
+        venta: createdSale,
+      });
+
       setSuccessMessage(`✅ Venta de "${createdSale.producto_nombre}" registrada correctamente por S/ ${Number(createdSale.total).toFixed(2)}.`);
 
       // Limpiar formulario y resetear a valores predeterminados
@@ -307,6 +324,13 @@ export function VentasManager({ userRole }: VentasManagerProps) {
         prev.map((v) => (v.id === updatedSale.id ? updatedSale : v))
       );
 
+      // Emitir evento de sincronización instantánea para Inicio y Reportes
+      emitVentaChange({
+        eventType: "UPDATE",
+        venta: updatedSale,
+        oldVenta: editingVenta,
+      });
+
       setEditingVenta(null);
       setSuccessMessage(`✅ Venta actualizada: Total recalculado a S/ ${Number(updatedSale.total).toFixed(2)}.`);
     } catch (err: unknown) {
@@ -348,6 +372,13 @@ export function VentasManager({ userRole }: VentasManagerProps) {
         throw new Error(json.error || "Error al eliminar.");
       }
       setVentas((prev) => prev.filter((item) => item.id !== v.id));
+
+      // Emitir evento de sincronización instantánea para Inicio y Reportes
+      emitVentaChange({
+        eventType: "DELETE",
+        venta: v,
+      });
+
       setSuccessMessage("Venta eliminada del registro.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "No se pudo eliminar la venta.";

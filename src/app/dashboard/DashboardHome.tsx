@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Egreso, formatCentsToSoles, getCategoryInfo } from "@/lib/types/expense";
+import { subscribeVentasSync, VentaSyncEvent } from "@/lib/utils/ventas-sync";
 
 export type FinancialBooking = {
   id: string;
@@ -235,6 +236,56 @@ export function DashboardHome({
     loadDataRef.current = loadData;
   }, [loadData]);
 
+  // Refresco garantizado de datos al montar la pantalla (evita datos obsoletos por router cache)
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Suscripción al bus de sincronización instantánea de ventas (<1ms entre pestañas y local)
+  useEffect(() => {
+    const unsubscribe = subscribeVentasSync((event: VentaSyncEvent) => {
+      const { eventType, venta } = event;
+      if (!venta || !venta.id) {
+        if (loadDataRef.current) loadDataRef.current();
+        return;
+      }
+
+      const item: FinancialVenta = {
+        id: venta.id,
+        cliente_nombre: venta.cliente_nombre || "",
+        producto_nombre: venta.producto_nombre || "",
+        cantidad: Number(venta.cantidad) || 1,
+        precio_unitario: Number(venta.precio_unitario) || 0,
+        total: Number(venta.total) || 0,
+        metodo_pago: venta.metodo_pago || "Efectivo",
+        fecha: venta.fecha || new Date().toISOString(),
+        notas: venta.notas || null,
+      };
+
+      if (eventType === "INSERT") {
+        setFinancialVentas((prev) => {
+          if (prev.some((v) => v.id === item.id)) return prev;
+          return [item, ...prev];
+        });
+      } else if (eventType === "UPDATE") {
+        setFinancialVentas((prev) =>
+          prev.map((v) => (v.id === item.id ? { ...v, ...item } : v))
+        );
+      } else if (eventType === "DELETE") {
+        setFinancialVentas((prev) => prev.filter((v) => v.id !== item.id));
+      }
+
+      // Sincronizar en segundo plano para consolidación global
+      if (loadDataRef.current) {
+        loadDataRef.current();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   // Suscripción protegida y autenticada a Supabase Realtime para reservas, pagos y egresos
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -333,7 +384,23 @@ export function DashboardHome({
               schema: "public",
               table: "ventas_mostrador",
             },
-            () => {
+            (payload: { eventType: string; new?: any; old?: any }) => {
+              if (payload.eventType === "INSERT" && payload.new) {
+                const newVenta = payload.new as FinancialVenta;
+                setFinancialVentas((prev) => {
+                  if (prev.some((v) => v.id === newVenta.id)) return prev;
+                  return [newVenta, ...prev];
+                });
+              } else if (payload.eventType === "UPDATE" && payload.new) {
+                const updated = payload.new as FinancialVenta;
+                setFinancialVentas((prev) =>
+                  prev.map((v) => (v.id === updated.id ? { ...v, ...updated } : v))
+                );
+              } else if (payload.eventType === "DELETE" && payload.old) {
+                const deletedId = (payload.old as { id: string }).id;
+                setFinancialVentas((prev) => prev.filter((v) => v.id !== deletedId));
+              }
+
               if (loadDataRef.current) {
                 loadDataRef.current();
               }

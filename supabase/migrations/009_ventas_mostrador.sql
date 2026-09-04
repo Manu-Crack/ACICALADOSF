@@ -29,47 +29,36 @@ CREATE INDEX IF NOT EXISTS idx_ventas_mostrador_fecha ON public.ventas_mostrador
 CREATE INDEX IF NOT EXISTS idx_ventas_mostrador_cliente ON public.ventas_mostrador(cliente_nombre);
 CREATE INDEX IF NOT EXISTS idx_ventas_mostrador_created ON public.ventas_mostrador(created_at DESC);
 
--- Habilitar RLS
-ALTER TABLE public.ventas_mostrador ENABLE ROW LEVEL SECURITY;
+-- Habilitar réplica completa para soporte integral de Supabase Realtime (UPDATE/DELETE payloads)
+ALTER TABLE public.ventas_mostrador REPLICA IDENTITY FULL;
 
 -- -----------------------------------------------------------------------------
 -- 2. Políticas de Seguridad RLS (Lectura, Inserción y Actualización para Admin y Recepcionista)
 -- -----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "staff_read_ventas_mostrador" ON public.ventas_mostrador;
-CREATE POLICY "staff_read_ventas_mostrador" ON public.ventas_mostrador
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'recepcionista')
-    )
-  );
+DROP POLICY IF EXISTS "ventas_mostrador_select" ON public.ventas_mostrador;
+CREATE POLICY "ventas_mostrador_select" ON public.ventas_mostrador
+  FOR SELECT TO authenticated
+  USING ((SELECT private.get_user_role()) = ANY (ARRAY['admin'::text, 'recepcionista'::text]));
 
 DROP POLICY IF EXISTS "staff_insert_ventas_mostrador" ON public.ventas_mostrador;
-CREATE POLICY "staff_insert_ventas_mostrador" ON public.ventas_mostrador
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'recepcionista')
-    )
-  );
+DROP POLICY IF EXISTS "ventas_mostrador_insert" ON public.ventas_mostrador;
+CREATE POLICY "ventas_mostrador_insert" ON public.ventas_mostrador
+  FOR INSERT TO authenticated
+  WITH CHECK ((SELECT private.get_user_role()) = ANY (ARRAY['admin'::text, 'recepcionista'::text]));
 
 DROP POLICY IF EXISTS "staff_update_ventas_mostrador" ON public.ventas_mostrador;
-CREATE POLICY "staff_update_ventas_mostrador" ON public.ventas_mostrador
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'recepcionista')
-    )
-  );
+DROP POLICY IF EXISTS "ventas_mostrador_update" ON public.ventas_mostrador;
+CREATE POLICY "ventas_mostrador_update" ON public.ventas_mostrador
+  FOR UPDATE TO authenticated
+  USING ((SELECT private.get_user_role()) = ANY (ARRAY['admin'::text, 'recepcionista'::text]))
+  WITH CHECK ((SELECT private.get_user_role()) = ANY (ARRAY['admin'::text, 'recepcionista'::text]));
 
 DROP POLICY IF EXISTS "admin_delete_ventas_mostrador" ON public.ventas_mostrador;
-CREATE POLICY "admin_delete_ventas_mostrador" ON public.ventas_mostrador
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
-    )
-  );
+DROP POLICY IF EXISTS "ventas_mostrador_delete" ON public.ventas_mostrador;
+CREATE POLICY "ventas_mostrador_delete" ON public.ventas_mostrador
+  FOR DELETE TO authenticated
+  USING ((SELECT private.get_user_role()) = 'admin'::text);
 
 -- Habilitar publicación Realtime para ventas_mostrador
 DO $$

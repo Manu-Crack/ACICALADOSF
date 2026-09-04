@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ReportsManager } from "./ReportsManager";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata = {
   title: "Reportes Financieros y Operativos — Panel Administrativo | Acicalados",
   description: "Reportes exportables en Excel y PDF de ingresos, pagos, servicios, reservas y egresos",
