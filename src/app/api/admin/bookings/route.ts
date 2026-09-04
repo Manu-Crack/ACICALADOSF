@@ -600,6 +600,10 @@ export async function POST(request: NextRequest) {
       service_price_cents: item.service_price_cents,
       duration_minutes: item.duration_minutes,
       assigned_employee_id: item.assigned_employee_id,
+      start_time: item.start_time,
+      end_time: item.end_time,
+      hora_inicio: item.hora_inicio || item.start_time,
+      hora_fin: item.hora_fin || item.end_time,
     }));
 
     const { error: bsError } = await admin.from("booking_services").insert(bookingServices);

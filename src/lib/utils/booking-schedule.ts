@@ -34,6 +34,8 @@ export interface ScheduledServiceOutput<T = any> {
   endMin: number;
   startTimeStr: string; // "HH:MM:00"
   endTimeStr: string;   // "HH:MM:00"
+  hora_inicio?: string; // "HH:MM:00"
+  hora_fin?: string;    // "HH:MM:00"
   durationMinutes: number;
   workerId: string | null;
 }
@@ -111,6 +113,8 @@ export function calculateParallelServiceSchedule<T extends ServiceScheduleInput>
       endMin: svcEndMin,
       startTimeStr: formatMinutesToTime(svcStartMin),
       endTimeStr: formatMinutesToTime(svcEndMin),
+      hora_inicio: formatMinutesToTime(svcStartMin),
+      hora_fin: formatMinutesToTime(svcEndMin),
       durationMinutes: duration,
       workerId,
     };

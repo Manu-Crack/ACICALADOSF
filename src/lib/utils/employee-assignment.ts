@@ -106,11 +106,28 @@ export async function findAvailableEmployeeForBooking(
 
   const nonAbsentIds = nonAbsentEmployees.map((e) => e.id);
 
-  // 3. Filtrar empleados con citas existentes superpuestas en ese bloque horario
-  // Toda reserva activa (estado distinto de 'cancelada' y 'expirada') ocupa la agenda del colaborador
+  // 3. Filtrar empleados con citas y servicios existentes superpuestos en ese bloque horario
+  // Consultar servicios activos asignados individualmente a colaboradores
+  const { data: existingBookingServices } = await admin
+    .from("booking_services")
+    .select(`
+      assigned_employee_id,
+      start_time,
+      end_time,
+      hora_inicio,
+      hora_fin,
+      duration_minutes,
+      booking_id,
+      bookings!inner(id, booking_date, start_time, end_time, status)
+    `)
+    .eq("bookings.booking_date", bookingDate)
+    .in("assigned_employee_id", nonAbsentIds)
+    .not("bookings.status", "in", '("cancelada","expirada")');
+
+  // Toda reserva activa ocupa la agenda del colaborador
   const { data: existingBookings } = await admin
     .from("bookings")
-    .select("assigned_employee_id, start_time, end_time, status, payment_status")
+    .select("id, assigned_employee_id, start_time, end_time, status, payment_status")
     .eq("booking_date", bookingDate)
     .in("assigned_employee_id", nonAbsentIds)
     .not("status", "in", '("cancelada","expirada")');
@@ -123,15 +140,33 @@ export async function findAvailableEmployeeForBooking(
     dailyWorkload.set(emp.id, 0);
   }
 
+  // Contabilizar carga de trabajo diaria por reserva
   if (existingBookings?.length) {
     for (const b of existingBookings) {
       if (!b.assigned_employee_id) continue;
-
-      // Incrementar carga de trabajo diaria de la trabajadora por cada cita activa en el día
       const currentCount = dailyWorkload.get(b.assigned_employee_id) || 0;
       dailyWorkload.set(b.assigned_employee_id, currentCount + 1);
+    }
+  }
 
-      // Verificar si hay colisión horaria directa (solapamiento) con el bloque solicitado
+  const bookingsWithDetail = new Set((existingBookingServices || []).map((bs) => bs.booking_id));
+
+  // 1) Evaluar solapamientos usando el rango horario real de cada ítem de servicio
+  if (existingBookingServices?.length) {
+    for (const bs of existingBookingServices) {
+      if (!bs.assigned_employee_id) continue;
+      const svcStart = bs.start_time || bs.hora_inicio;
+      const svcEnd = bs.end_time || bs.hora_fin;
+      if (svcStart && svcEnd && hasTimeOverlap(svcStart, svcEnd, startTime, endTime)) {
+        busyEmployeeIds.add(bs.assigned_employee_id);
+      }
+    }
+  }
+
+  // 2) Fallback para citas heredadas sin detalle en booking_services
+  if (existingBookings?.length) {
+    for (const b of existingBookings) {
+      if (!b.assigned_employee_id || bookingsWithDetail.has(b.id)) continue;
       if (hasTimeOverlap(b.start_time, b.end_time, startTime, endTime)) {
         busyEmployeeIds.add(b.assigned_employee_id);
       }
@@ -206,6 +241,8 @@ export interface AssignedServiceItem {
   service_type: "barberia" | "spa";
   start_time: string; // "HH:MM:SS"
   end_time: string;   // "HH:MM:SS"
+  hora_inicio?: string;
+  hora_fin?: string;
   assigned_employee_id: string | null;
   employee_name?: string;
   employee_type?: string;
@@ -270,10 +307,10 @@ export async function assignMultiServiceEmployees(params: {
     .eq("booking_date", bookingDate)
     .not("status", "in", '("cancelada","expirada")');
 
-  // Obtener también los booking_services asignados para detectar solapamientos por servicio
+  // Obtener los booking_services asignados con sus marcas de tiempo individuales reales
   const { data: existingBookingServices } = await admin
     .from("booking_services")
-    .select("booking_id, assigned_employee_id, duration_minutes, bookings!inner(booking_date, start_time, end_time, status)")
+    .select("booking_id, assigned_employee_id, duration_minutes, start_time, end_time, hora_inicio, hora_fin, bookings!inner(id, booking_date, start_time, end_time, status)")
     .eq("bookings.booking_date", bookingDate)
     .not("bookings.status", "in", '("cancelada","expirada")');
 
@@ -286,27 +323,35 @@ export async function assignMultiServiceEmployees(params: {
     dailyWorkload.set(emp.id, 0);
   }
 
-  // Cargar reservas existentes en los busy slots
+  // Cargar carga de trabajo diaria de la cabecera
   for (const b of existingBookings || []) {
-    if (b.assigned_employee_id && b.start_time && b.end_time) {
-      const slots = employeeBusySlots.get(b.assigned_employee_id) || [];
-      slots.push({ start: b.start_time, end: b.end_time });
-      employeeBusySlots.set(b.assigned_employee_id, slots);
-
+    if (b.assigned_employee_id) {
       const count = dailyWorkload.get(b.assigned_employee_id) || 0;
       dailyWorkload.set(b.assigned_employee_id, count + 1);
     }
   }
 
-  // Cargar sub-servicios con asignación directa si existen
+  const existingBookingsWithDetail = new Set((existingBookingServices || []).map((bs) => bs.booking_id));
+
+  // Cargar franjas ocupadas basadas ESTRICTAMENTE en la duración individual de cada servicio
   for (const bs of existingBookingServices || []) {
     if (bs.assigned_employee_id) {
-      const bookingData: any = bs.bookings;
-      if (bookingData?.start_time && bookingData?.end_time) {
+      const svcStart = bs.start_time || bs.hora_inicio;
+      const svcEnd = bs.end_time || bs.hora_fin;
+      if (svcStart && svcEnd) {
         const slots = employeeBusySlots.get(bs.assigned_employee_id) || [];
-        slots.push({ start: bookingData.start_time, end: bookingData.end_time });
+        slots.push({ start: svcStart, end: svcEnd });
         employeeBusySlots.set(bs.assigned_employee_id, slots);
       }
+    }
+  }
+
+  // Fallback: Si existen reservas sin detalle en booking_services, usar cabecera
+  for (const b of existingBookings || []) {
+    if (b.assigned_employee_id && b.start_time && b.end_time && !existingBookingsWithDetail.has(b.id)) {
+      const slots = employeeBusySlots.get(b.assigned_employee_id) || [];
+      slots.push({ start: b.start_time, end: b.end_time });
+      employeeBusySlots.set(b.assigned_employee_id, slots);
     }
   }
 
@@ -431,6 +476,8 @@ export async function assignMultiServiceEmployees(params: {
       service_type: svc.type,
       start_time: finalSlot.startFormatted,
       end_time: finalSlot.endFormatted,
+      hora_inicio: finalSlot.startFormatted,
+      hora_fin: finalSlot.endFormatted,
       assigned_employee_id: chosenEmpId,
       employee_name: chosenEmpName,
       employee_type: chosenEmpType,

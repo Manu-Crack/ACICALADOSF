@@ -178,6 +178,22 @@ export async function DELETE(request: NextRequest) {
     const newTotalDurationMinutes = scheduleResult.totalDurationMinutes;
     const newEndTime = scheduleResult.endTimeStr;
 
+    // Actualizar marcas de tiempo de los servicios restantes en booking_services
+    for (const sched of scheduleResult.scheduledServices) {
+      const svcId = sched.item.id;
+      if (svcId) {
+        await admin
+          .from("booking_services")
+          .update({
+            start_time: sched.startTimeStr,
+            end_time: sched.endTimeStr,
+            hora_inicio: sched.startTimeStr,
+            hora_fin: sched.endTimeStr,
+          })
+          .eq("id", svcId);
+      }
+    }
+
     // c) Recálculo de pagos y saldos
     const { data: verifiedPayments } = await admin
       .from("payment_logs")
@@ -342,7 +358,11 @@ export async function DELETE(request: NextRequest) {
           service_name,
           service_price_cents,
           duration_minutes,
-          assigned_employee_id
+          assigned_employee_id,
+          start_time,
+          end_time,
+          hora_inicio,
+          hora_fin
         )
       `)
       .eq("id", bookingId)

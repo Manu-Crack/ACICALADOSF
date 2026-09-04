@@ -118,6 +118,22 @@ export async function PATCH(request: NextRequest) {
         updateData.assigned_employee_id = firstAssigned;
       }
 
+      // Sincronizar las marcas de tiempo individuales recalculadas de cada servicio
+      for (const sched of scheduleResult.scheduledServices) {
+        const svcId = sched.item.id;
+        if (svcId) {
+          await admin
+            .from("booking_services")
+            .update({
+              start_time: sched.startTimeStr,
+              end_time: sched.endTimeStr,
+              hora_inicio: sched.startTimeStr,
+              hora_fin: sched.endTimeStr,
+            })
+            .eq("id", svcId);
+        }
+      }
+
       const { error: updBookingErr } = await admin
         .from("bookings")
         .update(updateData)

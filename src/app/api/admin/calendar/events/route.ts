@@ -98,7 +98,11 @@ export async function GET(request: NextRequest) {
             service_name,
             duration_minutes,
             service_price_cents,
-            assigned_employee_id
+            assigned_employee_id,
+            start_time,
+            end_time,
+            hora_inicio,
+            hora_fin
           )
         `)
         .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
@@ -137,6 +141,10 @@ export async function GET(request: NextRequest) {
           duration_minutes?: number;
           service_price_cents?: number;
           assigned_employee_id?: string | null;
+          start_time?: string | null;
+          end_time?: string | null;
+          hora_inicio?: string | null;
+          hora_fin?: string | null;
         }> | null;
       }
 
@@ -245,6 +253,17 @@ export async function GET(request: NextRequest) {
           const priceToShow = empServices.length > 0 ? empServicesPriceCents : b.total_price_cents;
           const eventId = servicesByEmp.size > 1 ? `booking-${b.id}-${empId}` : `booking-${b.id}`;
 
+          // Calcular rango horario individual real de este colaborador
+          const empStartTime = empServices.reduce((earliest, s) => {
+            const t = s.start_time || s.hora_inicio;
+            return t && t < earliest ? t : earliest;
+          }, empServices[0]?.start_time || empServices[0]?.hora_inicio || b.start_time);
+
+          const empEndTime = empServices.reduce((latest, s) => {
+            const t = s.end_time || s.hora_fin;
+            return t && t > latest ? t : latest;
+          }, empServices[0]?.end_time || empServices[0]?.hora_fin || b.end_time);
+
           events.push({
             id: eventId,
             type: "booking",
@@ -253,8 +272,8 @@ export async function GET(request: NextRequest) {
             employee_name: empName,
             employee_specialty: empSpecialty,
             date: b.booking_date,
-            start_time: b.start_time,
-            end_time: b.end_time,
+            start_time: empStartTime,
+            end_time: empEndTime,
             status: b.status,
             status_label: bookingStatusLabels[b.status] || (b.status ? b.status.toUpperCase() : "RESERVA"),
             badge_class: bookingStatusBadges[b.status] || "badge-neutral",

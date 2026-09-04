@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { findAvailableEmployeeForBooking } from "@/lib/utils/employee-assignment";
+import { assignMultiServiceEmployees } from "@/lib/utils/employee-assignment";
 import { generateWhatsAppBookingUrl } from "@/lib/utils/whatsapp";
 
 /**
@@ -118,17 +118,20 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // 6. Algoritmo de asignación automática de empleado (Least Loaded + Round Robin)
-    const serviceIds = services.map((s: { id: string }) => s.id);
-    const assignedEmployeeId = await findAvailableEmployeeForBooking({
-      serviceIds,
-      serviceType,
+    // 6. Algoritmo de asignación automática de colaboradores y cronograma individual por servicio
+    const assignmentResult = await assignMultiServiceEmployees({
+      services: services.map((s: { id: string; name: string; price_cents: number; duration_minutes?: number; type: "barberia" | "spa" }) => ({
+        id: s.id,
+        name: s.name,
+        price_cents: s.price_cents,
+        duration_minutes: s.duration_minutes || 30,
+        type: s.type,
+      })),
       bookingDate: booking_date,
       startTime: start_time,
-      endTime: endTime,
     });
 
-    if (!assignedEmployeeId) {
+    if (assignmentResult.items.some((i) => !i.assigned_employee_id)) {
       return NextResponse.json(
         {
           error:
@@ -137,6 +140,11 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+
+    const assignedEmployeeId = assignmentResult.primary_employee_id;
+    const finalStartTime = assignmentResult.formatted_start_time;
+    const finalEndTime = assignmentResult.formatted_end_time;
+    const finalTotalDuration = assignmentResult.total_duration_minutes;
 
     const clientFullName = `${client_first_name} ${client_last_name}`.trim();
 
@@ -159,9 +167,9 @@ export async function POST(request: NextRequest) {
         service_type: serviceType,
         assigned_employee_id: assignedEmployeeId,
         booking_date,
-        start_time,
-        end_time: endTime,
-        total_duration_minutes: totalDuration,
+        start_time: finalStartTime,
+        end_time: finalEndTime,
+        total_duration_minutes: finalTotalDuration,
         total_price_cents: totalPriceCents,
         advance_percentage: advancePercentage,  // 25% — adelanto requerido
         advance_amount_cents: 0,                // Sin pago inicial aún
@@ -182,13 +190,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. Insert booking_services
-    const bookingServices = services.map((s) => ({
+    // 7. Insert booking_services con marcas horarias individuales y colaboradores asignados
+    const bookingServices = assignmentResult.items.map((item) => ({
       booking_id: booking.id,
-      service_id: s.id,
-      service_name: s.name,
-      service_price_cents: s.price_cents,
-      duration_minutes: s.duration_minutes,
+      service_id: item.service_id,
+      service_name: item.service_name,
+      service_price_cents: item.service_price_cents,
+      duration_minutes: item.duration_minutes,
+      assigned_employee_id: item.assigned_employee_id,
+      start_time: item.start_time,
+      end_time: item.end_time,
+      hora_inicio: item.hora_inicio || item.start_time,
+      hora_fin: item.hora_fin || item.end_time,
     }));
 
     await admin.from("booking_services").insert(bookingServices);

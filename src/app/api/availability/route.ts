@@ -120,7 +120,35 @@ export async function GET(request: NextRequest) {
       if (blocks) absencesList = blocks;
     }
 
-    // 4. Obtener todas las reservas activas (no canceladas ni expiradas) para esa fecha
+    // 4. Obtener todos los servicios activos con rangos individuales asignados para esa fecha
+    const { data: activeBookingServices, error: bsError } = await admin
+      .from("booking_services")
+      .select(`
+        id,
+        booking_id,
+        assigned_employee_id,
+        duration_minutes,
+        start_time,
+        end_time,
+        hora_inicio,
+        hora_fin,
+        bookings!inner (
+          id,
+          booking_date,
+          status,
+          start_time,
+          end_time,
+          assigned_employee_id
+        )
+      `)
+      .eq("bookings.booking_date", date)
+      .not("bookings.status", "in", '("cancelada","expirada")');
+
+    if (bsError) {
+      console.error("[Availability] Error al consultar booking_services:", bsError);
+    }
+
+    // Consultar también reservas activas para compatibilidad con reservas sin desgloses
     const { data: activeBookings, error: bookingsError } = await admin
       .from("bookings")
       .select("id, assigned_employee_id, start_time, end_time, status, service_type")
@@ -131,7 +159,9 @@ export async function GET(request: NextRequest) {
       console.error("[Availability] Error al consultar reservas:", bookingsError);
     }
 
+    const servicesList = activeBookingServices || [];
     const bookingsList = activeBookings || [];
+    const bookingsWithServices = new Set(servicesList.map((s) => s.booking_id));
 
     // 5. Horario de atención:
     // Domingo: 10:00 - 20:00 (600 a 1200 min)
@@ -201,21 +231,41 @@ export async function GET(request: NextRequest) {
 
         if (hasAbsence) return false;
 
-        // 2. Verificar si el colaborador tiene alguna cita activa asignada superpuesta
-        const hasBookingConflict = bookingsList.some((b) => {
-          if (b.assigned_employee_id !== emp.id) return false;
-          // Solapamiento de horario con otra reserva
+        // 2. Verificar si el colaborador tiene algún servicio individual activo superpuesto
+        // Cada colaborador queda libre exactamente al culminar su propio servicio
+        const hasServiceConflict = servicesList.some((bs) => {
+          if (bs.assigned_employee_id !== emp.id) return false;
+          const sTime = bs.start_time || bs.hora_inicio;
+          const eTime = bs.end_time || bs.hora_fin;
+          if (!sTime || !eTime) return false;
+          return hasTimeOverlap(sTime, eTime, candidateSlotStart, candidateSlotEnd);
+        });
+
+        if (hasServiceConflict) return false;
+
+        // 3. Fallback: Verificar reservas que no tengan detalle de booking_services
+        const hasLegacyBookingConflict = bookingsList.some((b) => {
+          if (b.assigned_employee_id !== emp.id || bookingsWithServices.has(b.id)) return false;
           return hasTimeOverlap(b.start_time, b.end_time, candidateSlotStart, candidateSlotEnd);
         });
 
-        return !hasBookingConflict;
+        return !hasLegacyBookingConflict;
       });
 
-      // Contabilizar reservas activas sin asignar que colisionan en ese horario (para no sobrecargar)
-      const unassignedOverlappingCount = bookingsList.filter((b) => {
-        if (b.assigned_employee_id) return false;
+      // Contabilizar servicios/reservas activas sin asignar que colisionan en ese horario (para no sobrecargar)
+      const unassignedServicesCount = servicesList.filter((bs) => {
+        if (bs.assigned_employee_id) return false;
+        const sTime = bs.start_time || bs.hora_inicio;
+        const eTime = bs.end_time || bs.hora_fin;
+        return sTime && eTime && hasTimeOverlap(sTime, eTime, candidateSlotStart, candidateSlotEnd);
+      }).length;
+
+      const unassignedLegacyCount = bookingsList.filter((b) => {
+        if (b.assigned_employee_id || bookingsWithServices.has(b.id)) return false;
         return hasTimeOverlap(b.start_time, b.end_time, candidateSlotStart, candidateSlotEnd);
       }).length;
+
+      const unassignedOverlappingCount = unassignedServicesCount + unassignedLegacyCount;
 
       const availableCapacity = Math.max(
         0,

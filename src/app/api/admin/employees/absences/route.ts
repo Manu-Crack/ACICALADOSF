@@ -172,7 +172,36 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // 1. Detectar reservas existentes asignadas al empleado en ese rango de fechas
+    // 1. Detectar servicios y reservas existentes asignadas al empleado en ese rango de fechas
+    const { data: rawServices } = await admin
+      .from("booking_services")
+      .select(`
+        id,
+        booking_id,
+        service_name,
+        start_time,
+        end_time,
+        hora_inicio,
+        hora_fin,
+        assigned_employee_id,
+        bookings!inner (
+          id,
+          booking_code,
+          client_first_name,
+          client_last_name,
+          client_phone,
+          booking_date,
+          start_time,
+          end_time,
+          status,
+          total_price_cents
+        )
+      `)
+      .eq("assigned_employee_id", employee_id)
+      .gte("bookings.booking_date", actualStartDate)
+      .lte("bookings.booking_date", actualEndDate)
+      .not("bookings.status", "in", '("cancelada","expirada")');
+
     const { data: rawBookings } = await admin
       .from("bookings")
       .select(`
@@ -187,7 +216,7 @@ export async function POST(request: NextRequest) {
         status,
         total_price_cents,
         booking_services (
-          services (name)
+          service_name
         )
       `)
       .eq("assigned_employee_id", employee_id)
@@ -195,26 +224,68 @@ export async function POST(request: NextRequest) {
       .lte("booking_date", actualEndDate)
       .not("status", "in", '("cancelada","expirada")');
 
-    interface RawBookingWithServices {
-      id: string;
-      booking_code: string;
-      client_first_name: string | null;
-      client_last_name: string | null;
-      client_phone: string | null;
-      booking_date: string;
-      start_time: string;
-      end_time: string;
-      status: string;
-      total_price_cents: number;
-      booking_services: Array<{
-        services: { name: string } | null;
-      }> | null;
-    }
-
     const conflicts: ConflictingBooking[] = [];
+    const processedBookingIds = new Set<string>();
 
-    ((rawBookings || []) as unknown as RawBookingWithServices[]).forEach((b) => {
-      // Si no es todo el día y coincide el día, verificar solapamiento de horas
+    // A) Evaluar colisiones usando las horas exactas de los servicios a cargo del colaborador
+    const servicesByBooking = new Map<string, any[]>();
+    (rawServices || []).forEach((s: any) => {
+      const bId = s.booking_id;
+      if (!servicesByBooking.has(bId)) {
+        servicesByBooking.set(bId, []);
+      }
+      servicesByBooking.get(bId)!.push(s);
+    });
+
+    servicesByBooking.forEach((svcs, bId) => {
+      processedBookingIds.add(bId);
+      const b = svcs[0].bookings;
+      const empStartTime = svcs.reduce((earliest: string, s: any) => {
+        const t = s.start_time || s.hora_inicio;
+        return t && t < earliest ? t : earliest;
+      }, svcs[0]?.start_time || svcs[0]?.hora_inicio || b.start_time);
+
+      const empEndTime = svcs.reduce((latest: string, s: any) => {
+        const t = s.end_time || s.hora_fin;
+        return t && t > latest ? t : latest;
+      }, svcs[0]?.end_time || svcs[0]?.hora_fin || b.end_time);
+
+      const serviceNames = svcs.map((s: any) => s.service_name || "Servicio");
+
+      if (!is_all_day && b.booking_date === actualStartDate && start_time && end_time) {
+        if (empStartTime < end_time && empEndTime > start_time) {
+          conflicts.push({
+            id: b.id,
+            booking_code: b.booking_code,
+            client_name: `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim(),
+            client_phone: b.client_phone,
+            booking_date: b.booking_date,
+            start_time: empStartTime,
+            end_time: empEndTime,
+            status: b.status,
+            total_price_cents: b.total_price_cents,
+            services: serviceNames,
+          });
+        }
+      } else {
+        conflicts.push({
+          id: b.id,
+          booking_code: b.booking_code,
+          client_name: `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim(),
+          client_phone: b.client_phone,
+          booking_date: b.booking_date,
+          start_time: empStartTime,
+          end_time: empEndTime,
+          status: b.status,
+          total_price_cents: b.total_price_cents,
+          services: serviceNames,
+        });
+      }
+    });
+
+    // B) Fallback para citas heredadas sin detalle en booking_services
+    (rawBookings || []).forEach((b: any) => {
+      if (processedBookingIds.has(b.id)) return;
       if (!is_all_day && b.booking_date === actualStartDate && start_time && end_time) {
         if (b.start_time < end_time && b.end_time > start_time) {
           conflicts.push({
@@ -227,11 +298,10 @@ export async function POST(request: NextRequest) {
             end_time: b.end_time,
             status: b.status,
             total_price_cents: b.total_price_cents,
-            services: (b.booking_services || []).map((bs) => bs.services?.name || "Servicio"),
+            services: (b.booking_services || []).map((bs: any) => bs.service_name || "Servicio"),
           });
         }
       } else {
-        // Todo el día o rango multiespecífico
         conflicts.push({
           id: b.id,
           booking_code: b.booking_code,
@@ -242,7 +312,7 @@ export async function POST(request: NextRequest) {
           end_time: b.end_time,
           status: b.status,
           total_price_cents: b.total_price_cents,
-          services: (b.booking_services || []).map((bs) => bs.services?.name || "Servicio"),
+          services: (b.booking_services || []).map((bs: any) => bs.service_name || "Servicio"),
         });
       }
     });
