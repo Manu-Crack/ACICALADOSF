@@ -5,7 +5,7 @@ import Link from "next/link";
 
 interface SearchItem {
   title: string;
-  category: "Servicios" | "Vestuario" | "Productos" | "Blog" | "Páginas" | "Ubicación";
+  category: "Servicios" | "Vestuario" | "Productos" | "Páginas" | "Ubicación";
   href: string;
   desc: string;
 }
@@ -19,7 +19,6 @@ const SEARCH_ITEMS: SearchItem[] = [
   { title: "Camisas y Accesorios", category: "Vestuario", href: "/vestuario", desc: "Complementos de vestir masculinos y calzado elegante" },
   { title: "Pomadas y Ceras para Barba", category: "Productos", href: "/tienda", desc: "Fijación y brillo natural de calidad profesional" },
   { title: "Shampoo y Tónicos Capilares", category: "Productos", href: "/tienda", desc: "Cuidado capilar anticaída y fortalecedor" },
-  { title: "Blog y Consejos de Estilo", category: "Blog", href: "/blog", desc: "Guías de cuidado masculino, tendencias y estilo" },
   { title: "Nuestra Ubicación y Horarios", category: "Ubicación", href: "/ubicacion", desc: "Visítanos en nuestra sede principal" },
   { title: "Reservar Cita Online", category: "Páginas", href: "/reservar", desc: "Agenda tu turno con tu especialista favorito" },
 ];
@@ -120,7 +119,7 @@ export function NavSearch() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar servicios, trajes, productos, blog..."
+                placeholder="Buscar servicios, trajes, productos..."
                 className="w-full bg-transparent text-gray-100 placeholder-gray-500 focus:outline-none text-base"
               />
               <button

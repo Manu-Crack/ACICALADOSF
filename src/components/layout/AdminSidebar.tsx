@@ -73,7 +73,6 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
     { href: "/dashboard/servicios", label: "Servicios", icon: "/iconsAdmi/Servicios.svg", show: isAdminOrRecep },
     { href: "/dashboard/vestuario", label: "Vestuario", icon: "/iconsAdmi/Vestuario.svg", show: isAdminOrRecep },
     { href: "/dashboard/productos", label: "Productos", icon: "/iconsAdmi/Productos.svg", show: isAdminOrRecep },
-    { href: "/dashboard/blog", label: "Blog", icon: "/iconsAdmi/Blog.svg", show: isAdminOrRecep },
   ];
 
   const filteredNav = navItems.filter((item) => item.show);

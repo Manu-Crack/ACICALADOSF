@@ -13,7 +13,6 @@ const NAV_LINKS: NavLinkItem[] = [
   { label: "Servicios", href: "/servicios" },
   { label: "Vestuario", href: "/vestuario" },
   { label: "Productos", href: "/tienda" },
-  { label: "Blog", href: "/blog" },
   { label: "Ubicación", href: "/ubicacion" },
 ];
 

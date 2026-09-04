@@ -90,8 +90,6 @@ El sistema usa una tabla `profiles` en Supabase con un campo `role`:
 | `/reservar` | Flujo completo de reserva de cita |
 | `/tienda` | Catálogo de productos a la venta |
 | `/vestuario` | Galería de vestuario / looks |
-| `/blog` | Listado de artículos del blog |
-| `/blog/[slug]` | Artículo individual del blog |
 | `/ubicacion` | Mapa y datos de ubicación del local |
 | `/mi-cuenta` | Perfil del cliente autenticado |
 
@@ -114,7 +112,6 @@ El sistema usa una tabla `profiles` en Supabase con un campo `role`:
 | `/dashboard/asistencia` | Control de asistencia con QR |
 | `/dashboard/productos` | CRUD de productos de la tienda |
 | `/dashboard/vestuario` | CRUD de vestuario/galería |
-| `/dashboard/blog` | CRUD de artículos del blog |
 
 ---
 
@@ -160,8 +157,6 @@ El sistema usa una tabla `profiles` en Supabase con un campo `role`:
 | `/api/admin/attendance/scan` | POST | Procesar escaneo QR de asistencia |
 | `/api/admin/products` | GET, POST, PUT, DELETE | Gestión de productos |
 | `/api/admin/products/upload` | POST | Subir imagen de producto a Storage |
-| `/api/admin/blog` | GET, POST, PUT, DELETE | Gestión de artículos del blog |
-| `/api/admin/blog/upload` | POST | Subir imagen de blog a Storage |
 | `/api/admin/wardrobe` | GET, POST, PUT, DELETE | Gestión de vestuario |
 | `/api/admin/wardrobe/upload` | POST | Subir imagen de vestuario a Storage |
 
@@ -255,11 +250,6 @@ El sistema usa una tabla `profiles` en Supabase con un campo `role`:
 ### 9.4 Vestuario (`/vestuario`)
 - Galería de looks/vestuario con componente cliente (`WardrobeClientGallery`) y filtros.
 
-### 9.5 Blog (`/blog`, `/blog/[slug]`)
-- Listado de artículos publicados.
-- Vista individual con contenido completo.
-- Componente cliente (`BlogClientView`) con búsqueda y filtros por categoría.
-
 ### 9.6 Servicios (`/servicios`)
 - Lista de todos los servicios activos del establecimiento.
 
@@ -291,7 +281,6 @@ El sistema usa una tabla `profiles` en Supabase con un campo `role`:
 | `attendance` | Registros de asistencia. Campos: `id`, `employee_id`, `date`, `check_in`, `check_out`, `status`, `notes` |
 | `products` | Productos de la tienda |
 | `wardrobe` | Ítems de vestuario/galería |
-| `blog_posts` | Artículos del blog con slug, contenido, imagen, estado |
 
 ### Estados de Asistencia (check constraint en DB)
 ```

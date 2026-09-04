@@ -6,7 +6,7 @@
 export function extractStoragePath(urlOrPath: string, bucketName?: string): string | null {
   if (!urlOrPath) return null;
 
-  if (urlOrPath.startsWith("services/") || urlOrPath.startsWith("wardrobe/") || urlOrPath.startsWith("products/") || urlOrPath.startsWith("blog/")) {
+  if (urlOrPath.startsWith("services/") || urlOrPath.startsWith("wardrobe/") || urlOrPath.startsWith("products/")) {
     return urlOrPath;
   }
 

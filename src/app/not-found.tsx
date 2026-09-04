@@ -51,12 +51,12 @@ export default function NotFound() {
               marginBottom: 32,
             }}
           >
-            El contenido o artículo que buscas ha sido movido, eliminado o no se encuentra disponible en este momento.
+            La página que buscas ha sido movida, eliminada o no se encuentra disponible en este momento.
           </p>
 
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/blog" className="btn btn-secondary">
-              Ver Todos los Artículos
+            <Link href="/servicios" className="btn btn-secondary">
+              Ver Servicios
             </Link>
             <Link href="/" className="btn btn-primary">
               Volver al Inicio
