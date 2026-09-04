@@ -66,6 +66,7 @@ export function AdminSidebar({ profile, userName }: AdminSidebarProps) {
     { href: "/dashboard", label: "Inicio", icon: "/iconsAdmi/Inicio.svg", show: true },
     { href: "/dashboard/calendario", label: "Calendario", icon: "/iconsAdmi/Calendario.svg", show: isAdminOrRecep },
     { href: "/dashboard/reservas", label: "Reservas", icon: "/iconsAdmi/Reservas.svg", show: isAdminOrRecep },
+    { href: "/dashboard/ventas", label: "Ventas", icon: "/iconsAdmi/Ventas.svg", show: isAdminOrRecep },
     { href: "/dashboard/reportes", label: "Reportes", icon: "/iconsAdmi/Reportes.svg", show: isAdminOrRecep },
     { href: "/dashboard/egresos", label: "Egresos", icon: "/iconsAdmi/Egresos.svg", show: isAdminOrRecep },
     { href: "/dashboard/empleados", label: "Empleados", icon: "/iconsAdmi/Empleados.svg", show: isAdminOrRecep },

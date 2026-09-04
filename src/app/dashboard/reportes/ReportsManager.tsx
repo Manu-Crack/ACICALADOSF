@@ -162,13 +162,14 @@ export function ReportsManager() {
 
   // Pestaña principal activa
   const [activeMainTab, setActiveMainTab] = useState<
-    "dashboard" | "reservas" | "pagos" | "empleados" | "egresos"
+    "dashboard" | "reservas" | "pagos" | "empleados" | "egresos" | "ventas"
   >("dashboard");
 
   // Filtros de módulo para Ranking y Tabla de Auditoría
   const [topServicesModule, setTopServicesModule] = useState<ModuleFilter>("all");
   const [auditModuleFilter, setAuditModuleFilter] = useState<ModuleFilter>("all");
   const [auditSearchTerm, setAuditSearchTerm] = useState("");
+  const [ventasSearchTerm, setVentasSearchTerm] = useState("");
 
   // ---------------------------------------------------------------------------
   // Estado de Datos
@@ -291,6 +292,11 @@ export function ReportsManager() {
               loadReportDataRef.current();
             }
           })
+          .on("postgres_changes", { event: "*", schema: "public", table: "ventas_mostrador" }, () => {
+            if (loadReportDataRef.current) {
+              loadReportDataRef.current();
+            }
+          })
           .subscribe();
       } catch (err) {
         console.error("[Supabase Realtime: Reports] Error inicializando suscripción:", err);
@@ -379,17 +385,32 @@ export function ReportsManager() {
 
     if (auditSearchTerm.trim()) {
       const term = auditSearchTerm.toLowerCase();
-      items = items.filter(
-        (s) =>
-          s.service_name.toLowerCase().includes(term) ||
-          s.employee_name.toLowerCase().includes(term) ||
-          s.client_name.toLowerCase().includes(term) ||
-          s.booking_code.toLowerCase().includes(term)
-      );
+      return items.filter((item) => {
+        const matchClient = item.client_name.toLowerCase().includes(term);
+        const matchService = item.service_name.toLowerCase().includes(term);
+        const matchWorker = item.employee_name.toLowerCase().includes(term);
+        const matchCode = item.booking_code.toLowerCase().includes(term);
+        return matchClient || matchService || matchWorker || matchCode;
+      });
     }
 
     return items;
   }, [reportData?.completed_services_audit, auditModuleFilter, auditSearchTerm]);
+
+  // ---------------------------------------------------------------------------
+  // Tabla de Ventas Mostrador Filtrada
+  // ---------------------------------------------------------------------------
+  const filteredCounterSales = useMemo(() => {
+    if (!reportData?.counter_sales) return [];
+    if (!ventasSearchTerm.trim()) return reportData.counter_sales;
+    const term = ventasSearchTerm.trim().toLowerCase();
+    return reportData.counter_sales.filter(
+      (v) =>
+        v.cliente_nombre.toLowerCase().includes(term) ||
+        v.producto_nombre.toLowerCase().includes(term) ||
+        v.metodo_pago.toLowerCase().includes(term)
+    );
+  }, [reportData?.counter_sales, ventasSearchTerm]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, paddingBottom: 60 }}>
@@ -893,6 +914,58 @@ export function ReportsManager() {
             </span>
           </div>
 
+          {/* Ingresos Ventas Mostrador (Productos Físicos) */}
+          <div
+            className="card"
+            style={{
+              padding: "16px 18px",
+              background: "linear-gradient(135deg, rgba(168, 85, 247, 0.14) 0%, rgba(168, 85, 247, 0.03) 100%)",
+              border: "1px solid rgba(168, 85, 247, 0.35)",
+              borderRadius: "var(--radius-md, 8px)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <span
+                style={{
+                  fontSize: "0.72rem",
+                  textTransform: "uppercase",
+                  color: "#c084fc",
+                  fontWeight: 800,
+                  letterSpacing: "0.05em",
+                }}
+              >
+                🛍️ Ventas Mostrador
+              </span>
+              <span
+                className="badge"
+                style={{
+                  background: "rgba(168, 85, 247, 0.2)",
+                  color: "#c084fc",
+                  fontSize: "0.65rem",
+                  fontWeight: 700,
+                }}
+              >
+                {summary.total_collected_cents > 0
+                  ? `${Math.round(((summary.counter_sales_collected_cents || 0) / summary.total_collected_cents) * 100)}%`
+                  : "0%"}
+              </span>
+            </div>
+            <p
+              style={{
+                fontSize: "1.55rem",
+                fontWeight: 900,
+                color: "#c084fc",
+                margin: "8px 0 2px",
+                letterSpacing: "-0.02em",
+              }}
+            >
+              S/ {((summary.counter_sales_collected_cents || 0) / 100).toFixed(2)}
+            </p>
+            <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+              {summary.counter_sales_count || 0} productos vendidos
+            </span>
+          </div>
+
           {/* Egresos Operativos */}
           <div
             className="card"
@@ -996,6 +1069,7 @@ export function ReportsManager() {
           { id: "pagos", label: `💳 Registro de Pagos (${reportData?.payments.length || 0})` },
           { id: "empleados", label: `👥 Rendimiento de Personal (${reportData?.employees_breakdown.length || 0})` },
           { id: "egresos", label: `💸 Gastos & Egresos (${reportData?.expenses.length || 0})` },
+          { id: "ventas", label: `🛍️ Ventas Mostrador (${reportData?.counter_sales?.length || 0})` },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1764,6 +1838,128 @@ export function ReportsManager() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: VENTAS MOSTRADOR / PRODUCTOS */}
+          {activeMainTab === "ventas" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Buscador de ventas */}
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="🔍 Filtrar ventas de mostrador por cliente, producto o método de pago..."
+                  value={ventasSearchTerm}
+                  onChange={(e) => setVentasSearchTerm(e.target.value)}
+                  style={{ flex: 1, fontSize: "0.82rem" }}
+                />
+                {ventasSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setVentasSearchTerm("")}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    ✕ Limpiar
+                  </button>
+                )}
+              </div>
+
+              {/* Tabla de ventas mostrador */}
+              <div className="card" style={{ padding: 0, overflow: "hidden", border: "1px solid var(--color-border)" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr style={{ background: "rgba(200, 164, 92, 0.08)", borderBottom: "1px solid var(--color-border)", textAlign: "left" }}>
+                        <th style={{ padding: "10px 14px" }}>Fecha / Hora</th>
+                        <th style={{ padding: "10px 14px" }}>Cliente</th>
+                        <th style={{ padding: "10px 14px" }}>Producto / Descripción</th>
+                        <th style={{ padding: "10px 14px", textAlign: "center" }}>Cant.</th>
+                        <th style={{ padding: "10px 14px", textAlign: "right" }}>P. Unitario</th>
+                        <th style={{ padding: "10px 14px", textAlign: "right" }}>Total</th>
+                        <th style={{ padding: "10px 14px" }}>Método de Pago</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCounterSales.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: "center", padding: "30px", color: "var(--color-text-muted)" }}>
+                            No hay ventas de mostrador registradas en el periodo consultado.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredCounterSales.map((v) => {
+                          const d = new Date(v.fecha);
+                          const dateStr = d.toLocaleDateString("es-PE", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            timeZone: "America/Lima",
+                          });
+                          const timeStr = d.toLocaleTimeString("es-PE", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                            timeZone: "America/Lima",
+                          });
+
+                          return (
+                            <tr key={v.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                              <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                                <span style={{ fontWeight: 600 }}>{dateStr}</span>{" "}
+                                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>{timeStr}</span>
+                              </td>
+                              <td style={{ padding: "10px 14px", fontWeight: 700 }}>
+                                {v.cliente_nombre}
+                              </td>
+                              <td style={{ padding: "10px 14px" }}>
+                                <span style={{ fontWeight: 600 }}>{v.producto_nombre}</span>
+                                {v.notas && (
+                                  <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
+                                    Nota: {v.notas}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={{ padding: "10px 14px", textAlign: "center", fontWeight: 800 }}>
+                                {v.cantidad}
+                              </td>
+                              <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                                S/ {v.precio_unitario.toFixed(2)}
+                              </td>
+                              <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 900, color: "var(--color-primary)" }}>
+                                S/ {v.total.toFixed(2)}
+                              </td>
+                              <td style={{ padding: "10px 14px" }}>
+                                <span
+                                  className="badge"
+                                  style={{
+                                    background:
+                                      v.metodo_pago === "Yape"
+                                        ? "rgba(147, 51, 234, 0.15)"
+                                        : v.metodo_pago === "Efectivo"
+                                        ? "rgba(34, 197, 94, 0.15)"
+                                        : "rgba(59, 130, 246, 0.15)",
+                                    color:
+                                      v.metodo_pago === "Yape"
+                                        ? "#c084fc"
+                                        : v.metodo_pago === "Efectivo"
+                                        ? "#4ade80"
+                                        : "#60a5fa",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {v.metodo_pago}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

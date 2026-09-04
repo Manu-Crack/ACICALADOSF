@@ -9,6 +9,7 @@ import type {
   ServicePerformanceItem,
   EmployeePerformanceItem,
   CompletedServiceAuditItem,
+  CounterSaleReportItem,
 } from "@/lib/types/reports";
 import type { Expense } from "@/lib/types/expenses";
 
@@ -225,6 +226,38 @@ export async function buildFullReportData(
   const { data: rawExpenses, error: expensesErr } = await expensesQuery;
   if (expensesErr) {
     console.error("Error fetching expenses for report:", expensesErr);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 1.1. Consultar Ventas de Mostrador (Productos Físicos)
+  // ---------------------------------------------------------------------------
+  let ventasQuery = supabase
+    .from("ventas_mostrador")
+    .select(`
+      id,
+      cliente_nombre,
+      producto_nombre,
+      cantidad,
+      precio_unitario,
+      total,
+      metodo_pago,
+      fecha,
+      registrado_por,
+      notas,
+      created_at
+    `)
+    .order("fecha", { ascending: false });
+
+  if (startDate) {
+    ventasQuery = ventasQuery.gte("fecha", `${startDate}T00:00:00.000Z`);
+  }
+  if (endDate) {
+    ventasQuery = ventasQuery.lte("fecha", `${endDate}T23:59:59.999Z`);
+  }
+
+  const { data: rawVentas, error: ventasErr } = await ventasQuery;
+  if (ventasErr) {
+    console.error("Error fetching ventas_mostrador for report:", ventasErr);
   }
 
   // ---------------------------------------------------------------------------
@@ -453,6 +486,71 @@ export async function buildFullReportData(
   let barberiaCollectedCents = 0;
   let spaBookingsCount = 0;
   let barberiaBookingsCount = 0;
+
+  // ---------------------------------------------------------------------------
+  // 4.1. Procesar Ventas de Mostrador (Capa Aditiva y Desacoplada)
+  // ---------------------------------------------------------------------------
+  const counterSalesList: CounterSaleReportItem[] = [];
+  let counterSalesCollectedCents = 0;
+
+  ((rawVentas || []) as unknown as Array<{
+    id: string;
+    cliente_nombre: string;
+    producto_nombre: string;
+    cantidad: number;
+    precio_unitario: number;
+    total: number;
+    metodo_pago: string;
+    fecha: string;
+    registrado_por?: string | null;
+    notas?: string | null;
+  }>).forEach((v) => {
+    if (searchTerm && searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      const matchClient = v.cliente_nombre?.toLowerCase().includes(term);
+      const matchProduct = v.producto_nombre?.toLowerCase().includes(term);
+      if (!matchClient && !matchProduct) {
+        return;
+      }
+    }
+
+    if (paymentMethod && paymentMethod !== "all") {
+      if (!matchesPaymentMethodFilter(v.metodo_pago, paymentMethod)) {
+        return;
+      }
+    }
+
+    const totalCents = Math.round(Number(v.total) * 100);
+    counterSalesCollectedCents += totalCents;
+
+    const normPay = normalizePaymentMethod(v.metodo_pago);
+    if (normPay === "yape") {
+      yapeCollectedCents += totalCents;
+    } else if (normPay === "efectivo") {
+      cashCollectedCents += totalCents;
+    } else if (normPay === "transferencia") {
+      transferCollectedCents += totalCents;
+    } else if (normPay === "mixto") {
+      mixedCollectedCents += totalCents;
+    }
+
+    counterSalesList.push({
+      id: v.id,
+      cliente_nombre: v.cliente_nombre,
+      producto_nombre: v.producto_nombre,
+      cantidad: v.cantidad,
+      precio_unitario: Number(v.precio_unitario),
+      total: Number(v.total),
+      total_cents: totalCents,
+      metodo_pago: v.metodo_pago,
+      fecha: v.fecha,
+      registrado_por: v.registrado_por,
+      notas: v.notas,
+    });
+  });
+
+  // Sumar ventas de mostrador a los ingresos consolidados
+  totalCollectedCents += counterSalesCollectedCents;
 
     const empBookingsMap = new Map<string, Set<string>>();
   const empCompletedMap = new Map<string, Set<string>>();
@@ -878,6 +976,8 @@ export async function buildFullReportData(
     transfer_collected_cents: transferCollectedCents,
     mixed_collected_cents: mixedCollectedCents,
     culqi_collected_cents: culqiCollectedCents,
+    counter_sales_collected_cents: counterSalesCollectedCents,
+    counter_sales_count: counterSalesList.length,
     advances_collected_cents: advancesCollectedCents,
     pending_balance_cents: pendingBalanceCents,
     total_expenses_cents: totalExpensesCents,
@@ -899,6 +999,7 @@ export async function buildFullReportData(
     ),
     expenses: expensesList,
     completed_services_audit: completedServicesAuditList,
+    counter_sales: counterSalesList,
   };
 }
 

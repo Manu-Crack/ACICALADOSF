@@ -32,13 +32,17 @@ export interface FinancialSummary {
   // 1. Valor contratado de reservas (Pactado)
   total_services_value_cents: number;
 
-  // 2. Ingresos realmente cobrados (Solo pagos verificados)
+  // 2. Ingresos realmente cobrados (Pagos verificados + Ventas de mostrador)
   total_collected_cents: number;
   yape_collected_cents: number;
   cash_collected_cents: number;
   transfer_collected_cents: number;
   mixed_collected_cents: number;
   culqi_collected_cents: number; // Pagos históricos verificados de Culqi
+
+  // Ventas de mostrador (Productos físicos)
+  counter_sales_collected_cents?: number;
+  counter_sales_count?: number;
 
   // 3. Adelantos cobrados
   advances_collected_cents: number;
@@ -139,6 +143,20 @@ export interface CompletedServiceAuditItem {
   status: string;
 }
 
+export interface CounterSaleReportItem {
+  id: string;
+  cliente_nombre: string;
+  producto_nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  total: number;
+  total_cents: number;
+  metodo_pago: string;
+  fecha: string;
+  registrado_por?: string | null;
+  notas?: string | null;
+}
+
 export interface FullReportData {
   filters: ReportFilterParams;
   generated_at: string;
@@ -150,4 +168,5 @@ export interface FullReportData {
   employees_breakdown: EmployeePerformanceItem[];
   expenses: Expense[];
   completed_services_audit?: CompletedServiceAuditItem[];
+  counter_sales?: CounterSaleReportItem[];
 }

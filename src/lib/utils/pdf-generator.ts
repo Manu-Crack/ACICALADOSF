@@ -90,8 +90,8 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     [
       "Valor Contratado:",
       fmtSoles(data.summary.total_services_value_cents),
-      "• Desglose Canales:",
-      paymentMethodsDetails,
+      "• Ventas Mostrador:",
+      fmtSoles(data.summary.counter_sales_collected_cents || 0),
       "Margen Operativo:",
       data.summary.total_collected_cents > 0
         ? `${Math.round((data.summary.net_result_cents / data.summary.total_collected_cents) * 100)}%`
@@ -400,6 +400,57 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
       6: { cellWidth: 30 },
       7: { halign: "right", cellWidth: 24 },
       8: { cellWidth: 20 },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // =========================================================================
+  // SECCIÓN 6: DETALLE DE VENTAS DE MOSTRADOR (PRODUCTOS FÍSICOS)
+  // =========================================================================
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lastSection5 = (doc as any).lastAutoTable;
+  yPos = lastSection5 ? lastSection5.finalY + 8 : yPos + 40;
+
+  if (yPos > 145) {
+    doc.addPage();
+    yPos = 20;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...DARK_BG);
+  doc.text("Detalle de Ventas de Mostrador (Productos Físicos)", 14, yPos);
+
+  const counterSalesRows = (data.counter_sales || []).map((v) => {
+    const d = new Date(v.fecha);
+    const dateFormatted = `${d.toLocaleDateString("es-PE", { timeZone: "America/Lima" })} ${d.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" })}`;
+
+    return [
+      dateFormatted,
+      v.cliente_nombre,
+      v.producto_nombre + (v.notas ? ` (${v.notas})` : ""),
+      String(v.cantidad),
+      fmtSoles(Math.round(v.precio_unitario * 100)),
+      fmtSoles(v.total_cents),
+      v.metodo_pago,
+    ];
+  });
+
+  autoTable(doc, {
+    startY: yPos + 3,
+    head: [["Fecha / Hora", "Cliente", "Producto / Descripción", "Cant.", "P. Unitario", "Total", "Método de Pago"]],
+    body: counterSalesRows.length > 0 ? counterSalesRows : [["No se registraron ventas de mostrador en este periodo.", "", "", "", "", "", ""]],
+    theme: "striped",
+    headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: TEXT_DARK },
+    columnStyles: {
+      0: { cellWidth: 32 },
+      1: { cellWidth: 42, fontStyle: "bold" },
+      2: { cellWidth: 84 },
+      3: { halign: "center", cellWidth: 16 },
+      4: { halign: "right", cellWidth: 26 },
+      5: { halign: "right", cellWidth: 26, fontStyle: "bold" },
+      6: { cellWidth: 43 },
     },
     margin: { left: 14, right: 14 },
   });

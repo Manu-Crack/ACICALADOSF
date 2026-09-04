@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { DashboardHome, FinancialBooking } from "./DashboardHome";
+import { DashboardHome, FinancialBooking, FinancialVenta } from "./DashboardHome";
 import { Egreso } from "@/lib/types/expense";
 
 export const metadata = {
@@ -63,8 +63,8 @@ export default async function DashboardPage() {
     .order("booking_date", { ascending: false })
     .limit(200);
 
-  // Cargar egresos (consultando expenses y egresos)
-  const [expensesRes, egresosRes] = await Promise.all([
+  // Cargar egresos y ventas de mostrador en paralelo
+  const [expensesRes, egresosRes, ventasRes] = await Promise.all([
     supabase
       .from("expenses")
       .select("*")
@@ -75,10 +75,16 @@ export default async function DashboardPage() {
       .select("*")
       .order("expense_date", { ascending: false })
       .limit(200),
+    supabase
+      .from("ventas_mostrador")
+      .select("id, cliente_nombre, producto_nombre, cantidad, precio_unitario, total, metodo_pago, fecha, notas")
+      .order("fecha", { ascending: false })
+      .limit(300),
   ]);
 
   const rawExpenses = expensesRes.data || [];
   const rawEgresos = egresosRes.data || [];
+  const rawVentas = ventasRes.data || [];
 
   // Mapear y unificar egresos activos
   const combinedEgresos: Egreso[] = [
@@ -122,6 +128,7 @@ export default async function DashboardPage() {
       initialWeekCount={weekCount ?? 0}
       initialFinancialBookings={(financialBookings as unknown as FinancialBooking[]) ?? []}
       initialFinancialEgresos={combinedEgresos}
+      initialFinancialVentas={(rawVentas as unknown as FinancialVenta[]) ?? []}
     />
   );
 }

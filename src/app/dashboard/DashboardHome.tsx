@@ -21,6 +21,18 @@ export type FinancialBooking = {
   created_at?: string;
 };
 
+export type FinancialVenta = {
+  id: string;
+  cliente_nombre: string;
+  producto_nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  total: number;
+  metodo_pago: string;
+  fecha: string;
+  notas?: string | null;
+};
+
 export type TodayBooking = FinancialBooking;
 
 interface DashboardHomeProps {
@@ -28,6 +40,7 @@ interface DashboardHomeProps {
   initialWeekCount: number;
   initialFinancialBookings?: FinancialBooking[];
   initialFinancialEgresos?: Egreso[];
+  initialFinancialVentas?: FinancialVenta[];
 }
 
 const statusLabels: Record<string, string> = {
@@ -87,6 +100,7 @@ export function DashboardHome({
   initialWeekCount,
   initialFinancialBookings = [],
   initialFinancialEgresos = [],
+  initialFinancialVentas = [],
 }: DashboardHomeProps) {
   // Agenda & Operational stats state
   const [bookings, setBookings] = useState<FinancialBooking[]>(initialBookings);
@@ -97,7 +111,8 @@ export function DashboardHome({
   const [financialRange, setFinancialRange] = useState<"day" | "week" | "month" | "all">("day");
   const [financialBookings, setFinancialBookings] = useState<FinancialBooking[]>(initialFinancialBookings);
   const [financialEgresos, setFinancialEgresos] = useState<Egreso[]>(initialFinancialEgresos);
-  const [financialTab, setFinancialTab] = useState<"todos" | "ingresos" | "egresos">("todos");
+  const [financialVentas, setFinancialVentas] = useState<FinancialVenta[]>(initialFinancialVentas);
+  const [financialTab, setFinancialTab] = useState<"todos" | "ingresos" | "ventas" | "egresos">("todos");
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -137,7 +152,7 @@ export function DashboardHome({
     try {
       const { todayStr, mondayStr, sundayStr } = dateBounds;
 
-      const [todayRes, weekRes, financialBookingsRes, expensesRes, egresosRes] = await Promise.all([
+      const [todayRes, weekRes, financialBookingsRes, expensesRes, egresosRes, ventasRes] = await Promise.all([
         supabase
           .from("bookings")
           .select(
@@ -170,6 +185,11 @@ export function DashboardHome({
           .select("*")
           .order("expense_date", { ascending: false })
           .limit(200),
+        supabase
+          .from("ventas_mostrador")
+          .select("id, cliente_nombre, producto_nombre, cantidad, precio_unitario, total, metodo_pago, fecha, notas")
+          .order("fecha", { ascending: false })
+          .limit(300),
       ]);
 
       if (todayRes.data) {
@@ -180,6 +200,9 @@ export function DashboardHome({
       }
       if (financialBookingsRes.data) {
         setFinancialBookings(financialBookingsRes.data as unknown as FinancialBooking[]);
+      }
+      if (ventasRes.data) {
+        setFinancialVentas(ventasRes.data as unknown as FinancialVenta[]);
       }
 
       const rawExpenses = (expensesRes.data || [])
@@ -303,6 +326,19 @@ export function DashboardHome({
               }
             }
           )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "ventas_mostrador",
+            },
+            () => {
+              if (loadDataRef.current) {
+                loadDataRef.current();
+              }
+            }
+          )
           .subscribe((status: string) => {
             if (status === "SUBSCRIBED") {
               setIsRealtimeConnected(true);
@@ -398,15 +434,38 @@ export function DashboardHome({
       return true;
     });
 
+    // Filtrar ventas de mostrador por periodo en Zona Horaria Perú
+    const inRangeVentas = financialVentas.filter((v) => {
+      const saleDatePeru = getPeruDateString(new Date(v.fecha));
+      if (financialRange === "day") {
+        return saleDatePeru === todayStr;
+      }
+      if (financialRange === "week") {
+        return saleDatePeru >= mondayStr && saleDatePeru <= sundayStr;
+      }
+      if (financialRange === "month") {
+        return saleDatePeru >= monthStartStr && saleDatePeru <= monthEndStr;
+      }
+      return true;
+    });
+
     // APLICACIÓN ESTRICTA: Solo considerar reservas confirmadas/pagadas (descartar pendientes)
     const validConfirmedBookings = inRangeBookings.filter(
       (b) => calculateValidIncomeForBooking(b) > 0
     );
 
-    const totalIncomeCents = validConfirmedBookings.reduce(
+    const totalServicesIncomeCents = validConfirmedBookings.reduce(
       (acc, b) => acc + calculateValidIncomeForBooking(b),
       0
     );
+
+    const totalVentasCents = inRangeVentas.reduce(
+      (acc, v) => acc + Math.round(Number(v.total) * 100),
+      0
+    );
+
+    // Ingresos Totales del Día / Periodo = Total Cobrado en Reservas + Total Ventas de Productos
+    const totalIncomeCents = totalServicesIncomeCents + totalVentasCents;
 
     const totalExpenseCents = inRangeEgresos.reduce(
       (acc, e) => acc + (e.amount_cents || 0),
@@ -424,13 +483,16 @@ export function DashboardHome({
       inRangeBookings,
       validConfirmedBookings,
       inRangeEgresos,
+      inRangeVentas,
+      totalServicesIncomeCents,
+      totalVentasCents,
       totalIncomeCents,
       totalExpenseCents,
       netBalanceCents,
       incomePercent,
       expensePercent,
     };
-  }, [financialRange, financialBookings, financialEgresos, dateBounds]);
+  }, [financialRange, financialBookings, financialEgresos, financialVentas, dateBounds]);
 
   const periodLabel = useMemo(() => {
     if (financialRange === "day") return "Hoy";
@@ -680,22 +742,22 @@ export function DashboardHome({
           </div>
         </div>
 
-        {/* 3 Main Financial Cards */}
+        {/* Main Financial Cards: 4 Tarjetas Consolidando Servicios y Ventas */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 20,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
             marginBottom: 24,
           }}
         >
-          {/* Card 1: Ingresos Válidos */}
+          {/* Card 1: Ingresos Totales Consolidados */}
           <div
             style={{
               background: "rgba(34, 197, 94, 0.04)",
-              border: "1px solid rgba(34, 197, 94, 0.25)",
+              border: "1px solid rgba(34, 197, 94, 0.3)",
               borderRadius: "var(--radius-md)",
-              padding: "20px",
+              padding: "18px 20px",
               position: "relative",
               overflow: "hidden",
             }}
@@ -703,30 +765,30 @@ export function DashboardHome({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <span
                 style={{
-                  fontSize: "0.775rem",
-                  fontWeight: 700,
+                  fontSize: "0.75rem",
+                  fontWeight: 800,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
                   color: "#4ade80",
                 }}
               >
-                💰 Ingresos Válidos
+                💰 Ingresos Totales
               </span>
               <span
                 className="badge badge-success"
-                style={{ fontSize: "0.7rem", padding: "2px 8px" }}
-                title="Solo reservas confirmadas o pagadas. Registros pendientes ignorados."
+                style={{ fontSize: "0.68rem", padding: "2px 8px" }}
+                title="Consolida cobros verificados de citas + ventas directas de mostrador."
               >
-                Solo Confirmados
+                Consolidado
               </span>
             </div>
 
             <p
               style={{
-                fontSize: "1.85rem",
-                fontWeight: 800,
+                fontSize: "1.75rem",
+                fontWeight: 900,
                 color: "#4ade80",
-                marginTop: 10,
+                marginTop: 8,
                 marginBottom: 4,
                 lineHeight: 1.1,
               }}
@@ -734,21 +796,18 @@ export function DashboardHome({
               {formatCentsToSoles(filteredFinancialData.totalIncomeCents)}
             </p>
 
-            <p className="text-muted" style={{ fontSize: "0.775rem", margin: 0 }}>
-              {filteredFinancialData.validConfirmedBookings.length}{" "}
-              {filteredFinancialData.validConfirmedBookings.length === 1
-                ? "reserva confirmada con cobro"
-                : "reservas confirmadas con cobro"}
+            <p className="text-muted" style={{ fontSize: "0.72rem", margin: 0 }}>
+              Citas: {formatCentsToSoles(filteredFinancialData.totalServicesIncomeCents)} · Mostrador: {formatCentsToSoles(filteredFinancialData.totalVentasCents)}
             </p>
           </div>
 
-          {/* Card 2: Egresos Operativos */}
+          {/* Card 2: Ingresos por Ventas / Mostrador (Desglosado) */}
           <div
             style={{
-              background: "rgba(239, 68, 68, 0.04)",
-              border: "1px solid rgba(239, 68, 68, 0.25)",
+              background: "rgba(200, 164, 92, 0.05)",
+              border: "1px solid rgba(200, 164, 92, 0.35)",
               borderRadius: "var(--radius-md)",
-              padding: "20px",
+              padding: "18px 20px",
               position: "relative",
               overflow: "hidden",
             }}
@@ -756,8 +815,65 @@ export function DashboardHome({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <span
                 style={{
-                  fontSize: "0.775rem",
+                  fontSize: "0.75rem",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: "var(--color-primary, #C8A45C)",
+                }}
+              >
+                🛍️ Ventas Mostrador
+              </span>
+              <Link
+                href="/dashboard/ventas"
+                style={{
+                  fontSize: "0.72rem",
+                  color: "var(--color-primary)",
+                  textDecoration: "none",
                   fontWeight: 700,
+                }}
+              >
+                Ver módulo →
+              </Link>
+            </div>
+
+            <p
+              style={{
+                fontSize: "1.75rem",
+                fontWeight: 900,
+                color: "var(--color-primary, #C8A45C)",
+                marginTop: 8,
+                marginBottom: 4,
+                lineHeight: 1.1,
+              }}
+            >
+              {formatCentsToSoles(filteredFinancialData.totalVentasCents)}
+            </p>
+
+            <p className="text-muted" style={{ fontSize: "0.72rem", margin: 0 }}>
+              {filteredFinancialData.inRangeVentas.length}{" "}
+              {filteredFinancialData.inRangeVentas.length === 1
+                ? "venta de artículos físicos"
+                : "ventas de artículos físicos"}
+            </p>
+          </div>
+
+          {/* Card 3: Egresos Operativos */}
+          <div
+            style={{
+              background: "rgba(239, 68, 68, 0.04)",
+              border: "1px solid rgba(239, 68, 68, 0.25)",
+              borderRadius: "var(--radius-md)",
+              padding: "18px 20px",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 800,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
                   color: "#f87171",
@@ -768,10 +884,10 @@ export function DashboardHome({
               <Link
                 href="/dashboard/egresos"
                 style={{
-                  fontSize: "0.75rem",
+                  fontSize: "0.72rem",
                   color: "var(--color-primary)",
                   textDecoration: "none",
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 Ver módulo →
@@ -780,10 +896,10 @@ export function DashboardHome({
 
             <p
               style={{
-                fontSize: "1.85rem",
-                fontWeight: 800,
+                fontSize: "1.75rem",
+                fontWeight: 900,
                 color: "#f87171",
-                marginTop: 10,
+                marginTop: 8,
                 marginBottom: 4,
                 lineHeight: 1.1,
               }}
@@ -791,7 +907,7 @@ export function DashboardHome({
               {formatCentsToSoles(filteredFinancialData.totalExpenseCents)}
             </p>
 
-            <p className="text-muted" style={{ fontSize: "0.775rem", margin: 0 }}>
+            <p className="text-muted" style={{ fontSize: "0.72rem", margin: 0 }}>
               {filteredFinancialData.inRangeEgresos.length}{" "}
               {filteredFinancialData.inRangeEgresos.length === 1
                 ? "gasto registrado"
@@ -799,7 +915,7 @@ export function DashboardHome({
             </p>
           </div>
 
-          {/* Card 3: Balance Neto (Utilidad) */}
+          {/* Card 4: Balance Neto (Utilidad) */}
           <div
             style={{
               background:
@@ -811,7 +927,7 @@ export function DashboardHome({
                   ? "1px solid rgba(200, 164, 92, 0.4)"
                   : "1px solid rgba(239, 68, 68, 0.4)",
               borderRadius: "var(--radius-md)",
-              padding: "20px",
+              padding: "18px 20px",
               position: "relative",
               overflow: "hidden",
             }}
@@ -819,8 +935,8 @@ export function DashboardHome({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <span
                 style={{
-                  fontSize: "0.775rem",
-                  fontWeight: 700,
+                  fontSize: "0.75rem",
+                  fontWeight: 800,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
                   color:
@@ -829,27 +945,27 @@ export function DashboardHome({
                       : "#f87171",
                 }}
               >
-                📈 Balance Neto (Utilidad)
+                📈 Balance Neto
               </span>
               <span
                 className={`badge ${
                   filteredFinancialData.netBalanceCents >= 0 ? "badge-gold" : "badge-error"
                 }`}
-                style={{ fontSize: "0.7rem", padding: "2px 8px" }}
+                style={{ fontSize: "0.68rem", padding: "2px 8px" }}
               >
-                {filteredFinancialData.netBalanceCents >= 0 ? "Superávit Positivo" : "Déficit"}
+                {filteredFinancialData.netBalanceCents >= 0 ? "Superávit" : "Déficit"}
               </span>
             </div>
 
             <p
               style={{
-                fontSize: "1.85rem",
-                fontWeight: 800,
+                fontSize: "1.75rem",
+                fontWeight: 900,
                 color:
                   filteredFinancialData.netBalanceCents >= 0
                     ? "var(--color-primary)"
                     : "#f87171",
-                marginTop: 10,
+                marginTop: 8,
                 marginBottom: 4,
                 lineHeight: 1.1,
               }}
@@ -858,8 +974,8 @@ export function DashboardHome({
               {formatCentsToSoles(filteredFinancialData.netBalanceCents)}
             </p>
 
-            <p className="text-muted" style={{ fontSize: "0.775rem", margin: 0 }}>
-              Margen operativo neto del periodo
+            <p className="text-muted" style={{ fontSize: "0.72rem", margin: 0 }}>
+              (Servicios + Ventas) − Egresos
             </p>
           </div>
         </div>
@@ -950,7 +1066,7 @@ export function DashboardHome({
                   color: financialTab === "todos" ? "var(--color-primary)" : "var(--color-text-muted)",
                 }}
               >
-                Todos ({filteredFinancialData.validConfirmedBookings.length + filteredFinancialData.inRangeEgresos.length})
+                Todos ({filteredFinancialData.validConfirmedBookings.length + filteredFinancialData.inRangeVentas.length + filteredFinancialData.inRangeEgresos.length})
               </button>
               <button
                 type="button"
@@ -966,7 +1082,23 @@ export function DashboardHome({
                   color: financialTab === "ingresos" ? "#4ade80" : "var(--color-text-muted)",
                 }}
               >
-                Ingresos Válidos ({filteredFinancialData.validConfirmedBookings.length})
+                Citas ({filteredFinancialData.validConfirmedBookings.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFinancialTab("ventas")}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: "1px solid var(--color-border)",
+                  background: financialTab === "ventas" ? "rgba(200, 164, 92, 0.2)" : "transparent",
+                  color: financialTab === "ventas" ? "var(--color-primary)" : "var(--color-text-muted)",
+                }}
+              >
+                Ventas Mostrador ({filteredFinancialData.inRangeVentas.length})
               </button>
               <button
                 type="button"
@@ -989,6 +1121,7 @@ export function DashboardHome({
 
           {/* Table of Movements */}
           {filteredFinancialData.validConfirmedBookings.length === 0 &&
+          filteredFinancialData.inRangeVentas.length === 0 &&
           filteredFinancialData.inRangeEgresos.length === 0 ? (
             <p className="text-muted" style={{ textAlign: "center", padding: "20px 0", fontSize: "0.85rem" }}>
               No se registran movimientos financieros confirmados para {periodLabel.toLowerCase()}.
@@ -1083,6 +1216,69 @@ export function DashboardHome({
                             }}
                           >
                             + {formatCentsToSoles(amount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                  {/* Ventas de Mostrador */}
+                  {(financialTab === "todos" || financialTab === "ventas") &&
+                    filteredFinancialData.inRangeVentas.map((v) => {
+                      const d = new Date(v.fecha);
+                      const dateFormatted = `${getPeruDateString(d)} ${d.toLocaleTimeString("es-PE", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                        timeZone: "America/Lima",
+                      })}`;
+                      const vCents = Math.round(Number(v.total) * 100);
+                      return (
+                        <tr
+                          key={`sale-${v.id}`}
+                          style={{
+                            borderBottom: "1px solid rgba(255,255,255,0.05)",
+                            backgroundColor: "rgba(200, 164, 92, 0.03)",
+                          }}
+                        >
+                          <td style={{ padding: "8px 10px" }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                background: "rgba(200, 164, 92, 0.2)",
+                                color: "var(--color-primary)",
+                              }}
+                            >
+                              🛍️ VENTA MOSTRADOR
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
+                            {dateFormatted}
+                          </td>
+                          <td style={{ padding: "8px 10px" }}>
+                            <span style={{ fontWeight: 600 }}>{v.cliente_nombre}</span>{" "}
+                            <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                              ({v.producto_nombre} × {v.cantidad})
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 10px" }}>
+                            <span className="badge badge-gold" style={{ fontSize: "0.7rem" }}>
+                              Producto ({v.metodo_pago})
+                            </span>
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              fontWeight: 700,
+                              color: "var(--color-primary)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            + {formatCentsToSoles(vCents)}
                           </td>
                         </tr>
                       );
