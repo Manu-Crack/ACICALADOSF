@@ -117,6 +117,7 @@ export interface EmployeePerformanceItem {
   bookings_count: number;
   completed_count: number;
   total_revenue_collected_cents: number;
+  total_duration_minutes?: number;
 }
 
 export interface CompletedServiceAuditItem {
@@ -131,6 +132,8 @@ export interface CompletedServiceAuditItem {
   date_exact: string;
   booking_date: string;
   start_time: string;
+  end_time?: string;
+  duration_minutes?: number;
   payment_method: string | null;
   payment_status: string;
   status: string;

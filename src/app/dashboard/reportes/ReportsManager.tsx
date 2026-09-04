@@ -27,6 +27,15 @@ function getPeruDateString(d: Date = new Date()): string {
   }
 }
 
+function formatDurationMinutes(totalMinutes?: number | null): string {
+  if (!totalMinutes || totalMinutes <= 0) return "0 min";
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 export function ReportsManager() {
   // Modal de Cierre de Caja WhatsApp
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
@@ -1460,11 +1469,13 @@ export function ReportsManager() {
                                 </div>
                               </td>
 
-                              {/* 4. Fecha Exacta */}
+                              {/* 4. Fecha Exacta y Horario del Servicio */}
                               <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
                                 <div style={{ fontWeight: 600 }}>{item.booking_date}</div>
                                 <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
                                   ⏰ {item.start_time ? item.start_time.slice(0, 5) : "—"}
+                                  {item.end_time ? ` – ${item.end_time.slice(0, 5)}` : ""}
+                                  {item.duration_minutes ? ` (${item.duration_minutes} min)` : ""}
                                 </span>
                               </td>
 
@@ -1684,6 +1695,7 @@ export function ReportsManager() {
                       <th style={{ padding: "10px 14px" }}>Cargo</th>
                       <th style={{ padding: "10px 14px", textAlign: "center" }}>Citas Asignadas</th>
                       <th style={{ padding: "10px 14px", textAlign: "center" }}>Completadas</th>
+                      <th style={{ padding: "10px 14px", textAlign: "center" }}>Tiempo Neto</th>
                       <th style={{ padding: "10px 14px", textAlign: "right" }}>Ingresos Cobrados Asociados</th>
                     </tr>
                   </thead>
@@ -1694,6 +1706,9 @@ export function ReportsManager() {
                         <td style={{ padding: "10px 14px", color: "var(--color-text-muted)" }}>{e.position}</td>
                         <td style={{ padding: "10px 14px", textAlign: "center", fontWeight: 600 }}>{e.bookings_count}</td>
                         <td style={{ padding: "10px 14px", textAlign: "center", color: "var(--color-success)", fontWeight: 700 }}>{e.completed_count}</td>
+                        <td style={{ padding: "10px 14px", textAlign: "center", fontWeight: 600, color: "var(--color-primary)" }}>
+                          ⏱️ {formatDurationMinutes(e.total_duration_minutes)}
+                        </td>
                         <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 800, color: "var(--color-primary)" }}>
                           S/ {(e.total_revenue_collected_cents / 100).toFixed(2)}
                         </td>

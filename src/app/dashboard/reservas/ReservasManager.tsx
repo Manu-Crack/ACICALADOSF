@@ -1622,36 +1622,38 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                             )}
                           </p>
                         )}
-                        <div style={{ marginTop: 8 }}>
-                          <label
-                            className="label"
-                            style={{ fontSize: "0.75rem" }}
-                          >
-                            Asignar Empleado:
-                          </label>
-                          <select
-                            className="select"
-                            style={{
-                              padding: "4px 8px",
-                              fontSize: "0.8125rem",
-                              maxWidth: 220,
-                            }}
-                            value={b.assigned_employee_id || ""}
-                            onChange={(e) =>
-                              updateBooking(b.id, {
-                                assigned_employee_id:
-                                  e.target.value || null,
-                              })
-                            }
-                          >
-                            <option value="">Sin asignar</option>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.first_name} {emp.last_name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        {(b.booking_services?.length ?? 0) < 2 && (
+                          <div style={{ marginTop: 8 }}>
+                            <label
+                              className="label"
+                              style={{ fontSize: "0.75rem" }}
+                            >
+                              Asignar Empleado:
+                            </label>
+                            <select
+                              className="select"
+                              style={{
+                                padding: "4px 8px",
+                                fontSize: "0.8125rem",
+                                maxWidth: 220,
+                              }}
+                              value={b.assigned_employee_id || ""}
+                              onChange={(e) =>
+                                updateBooking(b.id, {
+                                  assigned_employee_id:
+                                    e.target.value || null,
+                                })
+                              }
+                            >
+                              <option value="">Sin asignar</option>
+                              {employees.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {emp.first_name} {emp.last_name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
                       {/* WhatsApp Contact */}
@@ -1773,9 +1775,10 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                       {b.booking_services && b.booking_services.length > 0 ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 10 }}>
                           {b.booking_services.map((bs, idx) => {
+                            const isMultiService = (b.booking_services?.length ?? 0) >= 2;
                             const assignedEmp = bs.assigned_employee_id
                               ? employeeMap.get(bs.assigned_employee_id)
-                              : (b.assigned_employee_id ? employeeMap.get(b.assigned_employee_id) : null);
+                              : (!isMultiService && b.assigned_employee_id ? employeeMap.get(b.assigned_employee_id) : null);
 
                             const isEditingPrice = editingPriceId === bs.id;
                             const isSavingPrice = savingPriceId === bs.id;

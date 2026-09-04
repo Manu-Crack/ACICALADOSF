@@ -265,27 +265,38 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
     margin: { left: 14, right: 152 },
   });
 
+  const fmtDuration = (mins?: number) => {
+    if (!mins || mins <= 0) return "0m";
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
+
   const employeeRows = data.employees_breakdown.map((e) => [
     e.employee_name,
     e.position,
     String(e.bookings_count),
     String(e.completed_count),
+    fmtDuration(e.total_duration_minutes),
     fmtSoles(e.total_revenue_collected_cents),
   ]);
 
   autoTable(doc, {
     startY: yPos + 3,
-    head: [["Empleado", "Cargo", "Asignadas", "Completadas", "Cobrado Asociado"]],
-    body: employeeRows.length > 0 ? employeeRows : [["Sin registros de empleados.", "", "", "", ""]],
+    head: [["Empleado", "Cargo", "Asig.", "Comp.", "Tiempo", "Cobrado"]],
+    body: employeeRows.length > 0 ? employeeRows : [["Sin registros de empleados.", "", "", "", "", ""]],
     theme: "striped",
     headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
     bodyStyles: { fontSize: 7 },
     columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 22 },
-      2: { halign: "center", cellWidth: 20 },
-      3: { halign: "center", cellWidth: 22 },
-      4: { halign: "right", cellWidth: 26 },
+      0: { cellWidth: 30 },
+      1: { cellWidth: 18 },
+      2: { halign: "center", cellWidth: 14 },
+      3: { halign: "center", cellWidth: 14 },
+      4: { halign: "center", cellWidth: 16 },
+      5: { halign: "right", cellWidth: 24 },
     },
     margin: { left: 150, right: 14 },
   });
@@ -307,31 +318,38 @@ export function generatePdfReport(data: FullReportData): Uint8Array {
   doc.setTextColor(...DARK_BG);
   doc.text("Desglose de Servicios por Módulo (Auditoría)", 14, yPos);
 
-  const auditRows = (data.completed_services_audit || []).map((item) => [
-    item.service_name,
-    item.service_type === "spa" ? "Spa" : "Barbería",
-    fmtSoles(item.price_cents),
-    item.employee_name || "Sin asignar",
-    `${item.booking_date} ${item.start_time ? item.start_time.slice(0, 5) : ""}`.trim(),
-    `${item.booking_code} · ${item.client_name}`,
-    item.payment_method ? item.payment_method.toUpperCase() : "—",
-  ]);
+  const auditRows = (data.completed_services_audit || []).map((item) => {
+    const timeFormatted = item.start_time
+      ? `${item.start_time.slice(0, 5)}${item.end_time ? ` - ${item.end_time.slice(0, 5)}` : ""}${item.duration_minutes ? ` (${item.duration_minutes}m)` : ""}`
+      : "";
+    const dateTimeStr = `${item.booking_date} ${timeFormatted}`.trim();
+
+    return [
+      item.service_name,
+      item.service_type === "spa" ? "Spa" : "Barbería",
+      fmtSoles(item.price_cents),
+      item.employee_name || "Sin asignar",
+      dateTimeStr,
+      `${item.booking_code} · ${item.client_name}`,
+      item.payment_method ? item.payment_method.toUpperCase() : "—",
+    ];
+  });
 
   autoTable(doc, {
     startY: yPos + 3,
-    head: [["Servicio", "Módulo", "Precio Cobrado", "Especialista Asignado", "Fecha Exacta", "Cita / Cliente", "Método de Pago"]],
+    head: [["Servicio", "Módulo", "Precio Cobrado", "Especialista Asignado", "Fecha / Horario", "Cita / Cliente", "Método de Pago"]],
     body: auditRows.length > 0 ? auditRows : [["No hay servicios auditados en el periodo consultado.", "", "", "", "", "", ""]],
     theme: "striped",
     headStyles: { fillColor: DARK_BG, textColor: GOLD_COLOR, fontSize: 7.5 },
     bodyStyles: { fontSize: 7, textColor: TEXT_DARK },
     columnStyles: {
-      0: { cellWidth: 60, fontStyle: "bold" },
-      1: { cellWidth: 24 },
-      2: { halign: "right", cellWidth: 26, fontStyle: "bold" },
-      3: { cellWidth: 40 },
-      4: { cellWidth: 32 },
-      5: { cellWidth: 55 },
-      6: { cellWidth: 32 },
+      0: { cellWidth: 50, fontStyle: "bold" },
+      1: { cellWidth: 18 },
+      2: { halign: "right", cellWidth: 24, fontStyle: "bold" },
+      3: { cellWidth: 35 },
+      4: { cellWidth: 44 },
+      5: { cellWidth: 48 },
+      6: { cellWidth: 30 },
     },
     margin: { left: 14, right: 14 },
   });

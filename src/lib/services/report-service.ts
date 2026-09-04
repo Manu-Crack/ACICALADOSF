@@ -66,6 +66,34 @@ export function matchesPaymentMethodFilter(
   return normMethod === normFilter;
 }
 
+export function parseTimeToMinutes(timeStr?: string | null): number {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(":");
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return h * 60 + m;
+}
+
+export function formatMinutesToTime(totalMinutes: number): string {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+}
+
+function getEmployeeFullName(emp?: { first_name?: string | null; last_name?: string | null } | null): string {
+  if (!emp) return "Sin asignar";
+  const name = `${emp.first_name || ""} ${emp.last_name || ""}`.trim();
+  return name || "Sin asignar";
+}
+
+function getEmployeePosition(type?: string | null): string {
+  if (!type) return "Especialista";
+  if (type === "barberia") return "Barbero";
+  if (type === "spa") return "Especialista Spa";
+  return type;
+}
+
 /**
  * Servicio Centralizado de Reportes Financieros y Operativos.
  * Realiza cálculos exactos respetando las reglas financieras y de segmentación de rubros.
@@ -84,6 +112,20 @@ export async function buildFullReportData(
     paymentMethod,
     searchTerm,
   } = filters;
+
+  // ---------------------------------------------------------------------------
+  // 0. Consultar Empleados para mapeo y resolución de nombres independiente
+  // ---------------------------------------------------------------------------
+  const { data: allEmployeesData } = await supabase
+    .from("employees")
+    .select("id, first_name, last_name, type");
+
+  const employeeMap = new Map<string, { id: string; first_name: string; last_name: string; type: string }>();
+  if (allEmployeesData) {
+    allEmployeesData.forEach((emp: any) => {
+      employeeMap.set(emp.id, emp);
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // 1. Consultar Reservas dentro del Rango (Tabla bookings en Supabase)
@@ -112,11 +154,13 @@ export async function buildFullReportData(
       created_at,
       employees:assigned_employee_id (id, first_name, last_name, type),
       booking_services (
+        id,
         service_id,
         service_name,
         service_price_cents,
         duration_minutes,
         assigned_employee_id,
+        created_at,
         services:service_id (name, type)
       )
     `)
@@ -135,9 +179,8 @@ export async function buildFullReportData(
   if (paymentStatus && paymentStatus !== "all") {
     bookingsQuery = bookingsQuery.eq("payment_status", paymentStatus);
   }
-  if (employeeId && employeeId !== "all") {
-    bookingsQuery = bookingsQuery.eq("assigned_employee_id", employeeId);
-  }
+  // Nota: Si employeeId está definido, no se filtra a nivel SQL en bookings.assigned_employee_id
+  // para permitir que reservas múltiples con especialistas asignados en booking_services sean recuperadas.
 
   const { data: rawBookings, error: bookingsErr } = await bookingsQuery;
   if (bookingsErr) {
@@ -235,11 +278,13 @@ export async function buildFullReportData(
   }
 
   interface RawBookingService {
+    id?: string;
     service_id: string;
     service_name: string | null;
     service_price_cents: number;
     duration_minutes: number;
     assigned_employee_id?: string | null;
+    created_at?: string;
     services: {
       name: string;
       type: string;
@@ -275,8 +320,18 @@ export async function buildFullReportData(
     booking_services: RawBookingService[] | null;
   }
 
-  // Filtrar reservas por término de búsqueda y por método de pago si aplica
+  // Filtrar reservas por empleado, método de pago y término de búsqueda
   const filteredBookings = ((rawBookings || []) as unknown as RawBookingRow[]).filter((b) => {
+    if (employeeId && employeeId !== "all") {
+      const bServices = b.booking_services || [];
+      const matchesParent = b.assigned_employee_id === employeeId;
+      const matchesChild = bServices.some((bs) => bs.assigned_employee_id === employeeId);
+      if (bServices.length >= 2) {
+        if (!matchesChild) return false;
+      } else {
+        if (!matchesParent && !matchesChild) return false;
+      }
+    }
     if (paymentMethod && paymentMethod !== "all") {
       if (!matchesPaymentMethodFilter(b.payment_method, paymentMethod)) {
         return false;
@@ -398,6 +453,9 @@ export async function buildFullReportData(
   let spaBookingsCount = 0;
   let barberiaBookingsCount = 0;
 
+    const empBookingsMap = new Map<string, Set<string>>();
+  const empCompletedMap = new Map<string, Set<string>>();
+
   filteredBookings.forEach((b) => {
     const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim();
     totalBookings++;
@@ -482,73 +540,178 @@ export async function buildFullReportData(
       }
     }
 
-    const employeeName = b.employees
-      ? `${b.employees.first_name || ""} ${b.employees.last_name || ""}`.trim()
-      : "Sin asignar";
-
-    const employeePos = b.employees?.type
-      ? b.employees.type === "barberia"
-        ? "Barbero"
-        : b.employees.type === "spa"
-        ? "Especialista Spa"
-        : b.employees.type
-      : "Especialista";
-
-    // Nombres de servicios y desglose de servicios
+    // -------------------------------------------------------------------------
+    // Desglose de servicios, cronograma secuencial y asignación independiente
+    // -------------------------------------------------------------------------
     const serviceNamesArr: string[] = [];
-    const bServices = b.booking_services || [];
+    const rawBServices = b.booking_services || [];
+    // Ordenar cronológicamente según created_at
+    const bServices = [...rawBServices].sort((a, bItem) => {
+      if (a.created_at && bItem.created_at) {
+        const diff = new Date(a.created_at).getTime() - new Date(bItem.created_at).getTime();
+        if (diff !== 0) return diff;
+      }
+      return 0;
+    });
+
+    const isMultiService = bServices.length >= 2;
+    const baseStartMin = parseTimeToMinutes(b.start_time);
+    let currentMin = baseStartMin;
+
+    const totalBookingServicesPrice = bServices.reduce(
+      (sum, s) => sum + (s.service_price_cents || 0),
+      0
+    ) || b.total_price_cents || 1;
+
+    const distinctAssignedWorkerNames: string[] = [];
 
     if (bServices.length > 0) {
       bServices.forEach((bs) => {
         const sName = bs.service_name || bs.services?.name || "Servicio";
         const sType = bs.services?.type || b.service_type || "barberia";
-        const sPrice = bs.service_price_cents || 0;
+        const sPrice = bs.service_price_cents !== undefined && bs.service_price_cents !== null
+          ? bs.service_price_cents
+          : (b.total_price_cents || 0);
         serviceNamesArr.push(sName);
 
-        const key = bs.service_id || sName;
-        if (!servicesMap[key]) {
-          servicesMap[key] = {
+        // Cronograma secuencial exacto por servicio
+        const duration = Math.max(1, Number(bs.duration_minutes) || 30);
+        const svcStartMin = currentMin;
+        const svcEndMin = svcStartMin + duration;
+        const startTimeStr = formatMinutesToTime(svcStartMin);
+        const endTimeStr = formatMinutesToTime(svcEndMin);
+        currentMin = svcEndMin;
+
+        // Asignación de especialista:
+        // En citas múltiples (>=2), no hereda el empleado de la cabecera general.
+        // Si no tiene asignado en el servicio, queda como 'Sin asignar'.
+        const workerId = isMultiService
+          ? (bs.assigned_employee_id || null)
+          : (bs.assigned_employee_id || b.assigned_employee_id || null);
+
+        let workerName = "Sin asignar";
+        let workerPos = "Especialista";
+
+        if (workerId) {
+          const empInfo = employeeMap.get(workerId);
+          if (empInfo) {
+            workerName = getEmployeeFullName(empInfo);
+            workerPos = getEmployeePosition(empInfo.type);
+          } else if (b.employees && b.employees.id === workerId) {
+            workerName = getEmployeeFullName(b.employees);
+            workerPos = getEmployeePosition(b.employees.type);
+          }
+        }
+
+        if (workerName !== "Sin asignar" && !distinctAssignedWorkerNames.includes(workerName)) {
+          distinctAssignedWorkerNames.push(workerName);
+        }
+
+        // Catálogo de servicios general
+        const catKey = bs.service_id || sName;
+        if (!servicesMap[catKey]) {
+          servicesMap[catKey] = {
             service_id: bs.service_id || sName,
             service_name: sName,
             service_type: sType,
             price_cents: sPrice,
-            duration_minutes: bs.duration_minutes || 30,
+            duration_minutes: duration,
             times_booked: 0,
             total_revenue_cents: 0,
           };
         }
-        servicesMap[key].times_booked += 1;
-        // Solo acumular en recaudación de servicios si la cita no está cancelada ni expirada
+        servicesMap[catKey].times_booked += 1;
         if (b.status !== "cancelada" && b.status !== "expirada") {
-          servicesMap[key].total_revenue_cents += sPrice;
+          servicesMap[catKey].total_revenue_cents += sPrice;
         }
 
-        if (b.status !== "cancelada" && b.status !== "expirada") {
+        // Auditoría con especialista y horario exacto desvinculado
+        const matchesEmployeeFilter = !employeeId || employeeId === "all" || workerId === employeeId;
+
+        if (matchesEmployeeFilter && b.status !== "cancelada" && b.status !== "expirada") {
           completedServicesAuditList.push({
-            id: `${b.id}_${bs.service_id || Math.random().toString(36).substring(2, 7)}`,
+            id: `${b.id}_${bs.id || bs.service_id || Math.random().toString(36).substring(2, 7)}`,
             booking_id: b.id,
             booking_code: b.booking_code,
             client_name: clientName,
             service_name: sName,
             service_type: sType,
-            price_cents: bs.service_price_cents !== undefined && bs.service_price_cents !== null
-              ? bs.service_price_cents
-              : (b.total_price_cents || 0),
-            employee_name: employeeName,
-            date_exact: `${b.booking_date} ${b.start_time ? b.start_time.slice(0, 5) : ""}`.trim(),
+            price_cents: sPrice,
+            employee_name: workerName,
+            date_exact: `${b.booking_date} ${startTimeStr.slice(0, 5)}`.trim(),
             booking_date: b.booking_date,
-            start_time: b.start_time,
+            start_time: startTimeStr,
+            end_time: endTimeStr,
+            duration_minutes: duration,
             payment_method: b.payment_method || null,
             payment_status: b.payment_status,
             status: b.status,
           });
+        }
+
+        // Desglose de desempeño por colaborador (employees_breakdown)
+        if (workerId && matchesEmployeeFilter) {
+          if (!employeesMap[workerId]) {
+            employeesMap[workerId] = {
+              employee_id: workerId,
+              employee_name: workerName,
+              position: workerPos,
+              bookings_count: 0,
+              completed_count: 0,
+              total_revenue_collected_cents: 0,
+              total_duration_minutes: 0,
+            };
+          }
+
+          if (!empBookingsMap.has(workerId)) empBookingsMap.set(workerId, new Set());
+          empBookingsMap.get(workerId)!.add(b.id);
+          employeesMap[workerId].bookings_count = empBookingsMap.get(workerId)!.size;
+
+          if (b.status === "completada") {
+            if (!empCompletedMap.has(workerId)) empCompletedMap.set(workerId, new Set());
+            empCompletedMap.get(workerId)!.add(b.id);
+            employeesMap[workerId].completed_count = empCompletedMap.get(workerId)!.size;
+          }
+
+          if (b.status !== "cancelada" && b.status !== "expirada") {
+            employeesMap[workerId].total_duration_minutes =
+              (employeesMap[workerId].total_duration_minutes || 0) + duration;
+          }
+
+          if (isConfirmedOrCompleted && validIncomeCents > 0) {
+            const svcShare = totalBookingServicesPrice > 0 ? (sPrice / totalBookingServicesPrice) : (1 / bServices.length);
+            const proportionalIncome = Math.round(validIncomeCents * svcShare);
+            employeesMap[workerId].total_revenue_collected_cents += proportionalIncome;
+          }
         }
       });
     } else {
       const sName = b.service_type === "spa" ? "Servicio Spa" : "Servicio Barbería";
       serviceNamesArr.push(sName);
 
-      if (b.status !== "cancelada" && b.status !== "expirada") {
+      const workerId = b.assigned_employee_id || null;
+      let workerName = "Sin asignar";
+      let workerPos = "Especialista";
+
+      if (workerId) {
+        const empInfo = employeeMap.get(workerId);
+        if (empInfo) {
+          workerName = getEmployeeFullName(empInfo);
+          workerPos = getEmployeePosition(empInfo.type);
+        } else if (b.employees) {
+          workerName = getEmployeeFullName(b.employees);
+          workerPos = getEmployeePosition(b.employees.type);
+        }
+      }
+
+      if (workerName !== "Sin asignar") {
+        distinctAssignedWorkerNames.push(workerName);
+      }
+
+      const duration = Math.max(1, parseTimeToMinutes(b.end_time) - parseTimeToMinutes(b.start_time)) || 30;
+      const matchesEmployeeFilter = !employeeId || employeeId === "all" || workerId === employeeId;
+
+      if (matchesEmployeeFilter && b.status !== "cancelada" && b.status !== "expirada") {
         completedServicesAuditList.push({
           id: `${b.id}_main`,
           booking_id: b.id,
@@ -557,38 +720,60 @@ export async function buildFullReportData(
           service_name: sName,
           service_type: b.service_type || "barberia",
           price_cents: b.total_price_cents,
-          employee_name: employeeName,
+          employee_name: workerName,
           date_exact: `${b.booking_date} ${b.start_time ? b.start_time.slice(0, 5) : ""}`.trim(),
           booking_date: b.booking_date,
           start_time: b.start_time,
+          end_time: b.end_time,
+          duration_minutes: duration,
           payment_method: b.payment_method || null,
           payment_status: b.payment_status,
           status: b.status,
         });
       }
+
+      if (workerId && matchesEmployeeFilter) {
+        if (!employeesMap[workerId]) {
+          employeesMap[workerId] = {
+            employee_id: workerId,
+            employee_name: workerName,
+            position: workerPos,
+            bookings_count: 0,
+            completed_count: 0,
+            total_revenue_collected_cents: 0,
+            total_duration_minutes: 0,
+          };
+        }
+
+        if (!empBookingsMap.has(workerId)) empBookingsMap.set(workerId, new Set());
+        empBookingsMap.get(workerId)!.add(b.id);
+        employeesMap[workerId].bookings_count = empBookingsMap.get(workerId)!.size;
+
+        if (b.status === "completada") {
+          if (!empCompletedMap.has(workerId)) empCompletedMap.set(workerId, new Set());
+          empCompletedMap.get(workerId)!.add(b.id);
+          employeesMap[workerId].completed_count = empCompletedMap.get(workerId)!.size;
+        }
+
+        if (b.status !== "cancelada" && b.status !== "expirada") {
+          employeesMap[workerId].total_duration_minutes =
+            (employeesMap[workerId].total_duration_minutes || 0) + duration;
+        }
+
+        if (isConfirmedOrCompleted && validIncomeCents > 0) {
+          employeesMap[workerId].total_revenue_collected_cents += validIncomeCents;
+        }
+      }
     }
 
-    // Desglose por empleado
-    if (b.assigned_employee_id) {
-      const empId = b.assigned_employee_id;
-      if (!employeesMap[empId]) {
-        employeesMap[empId] = {
-          employee_id: empId,
-          employee_name: employeeName,
-          position: employeePos,
-          bookings_count: 0,
-          completed_count: 0,
-          total_revenue_collected_cents: 0,
-        };
-      }
-      employeesMap[empId].bookings_count += 1;
-      if (b.status === "completada") {
-        employeesMap[empId].completed_count += 1;
-      }
-      // Solo atribuir ingreso cobrado real de citas confirmadas/completadas
-      if (isConfirmedOrCompleted && validIncomeCents > 0) {
-        employeesMap[empId].total_revenue_collected_cents += validIncomeCents;
-      }
+    // Nombre de empleado para la fila resumen de bookingsList
+    let bookingEmployeeName = "Sin asignar";
+    if (isMultiService) {
+      bookingEmployeeName = distinctAssignedWorkerNames.length > 0
+        ? distinctAssignedWorkerNames.join(", ")
+        : "Sin asignar";
+    } else {
+      bookingEmployeeName = distinctAssignedWorkerNames[0] || (b.employees ? `${b.employees.first_name || ""} ${b.employees.last_name || ""}`.trim() : "Sin asignar");
     }
 
     // Resolver método de pago efectivo
@@ -606,7 +791,7 @@ export async function buildFullReportData(
       start_time: b.start_time,
       end_time: b.end_time,
       employee_id: b.assigned_employee_id,
-      employee_name: employeeName,
+      employee_name: bookingEmployeeName,
       service_names: serviceNamesArr.join(", ") || "General",
       service_type: b.service_type,
       total_price_cents: b.total_price_cents,
@@ -722,7 +907,7 @@ export async function buildFullReportData(
       (a, b) => b.times_booked - a.times_booked || b.total_revenue_cents - a.total_revenue_cents
     ),
     employees_breakdown: Object.values(employeesMap).sort(
-      (a, b) => b.total_revenue_collected_cents - a.total_revenue_collected_cents
+      (a, b) => b.total_revenue_collected_cents - a.total_revenue_collected_cents || (b.total_duration_minutes || 0) - (a.total_duration_minutes || 0)
     ),
     expenses: expensesList,
     completed_services_audit: completedServicesAuditList,
