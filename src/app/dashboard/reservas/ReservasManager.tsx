@@ -273,21 +273,43 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
     }
   }
 
-  // Actualizar asignación de un servicio individual dentro de una reserva
+  // Actualizar asignación de un servicio individual dentro de una reserva y recalcular cronograma paralelo
   async function updateBookingServiceEmployee(bookingServiceId: string, employeeId: string | null) {
     try {
-      const { error } = await supabase
-        .from("booking_services")
-        .update({ assigned_employee_id: employeeId })
-        .eq("id", bookingServiceId);
+      const res = await fetch("/api/admin/bookings/service-employee", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_service_id: bookingServiceId,
+          employee_id: employeeId,
+        }),
+      });
 
-      if (error) {
-        alert("Error al actualizar la asignación del servicio: " + error.message);
-      } else {
-        await loadBookings(true);
+      if (!res.ok) {
+        // Fallback a actualización directa en cliente si la API fallara
+        const { error } = await supabase
+          .from("booking_services")
+          .update({ assigned_employee_id: employeeId })
+          .eq("id", bookingServiceId);
+
+        if (error) {
+          alert("Error al actualizar la asignación del servicio: " + error.message);
+          return;
+        }
       }
+
+      await loadBookings(true);
     } catch (err) {
       console.error("Error al reasignar empleado de servicio:", err);
+      try {
+        await supabase
+          .from("booking_services")
+          .update({ assigned_employee_id: employeeId })
+          .eq("id", bookingServiceId);
+        await loadBookings(true);
+      } catch {
+        // Ignorar
+      }
     }
   }
 

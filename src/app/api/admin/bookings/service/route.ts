@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { calculateParallelServiceSchedule } from "@/lib/utils/booking-schedule";
 
 async function verifyStaffAuth(allowedRoles: string[] = ["admin", "recepcionista"]) {
   const supabase = await createClient();
@@ -168,13 +169,14 @@ export async function DELETE(request: NextRequest) {
       0
     );
 
-    // b) Nueva duración total y nuevo horario de finalización
-    const newTotalDurationMinutes =
-      remainingServices.reduce((sum, s) => sum + (Number(s.duration_minutes) || 0), 0) || 30;
-
-    const baseStartMinutes = parseTimeToMinutes(booking.start_time);
-    const newEndMinutes = baseStartMinutes + newTotalDurationMinutes;
-    const newEndTime = `${formatMinutesToTime(newEndMinutes)}:00`;
+    // b) Nueva duración total y nuevo horario de finalización con cálculo paralelo
+    const scheduleResult = calculateParallelServiceSchedule(
+      booking.start_time,
+      remainingServices,
+      booking.assigned_employee_id
+    );
+    const newTotalDurationMinutes = scheduleResult.totalDurationMinutes;
+    const newEndTime = scheduleResult.endTimeStr;
 
     // c) Recálculo de pagos y saldos
     const { data: verifiedPayments } = await admin

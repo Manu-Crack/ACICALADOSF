@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { calculateParallelServiceSchedule } from "@/lib/utils/booking-schedule";
 import type {
   ReportFilterParams,
   FullReportData,
@@ -541,32 +542,28 @@ export async function buildFullReportData(
     }
 
     // -------------------------------------------------------------------------
-    // Desglose de servicios, cronograma secuencial y asignación independiente
+    // Desglose de servicios, cronograma paralelo y asignación independiente
     // -------------------------------------------------------------------------
     const serviceNamesArr: string[] = [];
     const rawBServices = b.booking_services || [];
-    // Ordenar cronológicamente según created_at
-    const bServices = [...rawBServices].sort((a, bItem) => {
-      if (a.created_at && bItem.created_at) {
-        const diff = new Date(a.created_at).getTime() - new Date(bItem.created_at).getTime();
-        if (diff !== 0) return diff;
-      }
-      return 0;
-    });
+    const scheduleResult = calculateParallelServiceSchedule(
+      b.start_time,
+      rawBServices,
+      b.assigned_employee_id
+    );
 
-    const isMultiService = bServices.length >= 2;
-    const baseStartMin = parseTimeToMinutes(b.start_time);
-    let currentMin = baseStartMin;
+    const isMultiService = rawBServices.length >= 2;
 
-    const totalBookingServicesPrice = bServices.reduce(
+    const totalBookingServicesPrice = rawBServices.reduce(
       (sum, s) => sum + (s.service_price_cents || 0),
       0
     ) || b.total_price_cents || 1;
 
     const distinctAssignedWorkerNames: string[] = [];
 
-    if (bServices.length > 0) {
-      bServices.forEach((bs) => {
+    if (scheduleResult.scheduledServices.length > 0) {
+      scheduleResult.scheduledServices.forEach((sched) => {
+        const bs = sched.item;
         const sName = bs.service_name || bs.services?.name || "Servicio";
         const sType = bs.services?.type || b.service_type || "barberia";
         const sPrice = bs.service_price_cents !== undefined && bs.service_price_cents !== null
@@ -574,20 +571,11 @@ export async function buildFullReportData(
           : (b.total_price_cents || 0);
         serviceNamesArr.push(sName);
 
-        // Cronograma secuencial exacto por servicio
-        const duration = Math.max(1, Number(bs.duration_minutes) || 30);
-        const svcStartMin = currentMin;
-        const svcEndMin = svcStartMin + duration;
-        const startTimeStr = formatMinutesToTime(svcStartMin);
-        const endTimeStr = formatMinutesToTime(svcEndMin);
-        currentMin = svcEndMin;
-
-        // Asignación de especialista:
-        // En citas múltiples (>=2), no hereda el empleado de la cabecera general.
-        // Si no tiene asignado en el servicio, queda como 'Sin asignar'.
-        const workerId = isMultiService
-          ? (bs.assigned_employee_id || null)
-          : (bs.assigned_employee_id || b.assigned_employee_id || null);
+        // Cronograma paralelo/secuencial calculado
+        const duration = sched.durationMinutes;
+        const startTimeStr = sched.startTimeStr;
+        const endTimeStr = sched.endTimeStr;
+        const workerId = sched.workerId;
 
         let workerName = "Sin asignar";
         let workerPos = "Especialista";
@@ -679,7 +667,7 @@ export async function buildFullReportData(
           }
 
           if (isConfirmedOrCompleted && validIncomeCents > 0) {
-            const svcShare = totalBookingServicesPrice > 0 ? (sPrice / totalBookingServicesPrice) : (1 / bServices.length);
+            const svcShare = totalBookingServicesPrice > 0 ? (sPrice / totalBookingServicesPrice) : (1 / rawBServices.length);
             const proportionalIncome = Math.round(validIncomeCents * svcShare);
             employeesMap[workerId].total_revenue_collected_cents += proportionalIncome;
           }
@@ -789,7 +777,7 @@ export async function buildFullReportData(
       client_phone: b.client_phone,
       booking_date: b.booking_date,
       start_time: b.start_time,
-      end_time: b.end_time,
+      end_time: rawBServices.length > 0 ? scheduleResult.endTimeStr : b.end_time,
       employee_id: b.assigned_employee_id,
       employee_name: bookingEmployeeName,
       service_names: serviceNamesArr.join(", ") || "General",

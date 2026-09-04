@@ -1,9 +1,10 @@
 import assert from "node:assert";
 import { parseTimeToMinutes, formatMinutesToTime } from "../../src/lib/services/report-service";
+import { calculateParallelServiceSchedule } from "../../src/lib/utils/booking-schedule";
 import { generatePdfReport } from "../../src/lib/utils/pdf-generator";
 import type { FullReportData, CompletedServiceAuditItem, EmployeePerformanceItem } from "../../src/lib/types/reports";
 
-console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y Desvinculación Horaria por Servicio...");
+console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y Programación en Paralelo...");
 
 // -----------------------------------------------------------------------------
 // 1. Prueba de funciones helper de tiempo
@@ -21,7 +22,7 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
 }
 
 // -----------------------------------------------------------------------------
-// 2. Simulación de procesamiento de reserva múltiple (Desvinculación y Especialistas)
+// 2. Simulación de procesamiento de reserva múltiple (Paralelismo y Especialistas)
 // -----------------------------------------------------------------------------
 {
   interface MockBookingService {
@@ -63,8 +64,8 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
     ["emp-header", { id: "emp-header", first_name: "Cabecera", last_name: "General", type: "barberia" }],
   ]);
 
-  // Reserva de 3 servicios (45m + 60m + 30m = 135m total)
-  // Horario global de la reserva: 15:15:00 a 19:14:00 (rango extendido que NO debe arrastrarse a servicios)
+  // Reserva de 3 servicios (Corte 45m, Limpieza 60m, Perfilado 30m)
+  // Con Carlos (Barbería) y Yholi (Spa) en simultáneo a las 15:15:00
   const bookingMulti: MockBooking = {
     id: "booking-multi-1",
     booking_code: "BK-MULTI-01",
@@ -73,7 +74,7 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
     client_phone: "987654321",
     booking_date: "2026-09-04",
     start_time: "15:15:00",
-    end_time: "19:14:00",
+    end_time: "16:15:00",
     status: "completada",
     payment_status: "total",
     service_type: "mixto",
@@ -134,41 +135,28 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
       const isConfirmedOrCompleted = b.status === "confirmada" || b.status === "completada";
 
       const rawBServices = b.booking_services || [];
-      const bServices = [...rawBServices].sort((a, bItem) => {
-        if (a.created_at && bItem.created_at) {
-          const diff = new Date(a.created_at).getTime() - new Date(bItem.created_at).getTime();
-          if (diff !== 0) return diff;
-        }
-        return 0;
-      });
+      const scheduleResult = calculateParallelServiceSchedule(
+        b.start_time,
+        rawBServices,
+        b.assigned_employee_id
+      );
 
-      const isMultiService = bServices.length >= 2;
-      const baseStartMin = parseTimeToMinutes(b.start_time);
-      let currentMin = baseStartMin;
-
-      const totalBookingServicesPrice = bServices.reduce(
+      const totalBookingServicesPrice = rawBServices.reduce(
         (sum, s) => sum + (s.service_price_cents || 0),
         0
       ) || b.total_price_cents || 1;
 
-      bServices.forEach((bs) => {
+      scheduleResult.scheduledServices.forEach((sched) => {
+        const bs = sched.item;
         const sName = bs.service_name;
         const sType = bs.services.type;
         const sPrice = bs.service_price_cents;
 
-        // Cronograma secuencial exacto por servicio
-        const duration = Math.max(1, Number(bs.duration_minutes) || 30);
-        const svcStartMin = currentMin;
-        const svcEndMin = svcStartMin + duration;
-        const startTimeStr = formatMinutesToTime(svcStartMin);
-        const endTimeStr = formatMinutesToTime(svcEndMin);
-        currentMin = svcEndMin;
-
-        // Asignación de especialista independiente:
-        // En reservas múltiples (>=2), NO hereda el empleado general de cabecera.
-        const workerId = isMultiService
-          ? (bs.assigned_employee_id || null)
-          : (bs.assigned_employee_id || b.assigned_employee_id || null);
+        // Cronograma paralelo/secuencial calculado
+        const duration = sched.durationMinutes;
+        const startTimeStr = sched.startTimeStr;
+        const endTimeStr = sched.endTimeStr;
+        const workerId = sched.workerId;
 
         let workerName = "Sin asignar";
         let workerPos = "Especialista";
@@ -258,19 +246,19 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
   assert.strictEqual(svc1.duration_minutes, 45, "Duración exacta = 45 min");
   assert.strictEqual(svc1.employee_name, "Carlos García", "Especialista asignado = Carlos García");
 
-  // Verificación Servicio 2 (Limpieza Facial)
+  // Verificación Servicio 2 (Limpieza Facial - En paralelo con Carlos)
   const svc2 = auditList[1];
   assert.strictEqual(svc2.service_name, "Limpieza Facial");
-  assert.strictEqual(svc2.start_time, "16:00:00", "Servicio 2 inicia a las 16:00 (no a las 15:15)");
-  assert.strictEqual(svc2.end_time, "17:00:00", "Servicio 2 finaliza a las 17:00 (60m)");
+  assert.strictEqual(svc2.start_time, "15:15:00", "Servicio 2 atiende en paralelo e inicia a las 15:15");
+  assert.strictEqual(svc2.end_time, "16:15:00", "Servicio 2 finaliza a las 16:15 (60m)");
   assert.strictEqual(svc2.duration_minutes, 60, "Duración exacta = 60 min");
   assert.strictEqual(svc2.employee_name, "Yholi Flores", "Especialista asignado = Yholi Flores");
 
   // Verificación Servicio 3 (Perfilado de Cejas - Sin Asignar)
   const svc3 = auditList[2];
   assert.strictEqual(svc3.service_name, "Perfilado de Cejas");
-  assert.strictEqual(svc3.start_time, "17:00:00", "Servicio 3 inicia a las 17:00");
-  assert.strictEqual(svc3.end_time, "17:30:00", "Servicio 3 finaliza a las 17:30 (30m)");
+  assert.strictEqual(svc3.start_time, "15:15:00", "Servicio 3 sin asignar inicia a las 15:15");
+  assert.strictEqual(svc3.end_time, "15:45:00", "Servicio 3 finaliza a las 15:45 (30m)");
   assert.strictEqual(svc3.duration_minutes, 30, "Duración exacta = 30 min");
   assert.strictEqual(
     svc3.employee_name,
@@ -278,19 +266,19 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
     "Servicio 3 NO hereda el empleado de cabecera general (emp-header)"
   );
 
-  console.log("  ✅ Desglose de servicios de auditoría (horarios y especialistas independientes): PASS");
+  console.log("  ✅ Desglose de servicios de auditoría (horarios paralelos y especialistas independientes): PASS");
 
   // Verificación Desglose de Empleados (employees_breakdown)
   const empCarlos = resultAll.employeesMap["emp-carlos"];
   assert(empCarlos, "Carlos debe existir en el desglose");
-  assert.strictEqual(empCarlos.total_duration_minutes, 45, "Carlos trabajó estrictamente 45 minutos (no 239 min de la cita)");
+  assert.strictEqual(empCarlos.total_duration_minutes, 45, "Carlos trabajó estrictamente 45 minutos");
   assert.strictEqual(empCarlos.total_revenue_collected_cents, 4000, "Carlos generó S/ 40.00 proporcionalmente");
   assert.strictEqual(empCarlos.bookings_count, 1);
   assert.strictEqual(empCarlos.completed_count, 1);
 
   const empYholi = resultAll.employeesMap["emp-yholi"];
   assert(empYholi, "Yholi debe existir en el desglose");
-  assert.strictEqual(empYholi.total_duration_minutes, 60, "Yholi trabajó estrictamente 60 minutos (no 239 min)");
+  assert.strictEqual(empYholi.total_duration_minutes, 60, "Yholi trabajó estrictamente 60 minutos");
   assert.strictEqual(empYholi.total_revenue_collected_cents, 6000, "Yholi generó S/ 60.00 proporcionalmente");
   assert.strictEqual(empYholi.bookings_count, 1);
   assert.strictEqual(empYholi.completed_count, 1);
@@ -316,7 +304,7 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
 }
 
 // -----------------------------------------------------------------------------
-// 4. Prueba del generador de PDF con cronograma y horas netas
+// 4. Prueba del generador de PDF con cronograma paralelo y horas netas
 // -----------------------------------------------------------------------------
 {
   const mockReportData: FullReportData = {
@@ -358,7 +346,7 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
         client_phone: "987654321",
         booking_date: "2026-09-04",
         start_time: "15:15:00",
-        end_time: "17:30:00",
+        end_time: "16:15:00",
         employee_id: null,
         employee_name: "Carlos García, Yholi Flores",
         service_names: "Corte Fade, Limpieza Facial",
@@ -429,10 +417,10 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
         service_type: "spa",
         price_cents: 6000,
         employee_name: "Yholi Flores",
-        date_exact: "2026-09-04 16:00",
+        date_exact: "2026-09-04 15:15",
         booking_date: "2026-09-04",
-        start_time: "16:00:00",
-        end_time: "17:00:00",
+        start_time: "15:15:00",
+        end_time: "16:15:00",
         duration_minutes: 60,
         payment_method: "yape",
         payment_status: "total",
@@ -444,7 +432,7 @@ console.log("🧪 Iniciando pruebas de Asignación Independiente de Personal y D
   const pdfBytes = generatePdfReport(mockReportData);
   assert(pdfBytes instanceof Uint8Array, "Debe generar un Uint8Array válido");
   assert(pdfBytes.length > 1000, "El PDF debe tener un tamaño sustancial mayor a 1KB");
-  console.log(`  ✅ Generación de PDF con columnas de horario secuencial y tiempo neto (${pdfBytes.length} bytes): PASS`);
+  console.log(`  ✅ Generación de PDF con columnas de horario paralelo y tiempo neto (${pdfBytes.length} bytes): PASS`);
 }
 
-console.log("\n🎉 ¡Todas las pruebas de asignación independiente y desvinculación horaria pasaron exitosamente!");
+console.log("\n🎉 ¡Todas las pruebas de asignación independiente y programación en paralelo pasaron exitosamente!");

@@ -1,6 +1,7 @@
 import assert from "node:assert";
+import { calculateParallelServiceSchedule } from "../../src/lib/utils/booking-schedule";
 
-// Copia exacta de las utilidades implementadas en EmployeesManager
+// Copia de las utilidades de tiempo y renderizado de tarjetas en EmployeesManager
 function parseTimeToMinutes(timeStr?: string | null): number {
   if (!timeStr) return 0;
   const parts = timeStr.split(":");
@@ -45,7 +46,7 @@ function computeWorkerCards(b: TestBooking) {
   });
 
   const baseStartMin = parseTimeToMinutes(b.start_time);
-  let currentMin = baseStartMin;
+  const workerLastEndMinutes = new Map<string, number>();
 
   const scheduledServices: Array<{
     service: TestService & { start_time: string; end_time: string };
@@ -56,13 +57,17 @@ function computeWorkerCards(b: TestBooking) {
     endTimeStr: string;
   }> = [];
 
-  for (const svc of sortedServices) {
+  for (const [idx, svc] of sortedServices.entries()) {
     const duration = Math.max(1, Number(svc.duration_minutes) || 30);
-    const svcStartMin = currentMin;
+    const wId = svc.assigned_employee_id;
+    const workerKey = wId || `unassigned_${svc.id || idx}`;
+
+    const svcStartMin = workerLastEndMinutes.get(workerKey) ?? baseStartMin;
     const svcEndMin = svcStartMin + duration;
+    workerLastEndMinutes.set(workerKey, svcEndMin);
+
     const startTimeStr = formatMinutesToTime(svcStartMin);
     const endTimeStr = formatMinutesToTime(svcEndMin);
-    const wId = svc.assigned_employee_id;
 
     scheduledServices.push({
       service: {
@@ -76,8 +81,6 @@ function computeWorkerCards(b: TestBooking) {
       startTimeStr,
       endTimeStr,
     });
-
-    currentMin = svcEndMin;
   }
 
   const groups = new Map<string | null, typeof scheduledServices>();
@@ -116,7 +119,7 @@ function computeWorkerCards(b: TestBooking) {
   return cards;
 }
 
-console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por trabajador...");
+console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas en paralelo por trabajador...");
 
 // Caso 1: Cita real 'f2ef9e03' (Tinte 120m con Janet + Manicure 59m con Malu)
 {
@@ -124,7 +127,7 @@ console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por tra
     id: "booking-1",
     booking_code: "f2ef9e03",
     start_time: "17:00:00",
-    end_time: "19:59:00",
+    end_time: "19:00:00",
     assigned_employee_id: "emp-janet",
     booking_services: [
       {
@@ -146,6 +149,7 @@ console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por tra
     ],
   };
 
+  // 1. Tarjetas en módulo Empleados
   const cards = computeWorkerCards(b);
   assert.strictEqual(cards.length, 2, "Deben generarse 2 tarjetas separadas");
 
@@ -155,11 +159,20 @@ console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por tra
   assert.strictEqual(janetCard.totalDurationMinutes, 120, "Duración de Janet = 120 min");
 
   const maluCard = cards.find((c) => c.workerId === "emp-malu")!;
-  assert.strictEqual(maluCard.startTime, "19:00", "Malu inicia a las 19:00 (no arrastra 17:00)");
-  assert.strictEqual(maluCard.endTime, "19:59", "Malu finaliza a las 19:59");
+  assert.strictEqual(maluCard.startTime, "17:00", "Malu atiende en paralelo e inicia a las 17:00");
+  assert.strictEqual(maluCard.endTime, "17:59", "Malu finaliza a las 17:59 y queda libre");
   assert.strictEqual(maluCard.totalDurationMinutes, 59, "Duración de Malu = 59 min");
 
-  console.log("  ✅ Caso 1 (f2ef9e03): Janet 17:00-19:00 (120m) & Malu 19:00-19:59 (59m) PASS");
+  // 2. Cronograma de servicios paralelo y duración de cita padre
+  const scheduleResult = calculateParallelServiceSchedule(b.start_time, b.booking_services, b.assigned_employee_id);
+  assert.strictEqual(scheduleResult.scheduledServices[0].startTimeStr, "17:00:00");
+  assert.strictEqual(scheduleResult.scheduledServices[0].endTimeStr, "19:00:00");
+  assert.strictEqual(scheduleResult.scheduledServices[1].startTimeStr, "17:00:00");
+  assert.strictEqual(scheduleResult.scheduledServices[1].endTimeStr, "17:59:00");
+  assert.strictEqual(scheduleResult.endTimeStr, "19:00:00", "La cita padre finaliza cuando termina el último servicio (19:00)");
+  assert.strictEqual(scheduleResult.totalDurationMinutes, 120, "Duración de la cita padre es 120m (no la suma de 179m)");
+
+  console.log("  ✅ Caso 1 (f2ef9e03): Janet 17:00-19:00 (120m) & Malu 17:00-17:59 (59m), Cita Padre 120m PASS");
 }
 
 // Caso 2: Cita real '8ee0e3b3' (Rizado 45m con Yholi + Corte Fade 60m con Aaron)
@@ -168,7 +181,7 @@ console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por tra
     id: "booking-2",
     booking_code: "8ee0e3b3",
     start_time: "14:15:00",
-    end_time: "16:00:00",
+    end_time: "15:15:00",
     assigned_employee_id: "emp-yholi",
     booking_services: [
       {
@@ -199,20 +212,25 @@ console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por tra
   assert.strictEqual(yholiCard.totalDurationMinutes, 45);
 
   const aaronCard = cards.find((c) => c.workerId === "emp-aaron")!;
-  assert.strictEqual(aaronCard.startTime, "15:00", "Aaron inicia a las 15:00 (no a las 14:15)");
-  assert.strictEqual(aaronCard.endTime, "16:00", "Aaron finaliza a las 16:00");
+  assert.strictEqual(aaronCard.startTime, "14:15", "Aaron inicia simultáneamente a las 14:15");
+  assert.strictEqual(aaronCard.endTime, "15:15", "Aaron finaliza a las 15:15");
   assert.strictEqual(aaronCard.totalDurationMinutes, 60);
 
-  console.log("  ✅ Caso 2 (8ee0e3b3): Yholi 14:15-15:00 (45m) & Aaron 15:00-16:00 (60m) PASS");
+  const scheduleResult = calculateParallelServiceSchedule(b.start_time, b.booking_services, b.assigned_employee_id);
+  assert.strictEqual(scheduleResult.startTimeStr, "14:15:00");
+  assert.strictEqual(scheduleResult.endTimeStr, "15:15:00");
+  assert.strictEqual(scheduleResult.totalDurationMinutes, 60, "Duración de cita padre = 60m (no 105m)");
+
+  console.log("  ✅ Caso 2 (8ee0e3b3): Yholi 14:15-15:00 (45m) & Aaron 14:15-15:15 (60m), Cita Padre 60m PASS");
 }
 
-// Caso 3: Servicios alternados (A -> B -> A)
+// Caso 3: Servicios alternados (A -> B -> A), especialista A con 2 servicios y especialista B con 1 servicio
 {
   const b: TestBooking = {
     id: "booking-3",
     booking_code: "interleaved-1",
     start_time: "10:00:00",
-    end_time: "11:45:00",
+    end_time: "11:00:00",
     assigned_employee_id: "emp-A",
     booking_services: [
       {
@@ -247,14 +265,24 @@ console.log("🧪 Iniciando pruebas de cálculo dinámico de cronogramas por tra
   const cardB = cards.find((c) => c.workerId === "emp-B")!;
 
   assert.strictEqual(cardA.startTime, "10:00");
-  assert.strictEqual(cardA.endTime, "11:45");
+  assert.strictEqual(cardA.endTime, "11:00", "Especialista A encadena sus 2 servicios (30m + 30m = 60m)");
   assert.strictEqual(cardA.totalDurationMinutes, 60);
 
-  assert.strictEqual(cardB.startTime, "10:30");
-  assert.strictEqual(cardB.endTime, "11:15");
+  assert.strictEqual(cardB.startTime, "10:00", "Especialista B atiende en paralelo desde las 10:00");
+  assert.strictEqual(cardB.endTime, "10:45", "Especialista B finaliza a las 10:45");
   assert.strictEqual(cardB.totalDurationMinutes, 45);
 
-  console.log("  ✅ Caso 3 (Intercalado): A (10:00-11:45, 60m dedicados) & B (10:30-11:15, 45m) PASS");
+  const scheduleResult = calculateParallelServiceSchedule(b.start_time, b.booking_services, b.assigned_employee_id);
+  assert.strictEqual(scheduleResult.scheduledServices[0].startTimeStr, "10:00:00");
+  assert.strictEqual(scheduleResult.scheduledServices[0].endTimeStr, "10:30:00");
+  assert.strictEqual(scheduleResult.scheduledServices[1].startTimeStr, "10:00:00", "B1 inicia en paralelo a las 10:00");
+  assert.strictEqual(scheduleResult.scheduledServices[1].endTimeStr, "10:45:00");
+  assert.strictEqual(scheduleResult.scheduledServices[2].startTimeStr, "10:30:00", "A2 se encadena para A tras A1 a las 10:30");
+  assert.strictEqual(scheduleResult.scheduledServices[2].endTimeStr, "11:00:00");
+  assert.strictEqual(scheduleResult.endTimeStr, "11:00:00");
+  assert.strictEqual(scheduleResult.totalDurationMinutes, 60);
+
+  console.log("  ✅ Caso 3 (Mismo especialista secuencial & distinto en paralelo): A (10:00-11:00) & B (10:00-10:45) PASS");
 }
 
-console.log("\n🎉 ¡Todos los tests pasaron exitosamente!");
+console.log("\n🎉 ¡Todos los tests de cronogramas paralelos pasaron exitosamente!");

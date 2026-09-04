@@ -310,41 +310,37 @@ export async function assignMultiServiceEmployees(params: {
     }
   }
 
-  // 5. Asignar secuencialmente cada servicio en la cita
+  // 5. Asignar servicios en la cita respetando paralelismo entre especialistas distintos
   const timeParts = startTime.split(":");
   const baseStartH = parseInt(timeParts[0], 10) || 0;
   const baseStartM = parseInt(timeParts[1], 10) || 0;
-  let currentMinutes = baseStartH * 60 + baseStartM;
+  const baseStartMinutes = baseStartH * 60 + baseStartM;
 
   const assignedItems: AssignedServiceItem[] = [];
   const conflictMessages: string[] = [];
+  const workerLastEndMinutes = new Map<string, number>();
 
-  const totalBookingDuration = services.reduce((acc, s) => acc + (s.duration_minutes || 30), 0);
   const formattedBookingStartTime = `${String(baseStartH).padStart(2, "0")}:${String(baseStartM).padStart(2, "0")}:00`;
-  const endH = Math.floor((baseStartH * 60 + baseStartM + totalBookingDuration) / 60);
-  const endM = (baseStartH * 60 + baseStartM + totalBookingDuration) % 60;
-  const formattedBookingEndTime = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}:00`;
+
+  const getSlotForWorker = (wId: string | null, duration: number) => {
+    const sMin = wId ? (workerLastEndMinutes.get(wId) ?? baseStartMinutes) : baseStartMinutes;
+    const eMin = sMin + duration;
+    const sH = Math.floor(sMin / 60);
+    const sM = sMin % 60;
+    const eH = Math.floor(eMin / 60);
+    const eM = eMin % 60;
+    return {
+      startMin: sMin,
+      endMin: eMin,
+      startFormatted: `${String(sH).padStart(2, "0")}:${String(sM).padStart(2, "0")}:00`,
+      endFormatted: `${String(eH).padStart(2, "0")}:${String(eM).padStart(2, "0")}:00`,
+    };
+  };
 
   for (const svc of services) {
     const duration = svc.duration_minutes || 30;
-    const slotStartMin = currentMinutes;
-    const slotEndMin = slotStartMin + duration;
 
-    const sH = Math.floor(slotStartMin / 60);
-    const sM = slotStartMin % 60;
-    const eH = Math.floor(slotEndMin / 60);
-    const eM = slotEndMin % 60;
-
-    const slotStartFormatted = `${String(sH).padStart(2, "0")}:${String(sM).padStart(2, "0")}:00`;
-    const slotEndFormatted = `${String(eH).padStart(2, "0")}:${String(eM).padStart(2, "0")}:00`;
-
-    // Comprobar si hay una asignación manual para este servicio o global
-    const requestedEmpId = manualAssignments?.[svc.id] || globalEmployeeId || null;
-    let chosenEmpId: string | null = null;
-    let chosenEmpName = "Sin Asignar";
-    let chosenEmpType = svc.type;
-
-    const isEmpFree = (empId: string) => {
+    const isEmpFree = (empId: string, slotStartFormatted: string, slotEndFormatted: string) => {
       // Verificar si tiene falta registrada
       if (absentTodayIds.has(empId)) return false;
 
@@ -364,27 +360,37 @@ export async function assignMultiServiceEmployees(params: {
       return true;
     };
 
+    // Comprobar si hay una asignación manual para este servicio o global
+    const requestedEmpId = manualAssignments?.[svc.id] || globalEmployeeId || null;
+    let chosenEmpId: string | null = null;
+    let chosenEmpName = "Sin Asignar";
+    let chosenEmpType = svc.type;
+    let finalSlot = getSlotForWorker(requestedEmpId, duration);
+
     if (requestedEmpId) {
       const manualEmp = employeeMap.get(requestedEmpId);
-      if (manualEmp && isEmpFree(requestedEmpId)) {
+      const manualSlot = getSlotForWorker(requestedEmpId, duration);
+      if (manualEmp && isEmpFree(requestedEmpId, manualSlot.startFormatted, manualSlot.endFormatted)) {
         chosenEmpId = requestedEmpId;
         chosenEmpName = `${manualEmp.first_name} ${manualEmp.last_name}`.trim();
         chosenEmpType = manualEmp.type;
+        finalSlot = manualSlot;
       } else {
         const empLabel = manualEmp ? `${manualEmp.first_name} ${manualEmp.last_name}` : "Colaborador";
         conflictMessages.push(
-          `${empLabel} no se encuentra disponible para el servicio "${svc.name}" (${slotStartFormatted.slice(0, 5)} - ${slotEndFormatted.slice(0, 5)}) por cruce de horario o ausencia.`
+          `${empLabel} no se encuentra disponible para el servicio "${svc.name}" (${manualSlot.startFormatted.slice(0, 5)} - ${manualSlot.endFormatted.slice(0, 5)}) por cruce de horario o ausencia.`
         );
       }
     }
 
     // Si no hubo asignación manual o no estaba disponible, asignar automáticamente
     if (!chosenEmpId) {
-      // Filtrar candidatos por especialidad
+      // Filtrar candidatos por especialidad y disponibilidad en su respectivo horario
       const candidates = activeEmployees.filter((e) => {
         if (svc.type === "barberia" && e.type !== "barberia" && e.type !== "ambos") return false;
         if (svc.type === "spa" && e.type !== "spa" && e.type !== "ambos") return false;
-        return isEmpFree(e.id);
+        const candidateSlot = getSlotForWorker(e.id, duration);
+        return isEmpFree(e.id, candidateSlot.startFormatted, candidateSlot.endFormatted);
       });
 
       if (candidates.length > 0) {
@@ -400,17 +406,21 @@ export async function assignMultiServiceEmployees(params: {
         chosenEmpId = best.id;
         chosenEmpName = `${best.first_name} ${best.last_name}`.trim();
         chosenEmpType = best.type;
+        finalSlot = getSlotForWorker(best.id, duration);
+      } else {
+        finalSlot = getSlotForWorker(null, duration);
       }
     }
 
-    // Si se asignó un empleado, registrar su franja ocupada e incrementar su carga diaria
+    // Si se asignó un empleado, registrar su franja ocupada e incrementar su carga diaria y cronograma
     if (chosenEmpId) {
       const slots = employeeBusySlots.get(chosenEmpId) || [];
-      slots.push({ start: slotStartFormatted, end: slotEndFormatted });
+      slots.push({ start: finalSlot.startFormatted, end: finalSlot.endFormatted });
       employeeBusySlots.set(chosenEmpId, slots);
 
       const currentLoad = dailyWorkload.get(chosenEmpId) || 0;
       dailyWorkload.set(chosenEmpId, currentLoad + 1);
+      workerLastEndMinutes.set(chosenEmpId, finalSlot.endMin);
     }
 
     assignedItems.push({
@@ -419,18 +429,25 @@ export async function assignMultiServiceEmployees(params: {
       service_price_cents: svc.price_cents,
       duration_minutes: duration,
       service_type: svc.type,
-      start_time: slotStartFormatted,
-      end_time: slotEndFormatted,
+      start_time: finalSlot.startFormatted,
+      end_time: finalSlot.endFormatted,
       assigned_employee_id: chosenEmpId,
       employee_name: chosenEmpName,
       employee_type: chosenEmpType,
     });
-
-    currentMinutes = slotEndMin;
   }
 
   const primaryEmployeeId =
     assignedItems.find((i) => i.assigned_employee_id)?.assigned_employee_id || globalEmployeeId || null;
+
+  const maxEndMinutes = Math.max(
+    ...assignedItems.map((i) => timeToMinutes(i.end_time)),
+    baseStartMinutes + 30
+  );
+  const totalBookingDuration = Math.max(1, maxEndMinutes - baseStartMinutes);
+  const endH = Math.floor(maxEndMinutes / 60);
+  const endM = maxEndMinutes % 60;
+  const formattedBookingEndTime = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}:00`;
 
   return {
     items: assignedItems,

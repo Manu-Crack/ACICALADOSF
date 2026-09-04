@@ -600,9 +600,9 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
           return 0;
         });
 
-        // 2. Secuenciar cronológicamente los servicios iniciando en la hora de inicio de la cita
+        // 2. Programar cronograma respetando paralelismo entre especialistas y secuencialidad para el mismo especialista
         const baseStartMin = parseTimeToMinutes(b.start_time);
-        let currentMin = baseStartMin;
+        const workerLastEndMinutes = new Map<string, number>();
 
         const scheduledServices: Array<{
           service: BookingServiceItem;
@@ -613,13 +613,17 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
           endTimeStr: string;
         }> = [];
 
-        for (const svc of sortedServices) {
+        for (const [idx, svc] of sortedServices.entries()) {
           const duration = Math.max(1, Number(svc.duration_minutes) || 30);
-          const svcStartMin = currentMin;
+          const wId = getServiceWorkerId(svc, b);
+          const workerKey = wId || `unassigned_${svc.id || svc.service_id || idx}`;
+
+          const svcStartMin = workerLastEndMinutes.get(workerKey) ?? baseStartMin;
           const svcEndMin = svcStartMin + duration;
+          workerLastEndMinutes.set(workerKey, svcEndMin);
+
           const startTimeStr = formatMinutesToTime(svcStartMin);
           const endTimeStr = formatMinutesToTime(svcEndMin);
-          const wId = getServiceWorkerId(svc, b);
 
           scheduledServices.push({
             service: {
@@ -633,8 +637,6 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             startTimeStr,
             endTimeStr,
           });
-
-          currentMin = svcEndMin;
         }
 
         // 3. Agrupar los servicios secuenciados por cada trabajador asignado
