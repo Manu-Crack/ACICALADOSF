@@ -28,10 +28,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     }
 
+    const isRecepcionista = profile.role === "recepcionista";
+    let todayPeru: string;
+    try {
+      todayPeru = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
+    } catch {
+      todayPeru = new Date().toISOString().split("T")[0];
+    }
+
     const { searchParams } = new URL(request.url);
     const filters: ReportFilterParams = {
-      startDate: searchParams.get("startDate") || undefined,
-      endDate: searchParams.get("endDate") || undefined,
+      startDate: isRecepcionista ? todayPeru : (searchParams.get("startDate") || undefined),
+      endDate: isRecepcionista ? todayPeru : (searchParams.get("endDate") || undefined),
       bookingStatus: searchParams.get("bookingStatus") || undefined,
       paymentStatus: searchParams.get("paymentStatus") || undefined,
       employeeId: searchParams.get("employeeId") || undefined,

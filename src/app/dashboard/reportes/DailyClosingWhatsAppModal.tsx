@@ -6,6 +6,7 @@ interface DailyClosingModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate?: string;
+  userRole?: string;
 }
 
 interface ClosingItem {
@@ -32,14 +33,22 @@ export function DailyClosingWhatsAppModal({
   isOpen,
   onClose,
   initialDate,
+  userRole,
 }: DailyClosingModalProps) {
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    if (initialDate) return initialDate;
+  const isRecepcionista = userRole === "recepcionista";
+
+  const getTodayPeruStr = useCallback(() => {
     try {
       return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
     } catch {
       return new Date().toISOString().split("T")[0];
     }
+  }, []);
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    if (isRecepcionista) return getTodayPeruStr();
+    if (initialDate) return initialDate;
+    return getTodayPeruStr();
   });
 
   const [loading, setLoading] = useState(false);
@@ -50,17 +59,20 @@ export function DailyClosingWhatsAppModal({
 
   // Sincronizar fecha inicial
   useEffect(() => {
-    if (initialDate) {
+    if (isRecepcionista) {
+      setSelectedDate(getTodayPeruStr());
+    } else if (initialDate) {
       setSelectedDate(initialDate);
     }
-  }, [initialDate]);
+  }, [initialDate, isRecepcionista, getTodayPeruStr]);
 
   // Cargar datos del reporte de cierre diario
   const loadDailyClosing = useCallback(async (date: string) => {
+    const effectiveDate = isRecepcionista ? getTodayPeruStr() : date;
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`/api/admin/reports/daily-closing?date=${date}`);
+      const res = await fetch(`/api/admin/reports/daily-closing?date=${effectiveDate}`);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Error al obtener reporte diario");
@@ -73,7 +85,7 @@ export function DailyClosingWhatsAppModal({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isRecepcionista, getTodayPeruStr]);
 
   useEffect(() => {
     if (isOpen) {
@@ -198,47 +210,100 @@ export function DailyClosingWhatsAppModal({
               border: "1px solid var(--color-border, rgba(255,255,255,0.08))",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-muted)" }}>
-                Fecha del Cierre:
-              </label>
-              <input
-                type="date"
-                className="input"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                style={{ fontSize: "0.85rem", padding: "4px 10px", width: "auto" }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  try {
-                    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
-                    setSelectedDate(todayStr);
-                  } catch {
-                    setSelectedDate(new Date().toISOString().split("T")[0]);
-                  }
+            {isRecepcionista ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  flexWrap: "wrap",
+                  gap: 10,
                 }}
-                style={{ fontSize: "0.75rem", padding: "4px 10px" }}
               >
-                📅 Hoy
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  const yesterday = new Date();
-                  yesterday.setDate(yesterday.getDate() - 1);
-                  setSelectedDate(yesterday.toISOString().split("T")[0]);
-                }}
-                style={{ fontSize: "0.75rem", padding: "4px 10px" }}
-              >
-                ⏪ Ayer
-              </button>
-            </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-muted)" }}>
+                    Fecha del Cierre:
+                  </label>
+                  <span
+                    style={{
+                      fontSize: "0.85rem",
+                      fontWeight: 800,
+                      color: "#22c55e",
+                      background: "rgba(34, 197, 94, 0.12)",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-sm, 6px)",
+                      border: "1px solid rgba(34, 197, 94, 0.25)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: "#22c55e",
+                        display: "inline-block",
+                      }}
+                    />
+                    Hoy ({selectedDate})
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: "0.72rem",
+                    color: "var(--color-text-muted)",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: "var(--radius-sm, 6px)",
+                    padding: "3px 8px",
+                  }}
+                >
+                  🔒 Jornada activa exclusiva
+                </span>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-muted)" }}>
+                    Fecha del Cierre:
+                  </label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    style={{ fontSize: "0.85rem", padding: "4px 10px", width: "auto" }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setSelectedDate(getTodayPeruStr());
+                    }}
+                    style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                  >
+                    📅 Hoy
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      const yesterday = new Date();
+                      yesterday.setDate(yesterday.getDate() - 1);
+                      setSelectedDate(yesterday.toISOString().split("T")[0]);
+                    }}
+                    style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                  >
+                    ⏪ Ayer
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {errorMsg && (

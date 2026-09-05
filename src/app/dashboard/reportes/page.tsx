@@ -30,7 +30,7 @@ export default async function ReportesPage() {
 
   return (
     <div style={{ maxWidth: 1240, margin: "0 auto", paddingBottom: 60, width: "100%" }}>
-      <ReportsManager />
+      <ReportsManager userRole={profile.role} />
     </div>
   );
 }

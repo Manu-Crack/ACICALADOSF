@@ -29,9 +29,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     }
 
+    const isRecepcionista = profile.role === "recepcionista";
+    let todayPeru: string;
+    try {
+      todayPeru = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
+    } catch {
+      todayPeru = new Date().toISOString().split("T")[0];
+    }
+
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get("startDate") || undefined;
-    const endDate = searchParams.get("endDate") || undefined;
+    const startDate = isRecepcionista ? todayPeru : (searchParams.get("startDate") || undefined);
+    const endDate = isRecepcionista ? todayPeru : (searchParams.get("endDate") || undefined);
 
     const filters: ReportFilterParams = {
       startDate,

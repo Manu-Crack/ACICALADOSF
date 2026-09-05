@@ -55,16 +55,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     }
 
+    const isRecepcionista = profile.role === "recepcionista";
+    let todayPeru: string;
+    try {
+      todayPeru = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Lima",
+      }).format(new Date());
+    } catch {
+      todayPeru = new Date().toISOString().split("T")[0];
+    }
+
     const { searchParams } = new URL(request.url);
     let targetDate = searchParams.get("date");
-    if (!targetDate) {
-      try {
-        targetDate = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/Lima",
-        }).format(new Date());
-      } catch {
-        targetDate = new Date().toISOString().split("T")[0];
-      }
+    if (isRecepcionista || !targetDate) {
+      targetDate = todayPeru;
     }
 
     const admin = createAdminClient();

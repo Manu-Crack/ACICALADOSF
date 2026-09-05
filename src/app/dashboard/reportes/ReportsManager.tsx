@@ -37,7 +37,13 @@ function formatDurationMinutes(totalMinutes?: number | null): string {
   return `${hours}h ${minutes}m`;
 }
 
-export function ReportsManager() {
+interface ReportsManagerProps {
+  userRole?: string;
+}
+
+export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
+  const isRecepcionista = userRole === "recepcionista";
+
   // Modal de Cierre de Caja WhatsApp
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
 
@@ -45,22 +51,39 @@ export function ReportsManager() {
   // Helpers de fechas y rangos (Zona Horaria Perú America/Lima)
   // ---------------------------------------------------------------------------
   const [currentDateReference, setCurrentDateReference] = useState<Date>(new Date());
-  const [periodType, setPeriodType] = useState<PeriodType>("month");
+  const [periodType, setPeriodType] = useState<PeriodType>(isRecepcionista ? "day" : "month");
 
-  // Fechas iniciales por defecto (Mes actual en Perú)
+  // Fechas iniciales por defecto (Mes actual en Perú para Admin, Hoy para Recepcionista)
   const initialDates = useMemo(() => {
     const now = new Date();
     const todayStr = getPeruDateString(now);
+    if (isRecepcionista) {
+      return {
+        start: todayStr,
+        end: todayStr,
+      };
+    }
     const [y, m] = todayStr.split("-");
     const lastDay = new Date(Number(y), Number(m), 0, 12, 0, 0).getDate();
     return {
       start: `${y}-${m}-01`,
       end: `${y}-${m}-${String(lastDay).padStart(2, "0")}`,
     };
-  }, []);
+  }, [isRecepcionista]);
 
   const [startDate, setStartDate] = useState<string>(initialDates.start);
   const [endDate, setEndDate] = useState<string>(initialDates.end);
+
+  // Salvaguarda inquebrantable para el rol Recepcionista: forzar siempre día actual (Hoy)
+  useEffect(() => {
+    if (isRecepcionista) {
+      const todayStr = getPeruDateString(new Date());
+      setPeriodType("day");
+      setCurrentDateReference(new Date());
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    }
+  }, [isRecepcionista]);
 
   // Calcular fechas basadas en periodType y currentDateReference en America/Lima
   const calculateDates = useCallback((type: PeriodType, refDate: Date) => {
@@ -104,15 +127,28 @@ export function ReportsManager() {
 
   // Sincronizar fechas cuando cambia el periodo o la fecha de referencia
   useEffect(() => {
+    if (isRecepcionista) {
+      const todayStr = getPeruDateString(new Date());
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+      return;
+    }
     if (periodType !== "custom") {
       const { start, end } = calculateDates(periodType, currentDateReference);
       setStartDate(start);
       setEndDate(end);
     }
-  }, [periodType, currentDateReference, calculateDates]);
+  }, [periodType, currentDateReference, calculateDates, isRecepcionista]);
 
   // Navegación de periodos (Anterior / Siguiente / Hoy) en Perú
   const navigatePeriod = (direction: -1 | 1 | 0) => {
+    if (isRecepcionista) {
+      if (direction === 0) {
+        setCurrentDateReference(new Date());
+      }
+      return;
+    }
+
     if (direction === 0) {
       setCurrentDateReference(new Date());
       return;
@@ -221,9 +257,13 @@ export function ReportsManager() {
     }
     setError(null);
     try {
+      const todayStr = getPeruDateString(new Date());
+      const effStartDate = isRecepcionista ? todayStr : startDate;
+      const effEndDate = isRecepcionista ? todayStr : endDate;
+
       const params = new URLSearchParams();
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
+      if (effStartDate) params.set("startDate", effStartDate);
+      if (effEndDate) params.set("endDate", effEndDate);
       if (bookingStatus && bookingStatus !== "all") params.set("bookingStatus", bookingStatus);
       if (paymentStatus && paymentStatus !== "all") params.set("paymentStatus", paymentStatus);
       if (employeeId && employeeId !== "all") params.set("employeeId", employeeId);
@@ -253,7 +293,7 @@ export function ReportsManager() {
         setLoading(false);
       }
     }
-  }, [startDate, endDate, bookingStatus, paymentStatus, employeeId, paymentMethod, searchTerm, periodType]);
+  }, [startDate, endDate, bookingStatus, paymentStatus, employeeId, paymentMethod, searchTerm, periodType, isRecepcionista]);
 
   // Refresco de datos cuando cambian filtros
   useEffect(() => {
@@ -529,9 +569,13 @@ export function ReportsManager() {
   const handleExportPdf = async () => {
     setExportingPdf(true);
     try {
+      const todayStr = getPeruDateString(new Date());
+      const effStartDate = isRecepcionista ? todayStr : startDate;
+      const effEndDate = isRecepcionista ? todayStr : endDate;
+
       const params = new URLSearchParams();
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
+      if (effStartDate) params.set("startDate", effStartDate);
+      if (effEndDate) params.set("endDate", effEndDate);
       if (bookingStatus && bookingStatus !== "all") params.set("bookingStatus", bookingStatus);
       if (paymentStatus && paymentStatus !== "all") params.set("paymentStatus", paymentStatus);
       if (employeeId && employeeId !== "all") params.set("employeeId", employeeId);
@@ -641,9 +685,39 @@ export function ReportsManager() {
             >
               Panel Analítico & Reportes
             </h1>
+            {isRecepcionista && (
+              <span
+                className="badge badge-success"
+                style={{
+                  fontSize: "0.72rem",
+                  padding: "4px 10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "rgba(34, 197, 94, 0.12)",
+                  color: "#22c55e",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  fontWeight: 700,
+                  borderRadius: "var(--radius-sm, 6px)",
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "#22c55e",
+                    display: "inline-block",
+                  }}
+                />
+                Jornada Activa (Solo Hoy)
+              </span>
+            )}
           </div>
           <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", marginTop: 4 }}>
-            Inteligencia de negocio, segmentación Spa vs Barbería, ranking de servicios y auditoría financiera.
+            {isRecepcionista
+              ? "Flujo de caja, reservas, ventas en mostrador y operaciones correspondientes exclusivamente a la jornada activa de hoy."
+              : "Inteligencia de negocio, segmentación Spa vs Barbería, ranking de servicios y auditoría financiera."}
           </p>
         </div>
 
@@ -727,45 +801,68 @@ export function ReportsManager() {
               Filtro Temporal:
             </span>
 
-            {[
-              { id: "day", label: "📅 Día" },
-              { id: "week", label: "📆 Semana" },
-              { id: "month", label: "🗓️ Mes" },
-              { id: "year", label: "📈 Año" },
-              { id: "custom", label: "⚙️ Personalizado" },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setPeriodType(item.id as PeriodType)}
-                className={`btn btn-sm ${
-                  periodType === item.id ? "btn-primary" : "btn-ghost"
-                }`}
-                style={{
-                  fontSize: "0.8rem",
-                  padding: "5px 12px",
-                  fontWeight: periodType === item.id ? 700 : 500,
-                  borderRadius: "var(--radius-sm, 6px)",
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
+            {isRecepcionista ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  style={{
+                    fontSize: "0.8rem",
+                    padding: "5px 14px",
+                    fontWeight: 700,
+                    borderRadius: "var(--radius-sm, 6px)",
+                    cursor: "default",
+                  }}
+                >
+                  📅 Día (Hoy)
+                </button>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 8px",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    borderRadius: "var(--radius-sm, 6px)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                  }}
+                >
+                  🔒 Exclusivo flujo del día de hoy
+                </span>
+              </div>
+            ) : (
+              [
+                { id: "day", label: "📅 Día" },
+                { id: "week", label: "📆 Semana" },
+                { id: "month", label: "🗓️ Mes" },
+                { id: "year", label: "📈 Año" },
+                { id: "custom", label: "⚙️ Personalizado" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPeriodType(item.id as PeriodType)}
+                  className={`btn btn-sm ${
+                    periodType === item.id ? "btn-primary" : "btn-ghost"
+                  }`}
+                  style={{
+                    fontSize: "0.8rem",
+                    padding: "5px 12px",
+                    fontWeight: periodType === item.id ? 700 : 500,
+                    borderRadius: "var(--radius-sm, 6px)",
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))
+            )}
           </div>
 
           {/* Navegación Temporal (Anterior, Siguiente, Hoy) */}
-          {periodType !== "custom" && (
+          {isRecepcionista ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => navigatePeriod(-1)}
-                className="btn btn-ghost btn-sm"
-                style={{ padding: "4px 8px", fontSize: "0.85rem" }}
-                title="Periodo anterior"
-              >
-                ◀
-              </button>
-
               <div
                 style={{
                   padding: "5px 14px",
@@ -783,49 +880,97 @@ export function ReportsManager() {
 
               <button
                 type="button"
-                onClick={() => navigatePeriod(1)}
-                className="btn btn-ghost btn-sm"
-                style={{ padding: "4px 8px", fontSize: "0.85rem" }}
-                title="Periodo siguiente"
-              >
-                ▶
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigatePeriod(0)}
+                onClick={() => setIsClosingModalOpen(true)}
                 className="btn btn-ghost btn-sm"
                 style={{
-                  padding: "4px 10px",
                   fontSize: "0.75rem",
-                  color: "var(--color-text-muted)",
+                  padding: "4px 10px",
+                  color: "#22c55e",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  background: "rgba(34, 197, 94, 0.08)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
                 }}
-                title="Ir al periodo actual"
+                title="Abrir Reporte Acicalados del Día para compartir por WhatsApp"
               >
-                Hoy
+                <span>📱 Reporte acicalados del dia</span>
               </button>
-
-              {periodType === "day" && (
+            </div>
+          ) : (
+            periodType !== "custom" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <button
                   type="button"
-                  onClick={() => setIsClosingModalOpen(true)}
+                  onClick={() => navigatePeriod(-1)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: "4px 8px", fontSize: "0.85rem" }}
+                  title="Periodo anterior"
+                >
+                  ◀
+                </button>
+
+                <div
+                  style={{
+                    padding: "5px 14px",
+                    background: "rgba(200, 164, 92, 0.12)",
+                    border: "1px solid rgba(200, 164, 92, 0.3)",
+                    borderRadius: "var(--radius-sm, 6px)",
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {periodLabel}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => navigatePeriod(1)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: "4px 8px", fontSize: "0.85rem" }}
+                  title="Periodo siguiente"
+                >
+                  ▶
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigatePeriod(0)}
                   className="btn btn-ghost btn-sm"
                   style={{
-                    fontSize: "0.75rem",
                     padding: "4px 10px",
-                    color: "#22c55e",
-                    border: "1px solid rgba(34, 197, 94, 0.3)",
-                    background: "rgba(34, 197, 94, 0.08)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
                   }}
-                  title="Abrir Reporte Acicalados del Día para compartir por WhatsApp"
+                  title="Ir al periodo actual"
                 >
-                  <span>📱 Reporte acicalados del dia</span>
+                  Hoy
                 </button>
-              )}
-            </div>
+
+                {periodType === "day" && (
+                  <button
+                    type="button"
+                    onClick={() => setIsClosingModalOpen(true)}
+                    className="btn btn-ghost btn-sm"
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "4px 10px",
+                      color: "#22c55e",
+                      border: "1px solid rgba(34, 197, 94, 0.3)",
+                      background: "rgba(34, 197, 94, 0.08)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                    title="Abrir Reporte Acicalados del Día para compartir por WhatsApp"
+                  >
+                    <span>📱 Reporte acicalados del dia</span>
+                  </button>
+                )}
+              </div>
+            )
           )}
         </div>
 
@@ -837,7 +982,7 @@ export function ReportsManager() {
             gap: 10,
           }}
         >
-          {periodType === "custom" && (
+          {!isRecepcionista && periodType === "custom" && (
             <>
               <div>
                 <label className="label" style={{ fontSize: "0.72rem", marginBottom: 2 }}>
@@ -2174,6 +2319,7 @@ export function ReportsManager() {
         isOpen={isClosingModalOpen}
         onClose={() => setIsClosingModalOpen(false)}
         initialDate={periodType === "day" ? startDate : undefined}
+        userRole={userRole}
       />
     </div>
   );
