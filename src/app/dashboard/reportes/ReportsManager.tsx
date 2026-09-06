@@ -51,25 +51,16 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
   // Helpers de fechas y rangos (Zona Horaria Perú America/Lima)
   // ---------------------------------------------------------------------------
   const [currentDateReference, setCurrentDateReference] = useState<Date>(new Date());
-  const [periodType, setPeriodType] = useState<PeriodType>(isRecepcionista ? "day" : "month");
+  const [periodType, setPeriodType] = useState<PeriodType>("day");
 
-  // Fechas iniciales por defecto (Mes actual en Perú para Admin, Hoy para Recepcionista)
+  // Fechas iniciales por defecto (Día actual en Perú para iniciar la jornada activa limpia)
   const initialDates = useMemo(() => {
-    const now = new Date();
-    const todayStr = getPeruDateString(now);
-    if (isRecepcionista) {
-      return {
-        start: todayStr,
-        end: todayStr,
-      };
-    }
-    const [y, m] = todayStr.split("-");
-    const lastDay = new Date(Number(y), Number(m), 0, 12, 0, 0).getDate();
+    const todayStr = getPeruDateString(new Date());
     return {
-      start: `${y}-${m}-01`,
-      end: `${y}-${m}-${String(lastDay).padStart(2, "0")}`,
+      start: todayStr,
+      end: todayStr,
     };
-  }, [isRecepcionista]);
+  }, []);
 
   const [startDate, setStartDate] = useState<string>(initialDates.start);
   const [endDate, setEndDate] = useState<string>(initialDates.end);
@@ -249,9 +240,21 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
     loadEmployees();
   }, []);
 
+  // Referencias para control de peticiones concurrentes y listeners
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const loadReportDataRef = useRef<(isSilent?: boolean) => Promise<void>>(() => Promise.resolve());
+
   // Cargar datos completos del reporte
   const loadReportData = useCallback(async (isSilent: boolean = false) => {
     if (!startDate && periodType !== "custom") return;
+
+    // Cancelar cualquier petición anterior en vuelo
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     if (!isSilent) {
       setLoading(true);
     }
@@ -273,6 +276,7 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
 
       const res = await fetch(`/api/admin/reports/data?${params.toString()}`, {
         cache: "no-store",
+        signal: controller.signal,
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
@@ -286,32 +290,40 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
       }
 
       setReportData(result.data);
-    } catch {
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        // Petición cancelada deliberadamente por una posterior; ignorar silenciosamente
+        return;
+      }
       setError("Error de conexión al cargar los datos del reporte.");
     } finally {
-      if (!isSilent) {
-        setLoading(false);
+      if (abortControllerRef.current === controller) {
+        if (!isSilent) {
+          setLoading(false);
+        }
       }
     }
   }, [startDate, endDate, bookingStatus, paymentStatus, employeeId, paymentMethod, searchTerm, periodType, isRecepcionista]);
+
+  useEffect(() => {
+    loadReportDataRef.current = loadReportData;
+  }, [loadReportData]);
 
   // Refresco de datos cuando cambian filtros
   useEffect(() => {
     loadReportData();
   }, [loadReportData]);
 
-  // Refresco garantizado de datos al montar la pantalla o al reenfocar la pestaña
+  // Refresco secundario al reenfocar la pestaña o regresar a la ventana
   useEffect(() => {
-    loadReportData(true);
-
     const handleFocus = () => {
-      loadReportData(true);
+      loadReportDataRef.current(true);
     };
 
     window.addEventListener("focus", handleFocus);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        loadReportData(true);
+        loadReportDataRef.current(true);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
@@ -319,17 +331,16 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, [loadReportData]);
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Sincronización en Tiempo Real (Supabase Realtime)
   // ---------------------------------------------------------------------------
   const supabase = useMemo(() => createClient(), []);
-  const loadReportDataRef = useRef(loadReportData);
-  useEffect(() => {
-    loadReportDataRef.current = loadReportData;
-  }, [loadReportData]);
 
   // Aplicación inmediata e interactiva de cambios en ventas de mostrador
   const applyVentaUpdate = useCallback(
@@ -649,15 +660,22 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
   // ---------------------------------------------------------------------------
   const filteredCounterSales = useMemo(() => {
     if (!reportData?.counter_sales) return [];
-    if (!ventasSearchTerm.trim()) return reportData.counter_sales;
     const term = ventasSearchTerm.trim().toLowerCase();
-    return reportData.counter_sales.filter(
-      (v) =>
+    return reportData.counter_sales.filter((v) => {
+      // Verificación estricta de fecha en zona horaria local de Perú (UTC-5)
+      if (v.fecha) {
+        const peruDate = getPeruDateString(new Date(v.fecha));
+        if (startDate && peruDate < startDate) return false;
+        if (endDate && peruDate > endDate) return false;
+      }
+      if (!term) return true;
+      return (
         v.cliente_nombre.toLowerCase().includes(term) ||
         v.producto_nombre.toLowerCase().includes(term) ||
         v.metodo_pago.toLowerCase().includes(term)
-    );
-  }, [reportData?.counter_sales, ventasSearchTerm]);
+      );
+    });
+  }, [reportData?.counter_sales, ventasSearchTerm, startDate, endDate]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, paddingBottom: 60 }}>

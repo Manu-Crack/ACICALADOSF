@@ -96,6 +96,17 @@ function getEmployeePosition(type?: string | null): string {
   return type;
 }
 
+export function getPeruDateString(d: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(d);
+  } catch {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+}
+
 /**
  * Servicio Centralizado de Reportes Financieros y Operativos.
  * Realiza cálculos exactos respetando las reglas financieras y de segmentación de rubros.
@@ -249,10 +260,10 @@ export async function buildFullReportData(
     .order("fecha", { ascending: false });
 
   if (startDate) {
-    ventasQuery = ventasQuery.gte("fecha", `${startDate}T00:00:00.000Z`);
+    ventasQuery = ventasQuery.gte("fecha", `${startDate}T00:00:00.000-05:00`);
   }
   if (endDate) {
-    ventasQuery = ventasQuery.lte("fecha", `${endDate}T23:59:59.999Z`);
+    ventasQuery = ventasQuery.lte("fecha", `${endDate}T23:59:59.999-05:00`);
   }
 
   const { data: rawVentas, error: ventasErr } = await ventasQuery;
@@ -505,6 +516,20 @@ export async function buildFullReportData(
     registrado_por?: string | null;
     notas?: string | null;
   }>).forEach((v) => {
+    // Verificación estricta de fecha en zona horaria local de Perú (America/Lima, UTC-5)
+    if (v.fecha) {
+      const vDate = new Date(v.fecha);
+      if (!isNaN(vDate.getTime())) {
+        const peruDateStr = getPeruDateString(vDate);
+        if (startDate && peruDateStr < startDate) {
+          return;
+        }
+        if (endDate && peruDateStr > endDate) {
+          return;
+        }
+      }
+    }
+
     if (searchTerm && searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
       const matchClient = v.cliente_nombre?.toLowerCase().includes(term);

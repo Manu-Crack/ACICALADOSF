@@ -67,10 +67,10 @@ export async function GET(request: Request) {
       .limit(limit);
 
     if (startDate) {
-      query = query.gte("fecha", `${startDate}T00:00:00.000Z`);
+      query = query.gte("fecha", `${startDate}T00:00:00.000-05:00`);
     }
     if (endDate) {
-      query = query.lte("fecha", `${endDate}T23:59:59.999Z`);
+      query = query.lte("fecha", `${endDate}T23:59:59.999-05:00`);
     }
 
     const { data, error } = await query;
@@ -84,6 +84,20 @@ export async function GET(request: Request) {
     }
 
     let filtered = data || [];
+
+    // Verificación estricta de límites de fecha en zona horaria local de Perú (America/Lima, UTC-5)
+    if (startDate || endDate) {
+      filtered = filtered.filter((v) => {
+        if (!v.fecha) return true;
+        const vDate = new Date(v.fecha);
+        if (isNaN(vDate.getTime())) return true;
+        const peruDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(vDate);
+        if (startDate && peruDateStr < startDate) return false;
+        if (endDate && peruDateStr > endDate) return false;
+        return true;
+      });
+    }
+
     if (searchTerm && searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
       filtered = filtered.filter(
@@ -159,6 +173,23 @@ export async function POST(request: Request) {
     // Cálculo dinámico del total exacto
     const calculatedTotal = Math.round(parsedQty * parsedPrice * 100) / 100;
 
+    // Normalizar fecha a UTC-5 si no trae zona horaria
+    let resolvedFechaISO: string;
+    if (fecha) {
+      const rawFechaStr = String(fecha).trim();
+      if (!rawFechaStr.includes("Z") && !/[+-]\d{2}:\d{2}$/.test(rawFechaStr)) {
+        if (rawFechaStr.length === 10) {
+          resolvedFechaISO = new Date(`${rawFechaStr}T12:00:00.000-05:00`).toISOString();
+        } else {
+          resolvedFechaISO = new Date(`${rawFechaStr}-05:00`).toISOString();
+        }
+      } else {
+        resolvedFechaISO = new Date(rawFechaStr).toISOString();
+      }
+    } else {
+      resolvedFechaISO = new Date().toISOString();
+    }
+
     const salePayload = {
       cliente_nombre: String(cliente_nombre).trim(),
       producto_nombre: String(producto_nombre).trim(),
@@ -166,7 +197,7 @@ export async function POST(request: Request) {
       precio_unitario: parsedPrice,
       total: calculatedTotal,
       metodo_pago: resolvedMethod,
-      fecha: fecha ? new Date(fecha).toISOString() : new Date().toISOString(),
+      fecha: resolvedFechaISO,
       registrado_por: auth.user.id,
       notas: notas ? String(notas).trim() : null,
     };

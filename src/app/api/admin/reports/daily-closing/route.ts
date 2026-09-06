@@ -120,8 +120,8 @@ export async function GET(request: NextRequest) {
     const { data: wardrobeMovs, error: wardErr } = await admin
       .from("wardrobe_movements")
       .select("price_cents, advance_cents, created_at, status")
-      .gte("created_at", `${targetDate}T00:00:00.000Z`)
-      .lte("created_at", `${targetDate}T23:59:59.999Z`);
+      .gte("created_at", `${targetDate}T00:00:00.000-05:00`)
+      .lte("created_at", `${targetDate}T23:59:59.999-05:00`);
 
     if (wardErr) {
       console.error("Error fetching wardrobe movements for daily closing:", wardErr);
