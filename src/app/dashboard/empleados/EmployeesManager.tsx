@@ -48,6 +48,10 @@ type BookingServiceItem = {
   created_at?: string | null;
   start_time?: string;
   end_time?: string;
+  hora_inicio?: string;
+  hora_fin?: string;
+  status?: string | null;
+  liberado_at?: string | null;
   services?: {
     id: string;
     name: string;
@@ -211,6 +215,12 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
             service_price_cents,
             duration_minutes,
             assigned_employee_id,
+            start_time,
+            end_time,
+            hora_inicio,
+            hora_fin,
+            status,
+            liberado_at,
             created_at,
             services:service_id (
               id,
@@ -1795,11 +1805,26 @@ export default function EmployeesManager({ userRole = "admin" }: { userRole?: st
                                 <span style={{ fontWeight: 600, color: "#FFFFFF" }}>
                                   {svc.service_name}
                                 </span>
+                                {svc.status === "completada" && (
+                                  <span
+                                    style={{
+                                      background: "rgba(34, 197, 94, 0.15)",
+                                      color: "#22c55e",
+                                      padding: "1px 6px",
+                                      borderRadius: 4,
+                                      fontSize: "0.68rem",
+                                      fontWeight: 700,
+                                      marginLeft: 6,
+                                    }}
+                                  >
+                                    🏁 Culminado
+                                  </span>
+                                )}
                                 <span
                                   className="text-muted"
                                   style={{ fontSize: "0.75rem", marginLeft: 6 }}
                                 >
-                                  ({svc.start_time && svc.end_time ? `${svc.start_time} – ${svc.end_time} · ` : ""}{formatDuration(svc.duration_minutes)})
+                                  ({(svc.hora_inicio || svc.start_time) && (svc.hora_fin || svc.end_time) ? `${String(svc.hora_inicio || svc.start_time).slice(0, 5)} – ${String(svc.hora_fin || svc.end_time).slice(0, 5)} · ` : ""}{formatDuration(svc.duration_minutes)})
                                 </span>
                               </div>
                               <strong style={{ color: "var(--color-primary)" }}>

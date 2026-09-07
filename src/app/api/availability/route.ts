@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
         end_time,
         hora_inicio,
         hora_fin,
+        status,
         bookings!inner (
           id,
           booking_date,
@@ -235,6 +236,7 @@ export async function GET(request: NextRequest) {
         // Cada colaborador queda libre exactamente al culminar su propio servicio
         const hasServiceConflict = servicesList.some((bs) => {
           if (bs.assigned_employee_id !== emp.id) return false;
+          if (bs.status === "cancelada") return false;
           const sTime = bs.start_time || bs.hora_inicio;
           const eTime = bs.end_time || bs.hora_fin;
           if (!sTime || !eTime) return false;
@@ -255,6 +257,7 @@ export async function GET(request: NextRequest) {
       // Contabilizar servicios/reservas activas sin asignar que colisionan en ese horario (para no sobrecargar)
       const unassignedServicesCount = servicesList.filter((bs) => {
         if (bs.assigned_employee_id) return false;
+        if (bs.status === "cancelada") return false;
         const sTime = bs.start_time || bs.hora_inicio;
         const eTime = bs.end_time || bs.hora_fin;
         return sTime && eTime && hasTimeOverlap(sTime, eTime, candidateSlotStart, candidateSlotEnd);

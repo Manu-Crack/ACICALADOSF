@@ -102,7 +102,9 @@ export async function GET(request: NextRequest) {
             start_time,
             end_time,
             hora_inicio,
-            hora_fin
+            hora_fin,
+            status,
+            liberado_at
           )
         `)
         .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
@@ -145,6 +147,8 @@ export async function GET(request: NextRequest) {
           end_time?: string | null;
           hora_inicio?: string | null;
           hora_fin?: string | null;
+          status?: string | null;
+          liberado_at?: string | null;
         }> | null;
       }
 
@@ -264,6 +268,9 @@ export async function GET(request: NextRequest) {
             return t && t > latest ? t : latest;
           }, empServices[0]?.end_time || empServices[0]?.hora_fin || b.end_time);
 
+          const allEmpServicesCompleted = empServices.length > 0 && empServices.every((s) => s.status === "completada");
+          const effectiveStatus = allEmpServicesCompleted ? "completada" : b.status;
+
           events.push({
             id: eventId,
             type: "booking",
@@ -274,9 +281,9 @@ export async function GET(request: NextRequest) {
             date: b.booking_date,
             start_time: empStartTime,
             end_time: empEndTime,
-            status: b.status,
-            status_label: bookingStatusLabels[b.status] || (b.status ? b.status.toUpperCase() : "RESERVA"),
-            badge_class: bookingStatusBadges[b.status] || "badge-neutral",
+            status: effectiveStatus,
+            status_label: bookingStatusLabels[effectiveStatus] || (effectiveStatus ? effectiveStatus.toUpperCase() : "RESERVA"),
+            badge_class: bookingStatusBadges[effectiveStatus] || "badge-neutral",
             icon: cfg.icon,
             color: cfg.color,
             bg_color: cfg.bgColor,
@@ -289,6 +296,14 @@ export async function GET(request: NextRequest) {
               services: displayServices,
               price_cents: priceToShow,
               payment_status: b.payment_status,
+              services_detail: empServices.map((bs) => ({
+                id: bs.id,
+                name: bs.service_name,
+                status: bs.status || "confirmada",
+                start_time: bs.start_time || bs.hora_inicio,
+                end_time: bs.end_time || bs.hora_fin,
+                liberado_at: bs.liberado_at,
+              })),
             },
           });
         });

@@ -113,6 +113,46 @@ export function CalendarEventModal({ event, onClose }: CalendarEventModalProps) 
                   </div>
                 </div>
               )}
+              {event.details.services_detail && event.details.services_detail.length > 0 && (
+                <div>
+                  <span style={{ color: "var(--color-text-muted)", display: "block", marginBottom: 6 }}>Atención por Servicio:</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {event.details.services_detail.map((sd) => (
+                      <div
+                        key={sd.id}
+                        style={{
+                          padding: "6px 10px",
+                          background: "rgba(255, 255, 255, 0.04)",
+                          borderRadius: "var(--radius-sm, 6px)",
+                          border: "1px solid var(--color-border)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "0.78rem",
+                        }}
+                      >
+                        <div>
+                          <strong>{sd.name}</strong>
+                          {sd.start_time && sd.end_time && (
+                            <span style={{ color: "var(--color-text-muted)", marginLeft: 6, fontSize: "0.72rem" }}>
+                              ({sd.start_time.slice(0, 5)} – {sd.end_time.slice(0, 5)})
+                            </span>
+                          )}
+                        </div>
+                        {sd.status === "completada" ? (
+                          <span style={{ color: "#22c55e", fontWeight: 700, fontSize: "0.7rem", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            🏁 Culminado {sd.liberado_at ? "⚡" : ""}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#f59e0b", fontSize: "0.7rem" }}>
+                            ⏳ En curso
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {event.details.price_cents !== undefined && (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ color: "var(--color-text-muted)" }}>Monto Total:</span>

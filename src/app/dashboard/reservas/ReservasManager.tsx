@@ -20,6 +20,12 @@ export type BookingServiceItem = {
   service_price_cents: number;
   duration_minutes: number;
   assigned_employee_id: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
+  status?: string | null;
+  liberado_at?: string | null;
 };
 
 type Booking = {
@@ -123,6 +129,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [releasingServiceId, setReleasingServiceId] = useState<string | null>(null);
 
   // Estado de modales
   const [paymentModalBooking, setPaymentModalBooking] = useState<BookingSummaryForPayment | null>(null);
@@ -143,7 +150,7 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
           .select(
             `id, booking_code, booking_date, start_time, end_time, status, payment_status, payment_method, total_price_cents, advance_percentage, advance_amount_cents, balance_cents, service_type, client_first_name, client_last_name, client_phone, client_email, client_dni, total_duration_minutes, confirmed_at, assigned_employee_id, created_at,
             booking_services (
-              id, service_id, service_name, service_price_cents, duration_minutes, assigned_employee_id
+              id, service_id, service_name, service_price_cents, duration_minutes, assigned_employee_id, start_time, end_time, hora_inicio, hora_fin, status, liberado_at
             )`
           )
           .in("status", ["pendiente", "confirmada", "completada", "cancelada"])
@@ -310,6 +317,53 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
       } catch {
         // Ignorar
       }
+    }
+  }
+
+  // Culminación anticipada y liberación inmediata de un servicio individual
+  async function handleReleaseBookingService(booking: Booking, bs: BookingServiceItem) {
+    const now = new Date();
+    const peruTime = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Lima",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(now);
+
+    const effectiveWorkerId = bs.assigned_employee_id || booking.assigned_employee_id;
+    const workerObj = effectiveWorkerId ? employeeMap.get(effectiveWorkerId) : null;
+    const workerName = workerObj ? `${workerObj.first_name} ${workerObj.last_name}` : "el colaborador";
+
+    const confirmMsg =
+      `⚡ ¿Confirmas CULMINAR y LIBERAR anticipadamente este servicio?\n\n` +
+      `• Servicio: ${bs.service_name}\n` +
+      `• Cita: ${booking.booking_code} (${booking.client_first_name} ${booking.client_last_name})\n` +
+      `• Hora de culminación: ${peruTime}\n\n` +
+      `Al confirmar:\n` +
+      `1. Se recortará la hora de término de este servicio a las ${peruTime}.\n` +
+      `2. ${workerName} quedará libre de inmediato para recibir nuevas citas.\n` +
+      `3. El precio pactado (S/ ${(bs.service_price_cents / 100).toFixed(2)}) no será alterado.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setReleasingServiceId(bs.id);
+    try {
+      const res = await fetch("/api/admin/bookings/service-release", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking_service_id: bs.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "No se pudo culminar el servicio.");
+      } else {
+        await loadBookings(true);
+      }
+    } catch (err) {
+      console.error("Error al culminar servicio:", err);
+      alert("Error de conexión al intentar culminar el servicio.");
+    } finally {
+      setReleasingServiceId(null);
     }
   }
 
@@ -1992,6 +2046,88 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                     ))}
                                   </select>
                                 </div>
+
+                                {/* Estado y Acción Liberar / Culminar Servicio */}
+                                {(() => {
+                                  const todayPeru = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
+                                  const isToday = b.booking_date === todayPeru;
+                                  const isCompleted = bs.status === "completada";
+                                  const canRelease = isToday && b.status !== "cancelada" && b.status !== "expirada" && !isCompleted;
+
+                                  if (isCompleted) {
+                                    return (
+                                      <div
+                                        style={{
+                                          marginTop: 6,
+                                          padding: "5px 8px",
+                                          background: "rgba(34, 197, 94, 0.1)",
+                                          border: "1px solid rgba(34, 197, 94, 0.25)",
+                                          borderRadius: "var(--radius-sm, 6px)",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "space-between",
+                                          fontSize: "0.72rem",
+                                        }}
+                                      >
+                                        <span style={{ color: "#22c55e", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                          🏁 Culminado {bs.end_time || bs.hora_fin ? `(${String(bs.end_time || bs.hora_fin).slice(0, 5)})` : ""}
+                                        </span>
+                                        {bs.liberado_at && (
+                                          <span style={{ color: "var(--color-primary, #C8A45C)", fontSize: "0.68rem", fontWeight: 600 }}>
+                                            ⚡ Liberado
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+
+                                  if (canRelease) {
+                                    return (
+                                      <div style={{ marginTop: 6 }}>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleReleaseBookingService(b, bs);
+                                          }}
+                                          disabled={releasingServiceId === bs.id}
+                                          className="btn btn-sm"
+                                          style={{
+                                            width: "100%",
+                                            padding: "5px 10px",
+                                            fontSize: "0.73rem",
+                                            fontWeight: 700,
+                                            background: "rgba(34, 197, 94, 0.12)",
+                                            color: "#22c55e",
+                                            border: "1px solid rgba(34, 197, 94, 0.35)",
+                                            borderRadius: "var(--radius-sm, 6px)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: 6,
+                                            cursor: "pointer",
+                                            transition: "all var(--transition-fast)",
+                                          }}
+                                          title="Marcar culminación ahora y liberar al especialista para nuevas atenciones"
+                                        >
+                                          {releasingServiceId === bs.id ? (
+                                            <>
+                                              <span>⏳</span>
+                                              <span>Liberando agenda...</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span>⚡</span>
+                                              <span>Culminar y Liberar</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    );
+                                  }
+
+                                  return null;
+                                })()}
                               </div>
                             );
                           })}

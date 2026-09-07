@@ -54,6 +54,14 @@ export interface CalendarEvent {
     reason?: string;
     observation?: string;
     evidence_url?: string | null;
+    services_detail?: Array<{
+      id: string;
+      name: string;
+      status: string;
+      start_time?: string | null;
+      end_time?: string | null;
+      liberado_at?: string | null;
+    }>;
   };
 }
 
