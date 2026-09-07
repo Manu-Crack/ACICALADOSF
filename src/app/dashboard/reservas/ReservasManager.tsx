@@ -1644,38 +1644,6 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                             )}
                           </p>
                         )}
-                        {(b.booking_services?.length ?? 0) < 2 && (
-                          <div style={{ marginTop: 8 }}>
-                            <label
-                              className="label"
-                              style={{ fontSize: "0.75rem" }}
-                            >
-                              Asignar Empleado:
-                            </label>
-                            <select
-                              className="select"
-                              style={{
-                                padding: "4px 8px",
-                                fontSize: "0.8125rem",
-                                maxWidth: 220,
-                              }}
-                              value={b.assigned_employee_id || ""}
-                              onChange={(e) =>
-                                updateBooking(b.id, {
-                                  assigned_employee_id:
-                                    e.target.value || null,
-                                })
-                              }
-                            >
-                              <option value="">Sin asignar</option>
-                              {employees.map((emp) => (
-                                <option key={emp.id} value={emp.id}>
-                                  {emp.first_name} {emp.last_name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
                       </div>
 
                       {/* WhatsApp Contact */}
@@ -1798,9 +1766,8 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 10 }}>
                           {b.booking_services.map((bs, idx) => {
                             const isMultiService = (b.booking_services?.length ?? 0) >= 2;
-                            const assignedEmp = bs.assigned_employee_id
-                              ? employeeMap.get(bs.assigned_employee_id)
-                              : (!isMultiService && b.assigned_employee_id ? employeeMap.get(b.assigned_employee_id) : null);
+                            const effectiveEmpId = bs.assigned_employee_id || (!isMultiService && b.assigned_employee_id ? b.assigned_employee_id : null);
+                            const assignedEmp = effectiveEmpId ? employeeMap.get(effectiveEmpId) : null;
 
                             const isEditingPrice = editingPriceId === bs.id;
                             const isSavingPrice = savingPriceId === bs.id;
@@ -1997,16 +1964,27 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                                   </span>
                                 </div>
 
-                                {/* Selector de Reasignación individual */}
-                                <div style={{ marginTop: 2 }}>
+                                {/* Selector de asignación individual por servicio */}
+                                <div style={{ marginTop: 4 }}>
+                                  <label
+                                    style={{
+                                      fontSize: "0.7rem",
+                                      color: "var(--color-text-muted)",
+                                      display: "block",
+                                      marginBottom: 2,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    Especialista asignado:
+                                  </label>
                                   <select
                                     className="select"
-                                    style={{ width: "100%", fontSize: "0.72rem", padding: "4px 8px", height: "auto" }}
-                                    value={bs.assigned_employee_id || ""}
+                                    style={{ width: "100%", fontSize: "0.75rem", padding: "4px 8px", height: "auto" }}
+                                    value={effectiveEmpId || ""}
                                     onChange={(e) => updateBookingServiceEmployee(bs.id, e.target.value || null)}
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    <option value="">— Reasignar colaborador —</option>
+                                    <option value="">— Sin especialista asignado —</option>
                                     {employees.map((emp) => (
                                       <option key={emp.id} value={emp.id}>
                                         {emp.first_name} {emp.last_name} {emp.type ? `(${emp.type === "barberia" ? "Barbero" : emp.type === "spa" ? "Spa" : emp.type})` : ""}

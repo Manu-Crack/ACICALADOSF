@@ -105,18 +105,13 @@ export async function PATCH(request: NextRequest) {
         booking.assigned_employee_id
       );
 
-      const isMultiService = allServices.length >= 2;
+      const firstAssigned = allServices.find((s) => s.assigned_employee_id)?.assigned_employee_id || null;
       const updateData: Record<string, unknown> = {
         total_duration_minutes: scheduleResult.totalDurationMinutes,
         end_time: scheduleResult.endTimeStr,
+        assigned_employee_id: firstAssigned,
         updated_at: new Date().toISOString(),
       };
-
-      if (isMultiService) {
-        // En citas múltiples, asegurar que el empleado de cabecera sea el primer asignado si existe
-        const firstAssigned = allServices.find((s) => s.assigned_employee_id)?.assigned_employee_id || null;
-        updateData.assigned_employee_id = firstAssigned;
-      }
 
       // Sincronizar las marcas de tiempo individuales recalculadas de cada servicio
       for (const sched of scheduleResult.scheduledServices) {
