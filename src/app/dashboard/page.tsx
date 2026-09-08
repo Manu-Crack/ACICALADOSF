@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { DashboardHome, FinancialBooking, FinancialVenta } from "./DashboardHome";
+import { DashboardHome, FinancialBooking, FinancialVenta, FinancialPaymentLog } from "./DashboardHome";
 import { Egreso } from "@/lib/types/expense";
 
 export const dynamic = "force-dynamic";
@@ -66,8 +66,8 @@ export default async function DashboardPage() {
     .order("booking_date", { ascending: false })
     .limit(200);
 
-  // Cargar egresos y ventas de mostrador en paralelo
-  const [expensesRes, egresosRes, ventasRes] = await Promise.all([
+  // Cargar egresos, ventas de mostrador y cobros reales en paralelo
+  const [expensesRes, egresosRes, ventasRes, paymentsRes] = await Promise.all([
     supabase
       .from("expenses")
       .select("*")
@@ -83,11 +83,20 @@ export default async function DashboardPage() {
       .select("id, cliente_nombre, producto_nombre, cantidad, precio_unitario, total, metodo_pago, fecha, notas")
       .order("fecha", { ascending: false })
       .limit(300),
+    supabase
+      .from("payment_logs")
+      .select(
+        "id, booking_id, amount_cents, payment_method, payment_type, yape_amount_cents, cash_amount_cents, status, paid_at, bookings(id, booking_code, client_first_name, client_last_name, service_type, booking_date, total_price_cents, advance_amount_cents, balance_cents, payment_status)"
+      )
+      .eq("status", "verified")
+      .order("paid_at", { ascending: false })
+      .limit(300),
   ]);
 
   const rawExpenses = expensesRes.data || [];
   const rawEgresos = egresosRes.data || [];
   const rawVentas = ventasRes.data || [];
+  const rawPayments = (paymentsRes.data as unknown as FinancialPaymentLog[]) || [];
 
   // Mapear y unificar egresos activos
   const combinedEgresos: Egreso[] = [
@@ -132,6 +141,7 @@ export default async function DashboardPage() {
       initialFinancialBookings={(financialBookings as unknown as FinancialBooking[]) ?? []}
       initialFinancialEgresos={combinedEgresos}
       initialFinancialVentas={(rawVentas as unknown as FinancialVenta[]) ?? []}
+      initialFinancialPayments={rawPayments}
     />
   );
 }

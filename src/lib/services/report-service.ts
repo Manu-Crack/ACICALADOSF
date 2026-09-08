@@ -175,6 +175,10 @@ export async function buildFullReportData(
         assigned_employee_id,
         created_at,
         services:service_id (name, type)
+      ),
+      payment_logs (
+        id,
+        status
       )
     `)
     .order("booking_date", { ascending: false })
@@ -291,10 +295,26 @@ export async function buildFullReportData(
     voided_by: string | null;
     void_reason: string | null;
     bookings: {
+      id?: string;
       booking_code: string;
       client_first_name: string | null;
       client_last_name: string | null;
+      client_phone?: string | null;
+      booking_date?: string | null;
       service_type?: string | null;
+      total_price_cents?: number | null;
+      advance_amount_cents?: number | null;
+      balance_cents?: number | null;
+      payment_status?: string | null;
+      assigned_employee_id?: string | null;
+      booking_services?: Array<{
+        id?: string;
+        service_id?: string;
+        service_name?: string | null;
+        service_price_cents?: number | null;
+        assigned_employee_id?: string | null;
+        services?: { name?: string; type?: string } | null;
+      }> | null;
     } | null;
   }
 
@@ -363,6 +383,7 @@ export async function buildFullReportData(
       type: string;
     } | null;
     booking_services: RawBookingService[] | null;
+    payment_logs?: { id: string; status: string }[] | null;
   }
 
   // Filtrar reservas por empleado, método de pago y término de búsqueda
@@ -396,41 +417,111 @@ export async function buildFullReportData(
   });
 
   // ---------------------------------------------------------------------------
-  // 3. Consultar Pagos Verificados Vinculados a estas Reservas
+  // 3. Consultar Pagos Verificados en el Rango de Fechas (Flujo de Caja Real)
   // ---------------------------------------------------------------------------
-  const bookingIds = filteredBookings.map((b) => b.id);
-  let rawPayments: RawPaymentRow[] = [];
-
-  if (bookingIds.length > 0) {
-    const { data: pData, error: paymentsErr } = await supabase
-      .from("payment_logs")
-      .select(`
+  let paymentsQuery = supabase
+    .from("payment_logs")
+    .select(`
+      id,
+      booking_id,
+      amount_cents,
+      payment_method,
+      payment_type,
+      yape_amount_cents,
+      cash_amount_cents,
+      status,
+      notes,
+      proof_url,
+      paid_at,
+      registered_by,
+      voided_at,
+      voided_by,
+      void_reason,
+      bookings (
         id,
-        booking_id,
-        amount_cents,
-        payment_method,
-        payment_type,
-        yape_amount_cents,
-        cash_amount_cents,
-        status,
-        notes,
-        proof_url,
-        paid_at,
-        registered_by,
-        voided_at,
-        voided_by,
-        void_reason,
-        bookings (booking_code, client_first_name, client_last_name, service_type)
-      `)
-      .in("booking_id", bookingIds)
-      .order("paid_at", { ascending: false });
+        booking_code,
+        client_first_name,
+        client_last_name,
+        client_phone,
+        booking_date,
+        service_type,
+        total_price_cents,
+        advance_amount_cents,
+        balance_cents,
+        payment_status,
+        assigned_employee_id,
+        booking_services (
+          id,
+          service_id,
+          service_name,
+          service_price_cents,
+          assigned_employee_id,
+          services:service_id (name, type)
+        )
+      )
+    `)
+    .order("paid_at", { ascending: false });
 
-    if (paymentsErr) {
-      console.error("Error fetching payment logs for report bookings:", paymentsErr);
-    } else if (pData) {
-      rawPayments = pData as unknown as RawPaymentRow[];
-    }
+  if (startDate) {
+    paymentsQuery = paymentsQuery.gte("paid_at", `${startDate}T00:00:00.000-05:00`);
   }
+  if (endDate) {
+    paymentsQuery = paymentsQuery.lte("paid_at", `${endDate}T23:59:59.999-05:00`);
+  }
+
+  const { data: pData, error: paymentsErr } = await paymentsQuery;
+  let rawPayments: RawPaymentRow[] = [];
+  if (paymentsErr) {
+    console.error("Error fetching payment logs for report:", paymentsErr);
+  } else if (pData) {
+    rawPayments = pData as unknown as RawPaymentRow[];
+  }
+
+  // Filtrar pagos por método de pago, empleado, término de búsqueda y estado de pago
+  const filteredPayments = rawPayments.filter((p) => {
+    if (paymentMethod && paymentMethod !== "all") {
+      if (!matchesPaymentMethodFilter(p.payment_method, paymentMethod)) {
+        return false;
+      }
+    }
+
+    const b = p.bookings;
+
+    if (employeeId && employeeId !== "all") {
+      if (!b) return false;
+      const bServices = b.booking_services || [];
+      const matchesParent = b.assigned_employee_id === employeeId;
+      const matchesChild = bServices.some((bs) => bs.assigned_employee_id === employeeId);
+      if (bServices.length >= 2) {
+        if (!matchesChild) return false;
+      } else {
+        if (!matchesParent && !matchesChild) return false;
+      }
+    }
+
+    if (searchTerm && searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      const clientName = `${b?.client_first_name || ""} ${b?.client_last_name || ""}`.trim().toLowerCase();
+      const matchesCode = b?.booking_code?.toLowerCase().includes(term);
+      const matchesClient = clientName.includes(term);
+      const matchesPhone = b?.client_phone?.includes(term);
+      if (!matchesCode && !matchesClient && !matchesPhone) {
+        return false;
+      }
+    }
+
+    if (paymentStatus && paymentStatus !== "all") {
+      if (paymentStatus === "parcial") {
+        if (p.payment_type !== "advance") return false;
+      } else if (paymentStatus === "total") {
+        if (p.payment_type !== "balance" && p.payment_type !== "full") return false;
+      } else if (paymentStatus === "sin_pago") {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   // ---------------------------------------------------------------------------
   // 4. Mapear y procesar Egresos (Intacto)
@@ -597,71 +688,17 @@ export async function buildFullReportData(
       pendingBalanceCents += b.balance_cents || 0;
     }
 
-    // Cálculo unificado de ingreso cobrado exactamente como en Inicio y Reservas
-    const validIncomeCents = calculateValidIncomeForBooking(b);
-    const isConfirmedOrCompleted = b.status === "confirmada" || b.status === "completada";
-
-    if (isConfirmedOrCompleted && validIncomeCents > 0) {
-      totalCollectedCents += validIncomeCents;
-
-      // Desglose por Método de Pago
-      const normMethod = normalizePaymentMethod(b.payment_method);
-      if (normMethod === "yape") {
-        yapeCollectedCents += validIncomeCents;
-      } else if (normMethod === "efectivo") {
-        cashCollectedCents += validIncomeCents;
-      } else if (normMethod === "transferencia") {
-        transferCollectedCents += validIncomeCents;
-      } else if (normMethod === "mixto") {
-        mixedCollectedCents += validIncomeCents;
-        const bookingVerifiedLogs = rawPayments.filter((p) => p.booking_id === b.id && p.status === "verified");
-        const yapePart = bookingVerifiedLogs.reduce((sum, p) => sum + (p.yape_amount_cents || 0), 0);
-        const cashPart = bookingVerifiedLogs.reduce((sum, p) => sum + (p.cash_amount_cents || 0), 0);
-        if (yapePart > 0 || cashPart > 0) {
-          yapeCollectedCents += yapePart;
-          cashCollectedCents += cashPart;
-        } else {
-          const half = Math.floor(validIncomeCents / 2);
-          yapeCollectedCents += half;
-          cashCollectedCents += (validIncomeCents - half);
-        }
-      } else if (normMethod === "culqi_legacy") {
-        culqiCollectedCents += validIncomeCents;
-      } else {
-        cashCollectedCents += validIncomeCents;
-      }
-
-      if (b.payment_status === "parcial") {
-        advancesCollectedCents += validIncomeCents;
-      }
-
-      // Segmentación Spa vs Barbería (100% balanceada con totalCollectedCents)
-      if (b.service_type === "spa") {
-        spaBookingsCount++;
-        spaCollectedCents += validIncomeCents;
-      } else if (b.service_type === "barberia") {
-        barberiaBookingsCount++;
-        barberiaCollectedCents += validIncomeCents;
-      } else {
-        // Servicio mixto: calcular proporción exacta asegurando que la suma de enteros sea exacta
-        const bServices = b.booking_services || [];
-        let spaSum = 0;
-        let barberiaSum = 0;
-        bServices.forEach((bs) => {
-          const type = bs.services?.type || "barberia";
-          const price = bs.service_price_cents || 0;
-          if (type === "spa") spaSum += price;
-          else barberiaSum += price;
-        });
-        const sumTotal = spaSum + barberiaSum || 1;
-        const spaRatio = spaSum / sumTotal;
-        const spaAmount = Math.round(validIncomeCents * spaRatio);
-        const barberiaAmount = validIncomeCents - spaAmount;
-        spaCollectedCents += spaAmount;
-        barberiaCollectedCents += barberiaAmount;
-        if (spaSum > 0) spaBookingsCount++;
-        if (barberiaSum > 0) barberiaBookingsCount++;
-      }
+    // Conteo de citas por categoría de servicio en la agenda
+    if (b.service_type === "spa") {
+      spaBookingsCount++;
+    } else if (b.service_type === "barberia") {
+      barberiaBookingsCount++;
+    } else {
+      const bServices = b.booking_services || [];
+      const hasSpa = bServices.some((bs) => bs.services?.type === "spa");
+      const hasBarberia = bServices.some((bs) => (bs.services?.type || "barberia") === "barberia");
+      if (hasSpa) spaBookingsCount++;
+      if (hasBarberia) barberiaBookingsCount++;
     }
 
     // -------------------------------------------------------------------------
@@ -788,12 +825,6 @@ export async function buildFullReportData(
             employeesMap[workerId].total_duration_minutes =
               (employeesMap[workerId].total_duration_minutes || 0) + duration;
           }
-
-          if (isConfirmedOrCompleted && validIncomeCents > 0) {
-            const svcShare = totalBookingServicesPrice > 0 ? (sPrice / totalBookingServicesPrice) : (1 / rawBServices.length);
-            const proportionalIncome = Math.round(validIncomeCents * svcShare);
-            employeesMap[workerId].total_revenue_collected_cents += proportionalIncome;
-          }
         }
       });
     } else {
@@ -870,10 +901,6 @@ export async function buildFullReportData(
           employeesMap[workerId].total_duration_minutes =
             (employeesMap[workerId].total_duration_minutes || 0) + duration;
         }
-
-        if (isConfirmedOrCompleted && validIncomeCents > 0) {
-          employeesMap[workerId].total_revenue_collected_cents += validIncomeCents;
-        }
       }
     }
 
@@ -922,13 +949,196 @@ export async function buildFullReportData(
   });
 
   // ---------------------------------------------------------------------------
-  // 6. Construir Lista de Pagos (payment_logs + pagos confirmados en bookings)
+  // 5.1. Cómputo de Ingresos Reales Cobrados (Flujo de Caja Estricto por paid_at)
   // ---------------------------------------------------------------------------
-  const paymentsList: PaymentReportItem[] = [];
   const coveredBookingIds = new Set<string>();
 
-  rawPayments.forEach((p) => {
+  // A. Sumar cada pago real verificado efectuado en este periodo de tiempo
+  filteredPayments.forEach((p) => {
     coveredBookingIds.add(p.booking_id);
+
+    // Solo pagos verificados y no anulados ingresan al flujo de caja
+    if (p.status !== "verified" || p.voided_at) return;
+
+    const amount = p.amount_cents || 0;
+    totalCollectedCents += amount;
+
+    if (p.payment_type === "advance") {
+      advancesCollectedCents += amount;
+    }
+
+    // Desglose por método de pago real
+    const normMethod = normalizePaymentMethod(p.payment_method);
+    if (normMethod === "yape") {
+      yapeCollectedCents += amount;
+    } else if (normMethod === "efectivo") {
+      cashCollectedCents += amount;
+    } else if (normMethod === "transferencia") {
+      transferCollectedCents += amount;
+    } else if (normMethod === "mixto") {
+      mixedCollectedCents += amount;
+      const yPart = p.yape_amount_cents || 0;
+      const cPart = p.cash_amount_cents || 0;
+      if (yPart > 0 || cPart > 0) {
+        yapeCollectedCents += yPart;
+        cashCollectedCents += cPart;
+      } else {
+        const half = Math.floor(amount / 2);
+        yapeCollectedCents += half;
+        cashCollectedCents += (amount - half);
+      }
+    } else if (normMethod === "culqi_legacy") {
+      culqiCollectedCents += amount;
+    } else {
+      cashCollectedCents += amount;
+    }
+
+    // Segmentación Spa vs Barbería
+    const b = p.bookings;
+    if (b) {
+      if (b.service_type === "spa") {
+        spaCollectedCents += amount;
+      } else if (b.service_type === "barberia") {
+        barberiaCollectedCents += amount;
+      } else {
+        const bServices = b.booking_services || [];
+        let spaSum = 0;
+        let barberiaSum = 0;
+        bServices.forEach((bs: any) => {
+          const type = bs.services?.type || "barberia";
+          const price = bs.service_price_cents || 0;
+          if (type === "spa") spaSum += price;
+          else barberiaSum += price;
+        });
+        const sumTotal = spaSum + barberiaSum || 1;
+        const spaRatio = spaSum / sumTotal;
+        const spaAmount = Math.round(amount * spaRatio);
+        const barberiaAmount = amount - spaAmount;
+        spaCollectedCents += spaAmount;
+        barberiaCollectedCents += barberiaAmount;
+      }
+
+      // Distribución de ingresos cobrados al colaborador asignado
+      const bServices = b.booking_services || [];
+      const totalBServicesPrice = bServices.reduce(
+        (sum: number, s: any) => sum + (s.service_price_cents || 0),
+        0
+      ) || b.total_price_cents || 1;
+
+      if (bServices.length > 0) {
+        bServices.forEach((bs: any) => {
+          const workerId = bs.assigned_employee_id || b.assigned_employee_id;
+          if (workerId) {
+            const sPrice = bs.service_price_cents || 0;
+            const share = totalBServicesPrice > 0 ? sPrice / totalBServicesPrice : 1 / bServices.length;
+            const allocated = Math.round(amount * share);
+            if (!employeesMap[workerId]) {
+              const empInfo = employeeMap.get(workerId);
+              employeesMap[workerId] = {
+                employee_id: workerId,
+                employee_name: empInfo ? getEmployeeFullName(empInfo) : "Sin asignar",
+                position: empInfo ? getEmployeePosition(empInfo.type) : "Especialista",
+                bookings_count: 0,
+                completed_count: 0,
+                total_revenue_collected_cents: 0,
+                total_duration_minutes: 0,
+              };
+            }
+            employeesMap[workerId].total_revenue_collected_cents += allocated;
+          }
+        });
+      } else if (b.assigned_employee_id) {
+        const workerId = b.assigned_employee_id;
+        if (!employeesMap[workerId]) {
+          const empInfo = employeeMap.get(workerId);
+          employeesMap[workerId] = {
+            employee_id: workerId,
+            employee_name: empInfo ? getEmployeeFullName(empInfo) : "Sin asignar",
+            position: empInfo ? getEmployeePosition(empInfo.type) : "Especialista",
+            bookings_count: 0,
+            completed_count: 0,
+            total_revenue_collected_cents: 0,
+            total_duration_minutes: 0,
+          };
+        }
+        employeesMap[workerId].total_revenue_collected_cents += amount;
+      }
+    }
+  });
+
+  // B. Compatibilidad histórica para reservas confirmadas sin registro en payment_logs
+  filteredBookings.forEach((b) => {
+    const hasLogs = (b as any).payment_logs && (b as any).payment_logs.length > 0;
+    if (!hasLogs && !coveredBookingIds.has(b.id)) {
+      const validIncomeCents = calculateValidIncomeForBooking(b);
+      const isConfirmedOrCompleted = b.status === "confirmada" || b.status === "completada";
+
+      if (isConfirmedOrCompleted && validIncomeCents > 0) {
+        totalCollectedCents += validIncomeCents;
+
+        const normMethod = normalizePaymentMethod(b.payment_method);
+        if (normMethod === "yape") yapeCollectedCents += validIncomeCents;
+        else if (normMethod === "efectivo") cashCollectedCents += validIncomeCents;
+        else if (normMethod === "transferencia") transferCollectedCents += validIncomeCents;
+        else if (normMethod === "mixto") {
+          mixedCollectedCents += validIncomeCents;
+          const half = Math.floor(validIncomeCents / 2);
+          yapeCollectedCents += half;
+          cashCollectedCents += (validIncomeCents - half);
+        } else if (normMethod === "culqi_legacy") culqiCollectedCents += validIncomeCents;
+        else cashCollectedCents += validIncomeCents;
+
+        if (b.payment_status === "parcial") {
+          advancesCollectedCents += validIncomeCents;
+        }
+
+        if (b.service_type === "spa") {
+          spaCollectedCents += validIncomeCents;
+        } else if (b.service_type === "barberia") {
+          barberiaCollectedCents += validIncomeCents;
+        } else {
+          const bServices = b.booking_services || [];
+          let spaSum = 0;
+          let barberiaSum = 0;
+          bServices.forEach((bs) => {
+            const type = bs.services?.type || "barberia";
+            const price = bs.service_price_cents || 0;
+            if (type === "spa") spaSum += price;
+            else barberiaSum += price;
+          });
+          const sumTotal = spaSum + barberiaSum || 1;
+          const spaRatio = spaSum / sumTotal;
+          const spaAmount = Math.round(validIncomeCents * spaRatio);
+          const barberiaAmount = validIncomeCents - spaAmount;
+          spaCollectedCents += spaAmount;
+          barberiaCollectedCents += barberiaAmount;
+        }
+
+        if (b.assigned_employee_id) {
+          if (!employeesMap[b.assigned_employee_id]) {
+            const empInfo = employeeMap.get(b.assigned_employee_id);
+            employeesMap[b.assigned_employee_id] = {
+              employee_id: b.assigned_employee_id,
+              employee_name: empInfo ? getEmployeeFullName(empInfo) : "Sin asignar",
+              position: empInfo ? getEmployeePosition(empInfo.type) : "Especialista",
+              bookings_count: 0,
+              completed_count: 0,
+              total_revenue_collected_cents: 0,
+              total_duration_minutes: 0,
+            };
+          }
+          employeesMap[b.assigned_employee_id].total_revenue_collected_cents += validIncomeCents;
+        }
+      }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Construir Lista de Pagos (payment_logs reales + reservas históricas)
+  // ---------------------------------------------------------------------------
+  const paymentsList: PaymentReportItem[] = [];
+
+  filteredPayments.forEach((p) => {
     const clientName = p.bookings
       ? `${p.bookings.client_first_name || ""} ${p.bookings.client_last_name || ""}`.trim()
       : "Cliente";
@@ -940,7 +1150,7 @@ export async function buildFullReportData(
       client_name: clientName,
       amount_cents: p.amount_cents,
       payment_method: p.payment_method,
-      payment_type: p.payment_type,
+      payment_type: p.payment_type || "total",
       yape_amount_cents: p.yape_amount_cents || 0,
       cash_amount_cents: p.cash_amount_cents || 0,
       status: p.status,
@@ -954,10 +1164,11 @@ export async function buildFullReportData(
     });
   });
 
-  // Sintetizar entradas para reservas confirmadas con dinero cobrado que no tengan fila separada en payment_logs
+  // Sintetizar entradas solo para reservas confirmadas históricas sin filas en payment_logs
   filteredBookings.forEach((b) => {
+    const hasLogs = (b as any).payment_logs && (b as any).payment_logs.length > 0;
     const validIncome = calculateValidIncomeForBooking(b);
-    if (validIncome > 0 && !coveredBookingIds.has(b.id)) {
+    if (!hasLogs && validIncome > 0 && !coveredBookingIds.has(b.id)) {
       const clientName = `${b.client_first_name || ""} ${b.client_last_name || ""}`.trim();
       paymentsList.push({
         id: `direct_${b.id}`,
@@ -970,7 +1181,7 @@ export async function buildFullReportData(
         yape_amount_cents: b.payment_method === "yape" ? validIncome : 0,
         cash_amount_cents: b.payment_method === "cash" || b.payment_method === "efectivo" ? validIncome : 0,
         status: "verified",
-        notes: "Cobro registrado en reserva",
+        notes: "Cobro registrado en reserva (histórico)",
         proof_url: null,
         paid_at: b.confirmed_at || b.created_at,
         registered_by_name: null,

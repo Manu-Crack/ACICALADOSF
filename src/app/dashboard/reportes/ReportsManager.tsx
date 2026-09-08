@@ -2097,7 +2097,36 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
                       return (
                         <tr key={p.id} style={{ borderBottom: "1px solid var(--color-border)", opacity: isVoided ? 0.6 : 1 }}>
                           <td style={{ padding: "10px 12px", fontWeight: 700 }}>{p.booking_code}</td>
-                          <td style={{ padding: "10px 12px" }}>{p.client_name}</td>
+                          <td style={{ padding: "10px 12px" }}>
+                            <div style={{ fontWeight: 600 }}>{p.client_name}</div>
+                            <div style={{ marginTop: 3 }}>
+                              {p.payment_type === "advance" && (
+                                <span className="badge badge-warning" style={{ fontSize: "0.65rem", padding: "1px 6px" }}>
+                                  Adelanto / Parcial
+                                </span>
+                              )}
+                              {p.payment_type === "balance" && (
+                                <span
+                                  className="badge"
+                                  style={{
+                                    fontSize: "0.65rem",
+                                    padding: "1px 6px",
+                                    background: "rgba(56, 189, 248, 0.15)",
+                                    color: "#38bdf8",
+                                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Liquidación Saldo
+                                </span>
+                              )}
+                              {(p.payment_type === "full" || p.payment_type === "total") && (
+                                <span className="badge badge-success" style={{ fontSize: "0.65rem", padding: "1px 6px" }}>
+                                  Pago Completo
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: isVoided ? "var(--color-text-muted)" : "var(--color-success)" }}>
                             S/ {(p.amount_cents / 100).toFixed(2)}
                           </td>

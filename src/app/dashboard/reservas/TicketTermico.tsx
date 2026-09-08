@@ -158,26 +158,46 @@ export function TicketTermico({
       </table>
 
       <div className="total-container">
-        <span>TOTAL A PAGAR:</span>
+        <span>TOTAL DEL SERVICIO:</span>
         <span>S/. {totalReserva}</span>
       </div>
 
-      {booking.advance_amount_cents !== undefined && booking.advance_amount_cents > 0 && booking.payment_status === "parcial" && (
+      {/* Detalle de cobro con adelanto parcial */}
+      {(booking.payment_status === "parcial" || (booking.advance_amount_cents !== undefined && booking.advance_amount_cents > 0 && booking.advance_amount_cents < booking.total_price_cents)) && (
         <div style={{ marginTop: "4px", fontSize: "11px" }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <span>ADELANTO ABONADO:</span>
-            <span>S/. {(booking.advance_amount_cents / 100).toFixed(2)}</span>
+            <span>
+              S/. {((booking.advance_amount_cents || 0) / 100).toFixed(2)}
+              {booking.payment_method ? ` (${booking.payment_method.toUpperCase()})` : ""}
+            </span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderTop: "1px dashed #000000", marginTop: "2px", paddingTop: "2px" }}>
-            <span>SALDO PENDIENTE:</span>
-            <span>S/. {(((booking.balance_cents !== undefined && booking.balance_cents >= 0) ? booking.balance_cents : Math.max(0, booking.total_price_cents - booking.advance_amount_cents)) / 100).toFixed(2)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderTop: "1px dashed #000000", marginTop: "3px", paddingTop: "3px" }}>
+            <span>SALDO PENDIENTE POR PAGAR:</span>
+            <span>
+              S/. {(((booking.balance_cents !== undefined && booking.balance_cents >= 0) ? booking.balance_cents : Math.max(0, booking.total_price_cents - (booking.advance_amount_cents || 0))) / 100).toFixed(2)}
+            </span>
           </div>
         </div>
       )}
 
+      {/* Detalle tras liquidación completa o pago total */}
       {booking.payment_status === "total" && (
-        <div style={{ textAlign: "center", fontSize: "11px", fontWeight: "bold", marginTop: "4px" }}>
-          *** CANCELADO TOTAL ***
+        <div style={{ marginTop: "4px", fontSize: "11px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span>TOTAL PAGADO:</span>
+            <span>
+              S/. {(booking.total_price_cents / 100).toFixed(2)}
+              {booking.payment_method ? ` (${booking.payment_method.toUpperCase()})` : ""}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderTop: "1px dashed #000000", marginTop: "3px", paddingTop: "3px" }}>
+            <span>SALDO PENDIENTE:</span>
+            <span>S/. 0.00</span>
+          </div>
+          <div style={{ textAlign: "center", fontSize: "11px", fontWeight: "bold", marginTop: "5px" }}>
+            *** CANCELADO TOTAL ***
+          </div>
         </div>
       )}
 

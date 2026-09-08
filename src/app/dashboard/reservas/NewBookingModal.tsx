@@ -110,6 +110,10 @@ export function NewBookingModal({
     }
   });
 
+  // Modo de Cobro Presencial: 'full' (Pago Completo) vs 'advance' (Registrar con Adelanto)
+  const [paymentMode, setPaymentMode] = useState<"full" | "advance">("full");
+  const [advanceAmount, setAdvanceAmount] = useState<string>("");
+
   // Método de Pago Presencial: 4 Opciones (Efectivo, Yape, Transferencia, Mixto)
   const [paymentMethod, setPaymentMethod] = useState<WalkInPaymentMethod>("efectivo");
 
@@ -140,6 +144,8 @@ export function NewBookingModal({
     setCustomServicePrices({});
     setEditingServiceId(null);
     setTempEditingPrice("");
+    setPaymentMode("full");
+    setAdvanceAmount("");
 
     async function loadData() {
       setLoadingInitial(true);
@@ -229,6 +235,31 @@ export function NewBookingModal({
   }, [customTotalPrice, selectedServicesTotalPriceCents]);
 
   const effectiveTotalPriceSoles = (effectiveTotalPriceCents / 100).toFixed(2);
+
+  // Monto numérico de adelanto y saldo pendiente reactivo en tiempo real
+  const parsedAdvanceSoles = useMemo(() => {
+    if (paymentMode === "full") return effectiveTotalPriceCents / 100;
+    const num = parseFloat(advanceAmount);
+    return isNaN(num) || num < 0 ? 0 : num;
+  }, [paymentMode, advanceAmount, effectiveTotalPriceCents]);
+
+  const advanceAmountCents = useMemo(() => {
+    return Math.round(parsedAdvanceSoles * 100);
+  }, [parsedAdvanceSoles]);
+
+  const pendingBalanceCents = useMemo(() => {
+    if (paymentMode === "full") return 0;
+    return Math.max(0, effectiveTotalPriceCents - advanceAmountCents);
+  }, [paymentMode, effectiveTotalPriceCents, advanceAmountCents]);
+
+  const pendingBalanceSoles = (pendingBalanceCents / 100).toFixed(2);
+
+  // Si se cambia a modo adelanto y estaba seleccionado mixto, cambiar a efectivo
+  useEffect(() => {
+    if (paymentMode === "advance" && paymentMethod === "mixto") {
+      setPaymentMethod("efectivo");
+    }
+  }, [paymentMode, paymentMethod]);
 
   // Conteo de catálogo por rubro
   const barberiaCount = useMemo(() => services.filter((s) => s.type === "barberia").length, [services]);
@@ -442,11 +473,29 @@ export function NewBookingModal({
       }
     }
 
-    // Validar montos en pago mixto
+    // Validar monto de adelanto si se seleccionó registrar con adelanto
+    if (paymentMode === "advance") {
+      if (!advanceAmount.trim() || parsedAdvanceSoles <= 0) {
+        setErrorMsg("Por favor, ingresa un monto de adelanto válido mayor a S/ 0.00.");
+        return;
+      }
+      if (advanceAmountCents > effectiveTotalPriceCents) {
+        setErrorMsg(
+          `El monto del adelanto (S/ ${parsedAdvanceSoles.toFixed(2)}) no puede exceder el total a cobrar (S/ ${effectiveTotalPriceSoles}).`
+        );
+        return;
+      }
+      if (paymentMethod === "mixto") {
+        setErrorMsg("Para registrar un adelanto, selecciona Efectivo, Yape o Transferencia.");
+        return;
+      }
+    }
+
+    // Validar montos en pago mixto (solo para pago completo)
     let yapeCents = 0;
     let cashCents = 0;
 
-    if (paymentMethod === "mixto") {
+    if (paymentMode === "full" && paymentMethod === "mixto") {
       const yNum = parseFloat(yapeAmount) || 0;
       const cNum = parseFloat(cashAmount) || 0;
       const sum = Math.round((yNum + cNum) * 100);
@@ -486,6 +535,8 @@ export function NewBookingModal({
         service_assignments: assignmentMode === "custom" ? serviceAssignments : undefined,
         booking_date: bookingDate,
         start_time: startTime,
+        payment_mode: paymentMode,
+        advance_amount_cents: paymentMode === "advance" ? advanceAmountCents : effectiveTotalPriceCents,
         payment_method: paymentMethod,
         yape_amount_cents: yapeCents,
         cash_amount_cents: cashCents,
@@ -503,7 +554,11 @@ export function NewBookingModal({
         throw new Error(data.error || "Error al crear la reserva presencial");
       }
 
-      setSuccessMsg(`¡Reserva ${data.booking?.booking_code || ""} confirmada y distribuida con éxito!`);
+      const successNotice = paymentMode === "advance" && pendingBalanceCents > 0
+        ? `¡Reserva ${data.booking?.booking_code || ""} confirmada con adelanto de S/ ${parsedAdvanceSoles.toFixed(2)}! Saldo pendiente: S/ ${pendingBalanceSoles}.`
+        : `¡Reserva ${data.booking?.booking_code || ""} confirmada y pagada completa con éxito!`;
+
+      setSuccessMsg(successNotice);
 
       // Limpiar formulario y cerrar
       setTimeout(() => {
@@ -515,6 +570,8 @@ export function NewBookingModal({
         setClientDni("");
         setClientEmail("");
         setAssignedEmployeeId("");
+        setPaymentMode("full");
+        setAdvanceAmount("");
         setPaymentMethod("efectivo");
         setSearchQuery("");
         setIsCustomPrice(false);
@@ -1357,105 +1414,270 @@ export function NewBookingModal({
 
             {/* SECCIÓN 4: MÉTODO DE PAGO Y CONFIRMACIÓN */}
             <div>
-              <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", marginBottom: 10, letterSpacing: "0.05em" }}>
-                4. Método de Pago y Confirmación *
-              </h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-                {/* Opción 1: Efectivo */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-primary, #C8A45C)", margin: 0, letterSpacing: "0.05em" }}>
+                  4. Modalidad de Cobro y Método de Pago *
+                </h3>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                  Total Cita: <strong style={{ color: "#fff" }}>S/ {effectiveTotalPriceSoles}</strong>
+                </span>
+              </div>
+
+              {/* Selector de Modalidad: Pago Completo vs Registrar con Adelanto */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                 <div
-                  onClick={() => setPaymentMethod("efectivo")}
+                  onClick={() => setPaymentMode("full")}
                   style={{
-                    padding: "10px 12px",
+                    padding: "12px 14px",
                     borderRadius: "var(--radius-md, 8px)",
-                    border: paymentMethod === "efectivo"
+                    border: paymentMode === "full"
                       ? "2px solid #22c55e"
                       : "1px solid var(--color-border, rgba(255,255,255,0.08))",
-                    background: paymentMethod === "efectivo" ? "rgba(34, 197, 94, 0.12)" : "rgba(255,255,255,0.02)",
+                    background: paymentMode === "full" ? "rgba(34, 197, 94, 0.12)" : "rgba(255,255,255,0.02)",
                     cursor: "pointer",
                     transition: "all 0.15s ease",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "efectivo" ? "#22c55e" : "#fff" }}>
-                    <span>💵</span>
-                    <span>Efectivo</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMode === "full" ? "#22c55e" : "#fff" }}>
+                    <span>💳</span>
+                    <span>Pago Completo (100%)</span>
                   </div>
-                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-                    Cobro físico en mostrador
+                  <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                    Cobrar la totalidad de <strong>S/ {effectiveTotalPriceSoles}</strong> ahora
                   </p>
                 </div>
 
-                {/* Opción 2: Yape */}
                 <div
-                  onClick={() => setPaymentMethod("yape")}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "var(--radius-md, 8px)",
-                    border: paymentMethod === "yape"
-                      ? "2px solid #a855f7"
-                      : "1px solid var(--color-border, rgba(255,255,255,0.08))",
-                    background: paymentMethod === "yape" ? "rgba(168, 85, 247, 0.12)" : "rgba(255,255,255,0.02)",
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
+                  onClick={() => {
+                    setPaymentMode("advance");
+                    if (!advanceAmount || parseFloat(advanceAmount) === 0) {
+                      // Sugerir 30% por defecto si no ha escrito nada
+                      const defVal = (Math.round((effectiveTotalPriceCents * 0.3) / 100)).toFixed(2);
+                      setAdvanceAmount(defVal);
+                    }
                   }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "yape" ? "#c084fc" : "#fff" }}>
-                    <span>💜</span>
-                    <span>Yape</span>
-                  </div>
-                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-                    Pago vía App / Código QR
-                  </p>
-                </div>
-
-                {/* Opción 3: Transferencia */}
-                <div
-                  onClick={() => setPaymentMethod("transferencia")}
                   style={{
-                    padding: "10px 12px",
+                    padding: "12px 14px",
                     borderRadius: "var(--radius-md, 8px)",
-                    border: paymentMethod === "transferencia"
-                      ? "2px solid #3b82f6"
-                      : "1px solid var(--color-border, rgba(255,255,255,0.08))",
-                    background: paymentMethod === "transferencia" ? "rgba(59, 130, 246, 0.12)" : "rgba(255,255,255,0.02)",
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "transferencia" ? "#60a5fa" : "#fff" }}>
-                    <span>🏦</span>
-                    <span>Transferencia</span>
-                  </div>
-                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-                    BCP, BBVA, Interbank, Plin
-                  </p>
-                </div>
-
-                {/* Opción 4: Mixto (Yape + Efectivo) */}
-                <div
-                  onClick={() => setPaymentMethod("mixto")}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "var(--radius-md, 8px)",
-                    border: paymentMethod === "mixto"
+                    border: paymentMode === "advance"
                       ? "2px solid #f59e0b"
                       : "1px solid var(--color-border, rgba(255,255,255,0.08))",
-                    background: paymentMethod === "mixto" ? "rgba(245, 158, 11, 0.12)" : "rgba(255,255,255,0.02)",
+                    background: paymentMode === "advance" ? "rgba(245, 158, 11, 0.12)" : "rgba(255,255,255,0.02)",
                     cursor: "pointer",
                     transition: "all 0.15s ease",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "mixto" ? "#f59e0b" : "#fff" }}>
-                    <span>🔄</span>
-                    <span>Mixto</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMode === "advance" ? "#f59e0b" : "#fff" }}>
+                    <span>💰</span>
+                    <span>Registrar con Adelanto</span>
                   </div>
-                  <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
-                    Yape + Efectivo combinado
+                  <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                    Cobrar anticipo manual y liquidar saldo pendiente después
                   </p>
                 </div>
               </div>
 
-              {/* Panel de desglose interactivo para Pago Mixto */}
-              {paymentMethod === "mixto" && (
+              {/* Panel de Adelanto Manual e Indicador en Vivo de Saldo Pendiente */}
+              {paymentMode === "advance" && (
+                <div
+                  style={{
+                    marginBottom: 14,
+                    padding: "14px 16px",
+                    borderRadius: "var(--radius-md, 8px)",
+                    background: "rgba(245, 158, 11, 0.08)",
+                    border: "1px solid rgba(245, 158, 11, 0.3)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "center" }}>
+                    {/* Campo Monto del Adelanto (Manual / Editable) */}
+                    <div>
+                      <label className="label" style={{ fontSize: "0.75rem", fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                        <span>💵</span>
+                        <span>Monto del Adelanto (Manual / Editable) *</span>
+                      </label>
+                      <div style={{ display: "inline-flex", alignItems: "center", position: "relative", width: "100%" }}>
+                        <span style={{ position: "absolute", left: 10, fontWeight: 800, fontSize: "1rem", color: "#f59e0b", pointerEvents: "none" }}>
+                          S/
+                        </span>
+                        <input
+                          type="number"
+                          step="0.50"
+                          min="0.01"
+                          max={effectiveTotalPriceSoles}
+                          className="input"
+                          placeholder="0.00"
+                          value={advanceAmount}
+                          onChange={(e) => setAdvanceAmount(e.target.value)}
+                          style={{ width: "100%", paddingLeft: 34, fontWeight: 800, fontSize: "1.05rem", color: "#fff" }}
+                        />
+                      </div>
+                      {/* Atajos rápidos de porcentajes para comodidad de recepción */}
+                      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", alignSelf: "center" }}>Sugerir:</span>
+                        {[20, 25, 30, 50].map((pct) => {
+                          const val = (Math.round((effectiveTotalPriceCents * (pct / 100)) / 100)).toFixed(2);
+                          return (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => setAdvanceAmount(val)}
+                              style={{
+                                background: "rgba(245, 158, 11, 0.15)",
+                                border: "1px solid rgba(245, 158, 11, 0.35)",
+                                color: "#f59e0b",
+                                borderRadius: "4px",
+                                fontSize: "0.68rem",
+                                padding: "2px 6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {pct}% (S/ {val})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Indicador en Tiempo Real de Saldo Pendiente */}
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        background: "rgba(0, 0, 0, 0.4)",
+                        border: "1px dashed rgba(245, 158, 11, 0.4)",
+                        borderRadius: "var(--radius-sm, 6px)",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <span style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>
+                        Indicador en Tiempo Real
+                      </span>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 2 }}>
+                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#fff" }}>
+                          Saldo Pendiente:
+                        </span>
+                        <span style={{ fontSize: "1.2rem", fontWeight: 800, color: pendingBalanceCents > 0 ? "#f59e0b" : "#22c55e" }}>
+                          S/ {pendingBalanceSoles}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                        <span>Cobrado Hoy: <strong>S/ {parsedAdvanceSoles.toFixed(2)}</strong></span>
+                        <span>Total: <strong>S/ {effectiveTotalPriceSoles}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Selector de Método de Pago Dedicado */}
+              <div style={{ marginBottom: 6 }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-text-muted)", display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {paymentMode === "advance" ? "Método de Pago para el Adelanto:" : "Método de Pago Total:"}
+                </span>
+
+                <div style={{ display: "grid", gridTemplateColumns: paymentMode === "advance" ? "repeat(auto-fit, minmax(130px, 1fr))" : "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                  {/* Opción 1: Efectivo */}
+                  <div
+                    onClick={() => setPaymentMethod("efectivo")}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "var(--radius-md, 8px)",
+                      border: paymentMethod === "efectivo"
+                        ? "2px solid #22c55e"
+                        : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                      background: paymentMethod === "efectivo" ? "rgba(34, 197, 94, 0.12)" : "rgba(255,255,255,0.02)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "efectivo" ? "#22c55e" : "#fff" }}>
+                      <span>💵</span>
+                      <span>Efectivo</span>
+                    </div>
+                    <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                      Cobro físico en mostrador
+                    </p>
+                  </div>
+
+                  {/* Opción 2: Yape */}
+                  <div
+                    onClick={() => setPaymentMethod("yape")}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "var(--radius-md, 8px)",
+                      border: paymentMethod === "yape"
+                        ? "2px solid #a855f7"
+                        : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                      background: paymentMethod === "yape" ? "rgba(168, 85, 247, 0.12)" : "rgba(255,255,255,0.02)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "yape" ? "#c084fc" : "#fff" }}>
+                      <span>💜</span>
+                      <span>Yape</span>
+                    </div>
+                    <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                      Pago vía App / Código QR
+                    </p>
+                  </div>
+
+                  {/* Opción 3: Transferencia */}
+                  <div
+                    onClick={() => setPaymentMethod("transferencia")}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "var(--radius-md, 8px)",
+                      border: paymentMethod === "transferencia"
+                        ? "2px solid #3b82f6"
+                        : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                      background: paymentMethod === "transferencia" ? "rgba(59, 130, 246, 0.12)" : "rgba(255,255,255,0.02)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "transferencia" ? "#60a5fa" : "#fff" }}>
+                      <span>🏦</span>
+                      <span>Transferencia</span>
+                    </div>
+                    <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                      BCP, BBVA, Interbank, Plin
+                    </p>
+                  </div>
+
+                  {/* Opción 4: Mixto (solo disponible en Pago Completo) */}
+                  {paymentMode === "full" && (
+                    <div
+                      onClick={() => setPaymentMethod("mixto")}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "var(--radius-md, 8px)",
+                        border: paymentMethod === "mixto"
+                          ? "2px solid #f59e0b"
+                          : "1px solid var(--color-border, rgba(255,255,255,0.08))",
+                        background: paymentMethod === "mixto" ? "rgba(245, 158, 11, 0.12)" : "rgba(255,255,255,0.02)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMethod === "mixto" ? "#f59e0b" : "#fff" }}>
+                        <span>🔄</span>
+                        <span>Mixto</span>
+                      </div>
+                      <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
+                        Yape + Efectivo combinado
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Panel de desglose interactivo para Pago Mixto (solo pago completo) */}
+              {paymentMode === "full" && paymentMethod === "mixto" && (
                 <div
                   style={{
                     marginTop: 12,
@@ -1513,10 +1735,22 @@ export function NewBookingModal({
               )}
 
               {/* Mensaje de confirmación del método */}
-              <div style={{ marginTop: 8, fontSize: "0.75rem", color: "#22c55e" }}>
-                <span>
-                  ✓ Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {effectiveTotalPriceSoles})</strong> con comprobante de cobro registrado.
-                </span>
+              <div style={{ marginTop: 10, fontSize: "0.75rem" }}>
+                {paymentMode === "advance" ? (
+                  <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>✓</span>
+                    <span>
+                      La reserva se registrará con un <strong>ADELANTO de S/ {parsedAdvanceSoles.toFixed(2)}</strong> ({paymentMethod.toUpperCase()}) en caja hoy. Quedará un <strong>SALDO PENDIENTE de S/ {pendingBalanceSoles}</strong> indexado para cobro en recepción.
+                    </span>
+                  </span>
+                ) : (
+                  <span style={{ color: "#22c55e", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>✓</span>
+                    <span>
+                      Al guardar, la reserva quedará <strong>confirmada</strong> y marcada como <strong>PAGADO COMPLETO (S/ {effectiveTotalPriceSoles})</strong> con comprobante de cobro registrado en caja hoy.
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
 

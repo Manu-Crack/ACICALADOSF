@@ -222,6 +222,7 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
   wsPagos.columns = [
     { header: "Cód. Reserva", key: "booking_code", width: 14 },
     { header: "Cliente", key: "client", width: 24 },
+    { header: "Tipo de Cobro", key: "payment_type", width: 18 },
     { header: "Monto Total (S/)", key: "amount", width: 16 },
     { header: "Método", key: "method", width: 14 },
     { header: "Monto Yape (S/)", key: "yape", width: 16 },
@@ -239,9 +240,17 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
   headerRow3.height = 24;
 
   data.payments.forEach((p) => {
+    const typeLabel =
+      p.payment_type === "advance"
+        ? "Adelanto / Anticipo"
+        : p.payment_type === "balance"
+        ? "Liquidación de Saldo"
+        : "Pago Completo";
+
     const row = wsPagos.addRow({
       booking_code: sanitizeForExcel(p.booking_code),
       client: sanitizeForExcel(p.client_name),
+      payment_type: typeLabel,
       amount: p.amount_cents / 100,
       method: p.payment_method,
       yape: p.yape_amount_cents / 100,
@@ -253,7 +262,7 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
       void_reason: sanitizeForExcel(p.void_reason || "—"),
     });
 
-    [3, 5, 6].forEach((colIdx) => {
+    [4, 6, 7].forEach((colIdx) => {
       row.getCell(colIdx).numFmt = CURRENCY_FORMAT;
     });
 
@@ -262,7 +271,7 @@ export async function generateExcelReport(data: FullReportData): Promise<Uint8Ar
     }
   });
 
-  wsPagos.autoFilter = "A1:K1";
+  wsPagos.autoFilter = "A1:L1";
 
   // =========================================================================
   // HOJA 4: SERVICIOS

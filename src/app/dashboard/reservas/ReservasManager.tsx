@@ -1322,56 +1322,86 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
 
                     {/* 7. Pago */}
                     <div>
-                      <span
-                        className={`badge ${
-                          b.payment_status === "total"
-                            ? "badge-success"
-                            : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                            ? "badge-warning"
-                            : "badge-error"
-                        }`}
-                        style={{
-                          fontWeight: 700,
-                          letterSpacing: "0.03em",
-                          fontSize: "0.72rem",
-                        }}
-                      >
-                        {b.payment_status === "total"
-                          ? "PAGADO COMPLETO"
-                          : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
-                          ? "SALDO PENDIENTE"
-                          : "SIN PAGO"}
-                      </span>
-
-                      {/* Monto restante si es saldo pendiente */}
-                      {(b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)) && (
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: "0.7rem",
-                            color: "var(--color-warning, #f59e0b)",
-                            marginTop: 4,
-                            fontWeight: 600,
-                          }}
-                        >
-                          Resta: S/ {((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)}
-                        </span>
-                      )}
-
-                      {/* Método de pago si ya está completado */}
-                      {b.payment_method && b.payment_status === "total" && (
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: "0.7rem",
-                            color: "var(--color-text-muted)",
-                            marginTop: 4,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {PAYMENT_METHOD_ICONS[b.payment_method as PaymentMethod] || "💳"}{" "}
-                          {PAYMENT_METHOD_LABELS[b.payment_method as PaymentMethod] || b.payment_method}
-                        </span>
+                      {b.payment_status === "total" ? (
+                        <div>
+                          <span
+                            className="badge badge-success"
+                            style={{
+                              fontWeight: 700,
+                              letterSpacing: "0.03em",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            PAGADO COMPLETO
+                          </span>
+                          {b.payment_method && (
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: "0.7rem",
+                                color: "var(--color-text-muted)",
+                                marginTop: 3,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {PAYMENT_METHOD_ICONS[b.payment_method as PaymentMethod] || "💳"}{" "}
+                              {PAYMENT_METHOD_LABELS[b.payment_method as PaymentMethod] || b.payment_method}
+                            </span>
+                          )}
+                        </div>
+                      ) : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents) ? (
+                        <div>
+                          <span
+                            className="badge badge-warning"
+                            style={{
+                              fontWeight: 700,
+                              letterSpacing: "0.03em",
+                              fontSize: "0.72rem",
+                              background: "rgba(245, 158, 11, 0.18)",
+                              color: "#f59e0b",
+                              borderColor: "rgba(245, 158, 11, 0.4)",
+                            }}
+                          >
+                            ADELANTO / PARCIAL
+                          </span>
+                          <div style={{ fontSize: "0.69rem", marginTop: 4, lineHeight: "1.3" }}>
+                            <span style={{ color: "#22c55e", fontWeight: 700, display: "block" }}>
+                              Adelanto: S/ {(b.advance_amount_cents / 100).toFixed(2)}
+                            </span>
+                            <span style={{ color: "#f59e0b", fontWeight: 700, display: "block" }}>
+                              Pendiente: S/ {((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - b.advance_amount_cents)) / 100).toFixed(2)}
+                            </span>
+                          </div>
+                          {b.payment_method && (
+                            <span style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", display: "block", marginTop: 2 }}>
+                              ({b.payment_method})
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <span
+                            className="badge badge-error"
+                            style={{
+                              fontWeight: 700,
+                              letterSpacing: "0.03em",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            SIN PAGO
+                          </span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "0.7rem",
+                              color: "var(--color-error)",
+                              marginTop: 3,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Pendiente: S/ {(b.total_price_cents / 100).toFixed(2)}
+                          </span>
+                        </div>
                       )}
                     </div>
 
@@ -1766,6 +1796,50 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                           </p>
                         )}
                       </div>
+
+                      {/* Balance Financiero y Estado de Cobro */}
+                      <div>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "var(--color-text-muted)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                            marginBottom: 8,
+                          }}
+                        >
+                          Balance Financiero
+                        </p>
+                        <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 3 }}>
+                          Total Contratado: <strong style={{ color: "#fff" }}>S/ {(b.total_price_cents / 100).toFixed(2)}</strong>
+                        </p>
+                        <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 3 }}>
+                          Cobrado / Adelanto: <strong style={{ color: "#22c55e" }}>S/ {(b.advance_amount_cents / 100).toFixed(2)}</strong> {b.payment_method ? `(${b.payment_method})` : ""}
+                        </p>
+                        <p className="text-muted" style={{ fontSize: "0.8125rem", marginBottom: 4 }}>
+                          Saldo Pendiente:{" "}
+                          <strong style={{ color: (b.balance_cents ?? Math.max(0, b.total_price_cents - b.advance_amount_cents)) > 0 ? "#f59e0b" : "#22c55e" }}>
+                            S/ {(((b.balance_cents !== undefined && b.balance_cents >= 0) ? b.balance_cents : Math.max(0, b.total_price_cents - b.advance_amount_cents)) / 100).toFixed(2)}
+                          </strong>
+                        </p>
+                        <span
+                          className={`badge ${
+                            b.payment_status === "total"
+                              ? "badge-success"
+                              : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                              ? "badge-warning"
+                              : "badge-error"
+                          }`}
+                          style={{ fontSize: "0.7rem", fontWeight: 700 }}
+                        >
+                          {b.payment_status === "total"
+                            ? "✅ Pagado Completo"
+                            : b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                            ? "⏳ Adelanto Registrado"
+                            : "❌ Sin Pago Registrado"}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Sección Detalle Multi-Servicio y Asignación por Servicio */}
@@ -2150,6 +2224,51 @@ export function ReservasManager({ userRole = "admin" }: { userRole?: string }) {
                         alignItems: "center",
                       }}
                     >
+                      {/* Botón Destacado: Completar Pago / Cobrar Saldo Pendiente */}
+                      {b.status !== "cancelada" && (
+                        b.payment_status === "parcial" ||
+                        (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents) ||
+                        b.payment_status === "sin_pago" ||
+                        (b.balance_cents !== undefined && b.balance_cents > 0)
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPaymentModal(b);
+                          }}
+                          disabled={actionLoading === b.id}
+                          className="btn btn-sm"
+                          style={{
+                            padding: "8px 18px",
+                            fontSize: "0.8125rem",
+                            fontWeight: 800,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            background: "linear-gradient(135deg, #22c55e, #16a34a)",
+                            color: "#ffffff",
+                            border: "none",
+                            borderRadius: "var(--radius-sm, 6px)",
+                            boxShadow: "0 2px 8px rgba(34, 197, 94, 0.35)",
+                            cursor: "pointer",
+                          }}
+                          title={
+                            b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                              ? `Completar cobro del saldo pendiente de S/ ${((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)}`
+                              : `Cobrar totalidad de la cita (S/ ${(b.total_price_cents / 100).toFixed(2)})`
+                          }
+                          id={`drawer-pay-btn-${b.id}`}
+                        >
+                          <span>💳</span>
+                          <span>
+                            {b.payment_status === "parcial" || (b.advance_amount_cents > 0 && b.advance_amount_cents < b.total_price_cents)
+                              ? `Completar Pago (Cobrar Saldo S/ ${((b.balance_cents !== undefined ? b.balance_cents : Math.max(0, b.total_price_cents - (b.advance_amount_cents || 0))) / 100).toFixed(2)})`
+                              : "Cobrar Cita"}
+                          </span>
+                        </button>
+                      )}
+
                       {/* Botón Principal: Imprimir Ticket Térmico (Admin + Recepcionista) */}
                       <button
                         type="button"

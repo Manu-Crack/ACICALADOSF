@@ -470,7 +470,13 @@ export async function POST(request: NextRequest) {
     const totalDuration = assignmentResult.total_duration_minutes;
     const finalPrimaryEmployeeId = assignmentResult.primary_employee_id;
 
-    // 5. Determinar método de pago inicial si fue cobrado en el mostrador
+    // 5. Determinar modo de cobro (Total vs Adelanto) y método de pago inicial
+    const paymentMode = body.payment_mode === "advance" ? "advance" : "full";
+    let initialAdvanceAmount = totalPriceCents;
+    let initialBalance = 0;
+    let initialPaymentStatus: "sin_pago" | "parcial" | "total" = "total";
+    let paymentLogType: "full" | "advance" = "full";
+
     const reqMethod = (body.payment_method || "").toLowerCase();
     let normalizedMethod: "cash" | "yape" | "transfer" | "mixed" | null = null;
     let dbPaymentMethodLabel: string | null = null;
@@ -478,42 +484,80 @@ export async function POST(request: NextRequest) {
     let yapeAmountCents = 0;
     let cashAmountCents = 0;
 
+    if (paymentMode === "advance") {
+      // Monto manual editable de adelanto
+      const parsedAdvance = parseInt(body.advance_amount_cents, 10);
+      if (isNaN(parsedAdvance) || parsedAdvance <= 0) {
+        return NextResponse.json(
+          { error: "El monto del adelanto debe ser un número válido mayor a S/ 0.00." },
+          { status: 422 }
+        );
+      }
+      if (parsedAdvance > totalPriceCents) {
+        return NextResponse.json(
+          { error: `El monto del adelanto (S/ ${(parsedAdvance / 100).toFixed(2)}) no puede exceder el total de la reserva (S/ ${(totalPriceCents / 100).toFixed(2)}).` },
+          { status: 422 }
+        );
+      }
+
+      initialAdvanceAmount = parsedAdvance;
+      initialBalance = Math.max(0, totalPriceCents - initialAdvanceAmount);
+      if (initialAdvanceAmount >= totalPriceCents) {
+        initialPaymentStatus = "total";
+        paymentLogType = "full";
+      } else {
+        initialPaymentStatus = "parcial";
+        paymentLogType = "advance";
+      }
+    } else {
+      // Pago completo
+      initialAdvanceAmount = totalPriceCents;
+      initialBalance = 0;
+      initialPaymentStatus = "total";
+      paymentLogType = "full";
+    }
+
+    const actualPaymentAmount = initialAdvanceAmount;
+
     if (reqMethod === "efectivo" || reqMethod === "cash") {
       normalizedMethod = "cash";
       dbPaymentMethodLabel = "efectivo";
-      cashAmountCents = totalPriceCents;
+      cashAmountCents = actualPaymentAmount;
     } else if (reqMethod === "yape") {
       normalizedMethod = "yape";
       dbPaymentMethodLabel = "yape";
-      yapeAmountCents = totalPriceCents;
+      yapeAmountCents = actualPaymentAmount;
     } else if (reqMethod === "transferencia" || reqMethod === "transfer") {
       normalizedMethod = "transfer";
       dbPaymentMethodLabel = "transferencia";
     } else if (reqMethod === "mixto" || reqMethod === "mixed") {
       normalizedMethod = "mixed";
       dbPaymentMethodLabel = "mixto";
-      // Montos desglosados de Yape y Efectivo
+      // Montos desglosados de Yape y Efectivo aplicados al monto cobrado hoy
       const rawYape = parseInt(body.yape_amount_cents, 10);
       const rawCash = parseInt(body.cash_amount_cents, 10);
 
-      if (!isNaN(rawYape) && rawYape >= 0 && rawYape <= totalPriceCents) {
+      if (!isNaN(rawYape) && rawYape >= 0 && rawYape <= actualPaymentAmount) {
         yapeAmountCents = rawYape;
-        cashAmountCents = Math.max(0, totalPriceCents - yapeAmountCents);
-      } else if (!isNaN(rawCash) && rawCash >= 0 && rawCash <= totalPriceCents) {
+        cashAmountCents = Math.max(0, actualPaymentAmount - yapeAmountCents);
+      } else if (!isNaN(rawCash) && rawCash >= 0 && rawCash <= actualPaymentAmount) {
         cashAmountCents = rawCash;
-        yapeAmountCents = Math.max(0, totalPriceCents - cashAmountCents);
+        yapeAmountCents = Math.max(0, actualPaymentAmount - cashAmountCents);
       } else {
-        // Por defecto mitades si no se especificaron
-        yapeAmountCents = Math.round(totalPriceCents / 2);
-        cashAmountCents = totalPriceCents - yapeAmountCents;
+        yapeAmountCents = Math.round(actualPaymentAmount / 2);
+        cashAmountCents = actualPaymentAmount - yapeAmountCents;
       }
+    } else {
+      // Si no se especificó método de pago válido
+      initialPaymentStatus = "sin_pago";
+      initialAdvanceAmount = 0;
+      initialBalance = totalPriceCents;
     }
 
-    const advancePercentage = 25;
+    const advancePercentage = totalPriceCents > 0
+      ? Math.round((initialAdvanceAmount / totalPriceCents) * 100)
+      : 25;
     const finalLastName = client_last_name?.trim() || "Presencial";
-    const initialPaymentStatus = normalizedMethod ? "total" : "sin_pago";
-    const initialAdvanceAmount = normalizedMethod ? totalPriceCents : 0;
-    const initialBalance = normalizedMethod ? 0 : totalPriceCents;
 
     // 6. Insertar registro principal de reserva en tabla 'bookings'
     const { data: newBooking, error: bookingError } = await admin
@@ -611,18 +655,25 @@ export async function POST(request: NextRequest) {
       console.error("Error al insertar booking_services:", bsError);
     }
 
-    // 9. Si se cobró inmediatamente en el mostrador, registrar en 'payment_logs'
-    if (normalizedMethod) {
+    // 9. Si se cobró inmediatamente en el mostrador (total o adelanto), registrar en 'payment_logs'
+    if (normalizedMethod && actualPaymentAmount > 0) {
       const nowIso = new Date().toISOString();
-      const notesMsg = normalizedMethod === "mixed"
-        ? `Cobro total presencial mixto (Yape: S/ ${(yapeAmountCents / 100).toFixed(2)} + Efectivo: S/ ${(cashAmountCents / 100).toFixed(2)})`
-        : `Cobro total presencial en mostrador (${dbPaymentMethodLabel})`;
+      let notesMsg = "";
+      if (paymentMode === "advance" && initialPaymentStatus === "parcial") {
+        notesMsg = normalizedMethod === "mixed"
+          ? `Adelanto presencial mixto de S/ ${(actualPaymentAmount / 100).toFixed(2)} (Yape: S/ ${(yapeAmountCents / 100).toFixed(2)} + Efectivo: S/ ${(cashAmountCents / 100).toFixed(2)}). Saldo pendiente: S/ ${(initialBalance / 100).toFixed(2)}`
+          : `Adelanto presencial en mostrador (${dbPaymentMethodLabel}) de S/ ${(actualPaymentAmount / 100).toFixed(2)}. Saldo pendiente: S/ ${(initialBalance / 100).toFixed(2)}`;
+      } else {
+        notesMsg = normalizedMethod === "mixed"
+          ? `Cobro total presencial mixto (Yape: S/ ${(yapeAmountCents / 100).toFixed(2)} + Efectivo: S/ ${(cashAmountCents / 100).toFixed(2)})`
+          : `Cobro total presencial en mostrador (${dbPaymentMethodLabel})`;
+      }
 
       const { error: payLogErr } = await admin.from("payment_logs").insert({
         booking_id: newBooking.id,
-        amount_cents: totalPriceCents,
+        amount_cents: actualPaymentAmount,
         payment_method: normalizedMethod,
-        payment_type: "full",
+        payment_type: paymentLogType,
         status: "verified",
         yape_amount_cents: yapeAmountCents,
         cash_amount_cents: cashAmountCents,

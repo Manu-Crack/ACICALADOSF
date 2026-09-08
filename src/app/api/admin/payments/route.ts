@@ -334,16 +334,16 @@ export async function POST(request: NextRequest) {
 
     if (payment_type === "advance" && amount_cents + currentPaid >= booking.total_price_cents) {
       resolvedPaymentType = "full";
-    } else if (payment_type === "balance" && currentPaid + amount_cents >= booking.total_price_cents) {
-      resolvedPaymentType = "full";
+    } else if (payment_type === "balance") {
+      resolvedPaymentType = "balance";
     }
 
     // Si es el primer pago y cubre exactamente o más del total
     if (currentPaid === 0 && amount_cents >= booking.total_price_cents) {
       resolvedPaymentType = "full";
     }
-    // Si es adelanto mínimo
-    if (currentPaid === 0 && amount_cents >= advanceRequired && amount_cents < booking.total_price_cents) {
+    // Si es adelanto inicial
+    if (currentPaid === 0 && amount_cents > 0 && amount_cents < booking.total_price_cents) {
       resolvedPaymentType = "advance";
     }
 

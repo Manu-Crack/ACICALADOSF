@@ -22,6 +22,30 @@ export type FinancialBooking = {
   created_at?: string;
 };
 
+export type FinancialPaymentLog = {
+  id: string;
+  booking_id: string;
+  amount_cents: number;
+  payment_method: string;
+  payment_type: string;
+  yape_amount_cents?: number | null;
+  cash_amount_cents?: number | null;
+  status: string;
+  paid_at: string;
+  bookings?: {
+    id?: string;
+    booking_code?: string;
+    client_first_name?: string | null;
+    client_last_name?: string | null;
+    service_type?: string | null;
+    booking_date?: string;
+    total_price_cents?: number;
+    advance_amount_cents?: number;
+    balance_cents?: number;
+    payment_status?: string;
+  } | null;
+};
+
 export type FinancialVenta = {
   id: string;
   cliente_nombre: string;
@@ -42,6 +66,7 @@ interface DashboardHomeProps {
   initialFinancialBookings?: FinancialBooking[];
   initialFinancialEgresos?: Egreso[];
   initialFinancialVentas?: FinancialVenta[];
+  initialFinancialPayments?: FinancialPaymentLog[];
 }
 
 const statusLabels: Record<string, string> = {
@@ -102,6 +127,7 @@ export function DashboardHome({
   initialFinancialBookings = [],
   initialFinancialEgresos = [],
   initialFinancialVentas = [],
+  initialFinancialPayments = [],
 }: DashboardHomeProps) {
   // Agenda & Operational stats state
   const [bookings, setBookings] = useState<FinancialBooking[]>(initialBookings);
@@ -111,6 +137,7 @@ export function DashboardHome({
   // Financial Panel state: 'day' | 'week' | 'month' | 'all'
   const [financialRange, setFinancialRange] = useState<"day" | "week" | "month" | "all">("day");
   const [financialBookings, setFinancialBookings] = useState<FinancialBooking[]>(initialFinancialBookings);
+  const [financialPayments, setFinancialPayments] = useState<FinancialPaymentLog[]>(initialFinancialPayments);
   const [financialEgresos, setFinancialEgresos] = useState<Egreso[]>(initialFinancialEgresos);
   const [financialVentas, setFinancialVentas] = useState<FinancialVenta[]>(initialFinancialVentas);
   const [financialTab, setFinancialTab] = useState<"todos" | "ingresos" | "ventas" | "egresos">("todos");
@@ -121,6 +148,12 @@ export function DashboardHome({
       setFinancialVentas(initialFinancialVentas);
     }
   }, [initialFinancialVentas]);
+
+  useEffect(() => {
+    if (initialFinancialPayments) {
+      setFinancialPayments(initialFinancialPayments);
+    }
+  }, [initialFinancialPayments]);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -160,7 +193,7 @@ export function DashboardHome({
     try {
       const { todayStr, mondayStr, sundayStr } = dateBounds;
 
-      const [todayRes, weekRes, financialBookingsRes, expensesRes, egresosRes, ventasData] = await Promise.all([
+      const [todayRes, weekRes, financialBookingsRes, paymentsRes, expensesRes, egresosRes, ventasData] = await Promise.all([
         supabase
           .from("bookings")
           .select(
@@ -183,6 +216,34 @@ export function DashboardHome({
           .in("status", ["confirmada", "completada", "pendiente"])
           .order("booking_date", { ascending: false })
           .limit(200),
+        supabase
+          .from("payment_logs")
+          .select(`
+            id,
+            booking_id,
+            amount_cents,
+            payment_method,
+            payment_type,
+            yape_amount_cents,
+            cash_amount_cents,
+            status,
+            paid_at,
+            bookings (
+              id,
+              booking_code,
+              client_first_name,
+              client_last_name,
+              service_type,
+              booking_date,
+              total_price_cents,
+              advance_amount_cents,
+              balance_cents,
+              payment_status
+            )
+          `)
+          .eq("status", "verified")
+          .order("paid_at", { ascending: false })
+          .limit(300),
         supabase
           .from("expenses")
           .select("*")
@@ -210,6 +271,9 @@ export function DashboardHome({
       }
       if (financialBookingsRes.data) {
         setFinancialBookings(financialBookingsRes.data as unknown as FinancialBooking[]);
+      }
+      if (paymentsRes.data) {
+        setFinancialPayments(paymentsRes.data as unknown as FinancialPaymentLog[]);
       }
       if (Array.isArray(ventasData)) {
         setFinancialVentas(ventasData);
@@ -542,15 +606,39 @@ export function DashboardHome({
       return true;
     });
 
-    // APLICACIÓN ESTRICTA: Solo considerar reservas confirmadas/pagadas (descartar pendientes)
-    const validConfirmedBookings = inRangeBookings.filter(
-      (b) => calculateValidIncomeForBooking(b) > 0
+    // REGLA ESTRICTA: Filtrar pagos reales verificados por fecha de cobro efectivo (paid_at en Perú)
+    const inRangePayments = financialPayments.filter((p) => {
+      if (!p.paid_at || p.status !== "verified") return false;
+      const paidDatePeru = getPeruDateString(new Date(p.paid_at));
+      if (financialRange === "day") {
+        return paidDatePeru === todayStr;
+      }
+      if (financialRange === "week") {
+        return paidDatePeru >= mondayStr && paidDatePeru <= sundayStr;
+      }
+      if (financialRange === "month") {
+        return paidDatePeru >= monthStartStr && paidDatePeru <= monthEndStr;
+      }
+      return true;
+    });
+
+    const paymentsIncomeCents = inRangePayments.reduce(
+      (acc, p) => acc + (p.amount_cents || 0),
+      0
     );
 
-    const totalServicesIncomeCents = validConfirmedBookings.reduce(
+    // Compatibilidad retrospectiva: reservas históricas sin registros en payment_logs
+    const coveredBookingIds = new Set(financialPayments.map((p) => p.booking_id));
+    const legacyValidBookings = inRangeBookings.filter(
+      (b) => !coveredBookingIds.has(b.id) && calculateValidIncomeForBooking(b) > 0
+    );
+    const legacyIncomeCents = legacyValidBookings.reduce(
       (acc, b) => acc + calculateValidIncomeForBooking(b),
       0
     );
+
+    // El consolidado de citas suma única y estrictamente el dinero real recaudado en el periodo
+    const totalServicesIncomeCents = paymentsIncomeCents + legacyIncomeCents;
 
     const totalVentasCents = inRangeVentas.reduce(
       (acc, v) => acc + Math.round(Number(v.total) * 100),
@@ -574,7 +662,8 @@ export function DashboardHome({
 
     return {
       inRangeBookings,
-      validConfirmedBookings,
+      validConfirmedBookings: legacyValidBookings,
+      inRangePayments,
       inRangeEgresos,
       inRangeVentas,
       totalServicesIncomeCents,
@@ -585,7 +674,7 @@ export function DashboardHome({
       incomePercent,
       expensePercent,
     };
-  }, [financialRange, financialBookings, financialEgresos, financialVentas, dateBounds]);
+  }, [financialRange, financialBookings, financialPayments, financialEgresos, financialVentas, dateBounds]);
 
   const periodLabel = useMemo(() => {
     if (financialRange === "day") return "Hoy";
@@ -1159,7 +1248,7 @@ export function DashboardHome({
                   color: financialTab === "todos" ? "var(--color-primary)" : "var(--color-text-muted)",
                 }}
               >
-                Todos ({filteredFinancialData.validConfirmedBookings.length + filteredFinancialData.inRangeVentas.length + filteredFinancialData.inRangeEgresos.length})
+                Todos ({filteredFinancialData.inRangePayments.length + filteredFinancialData.validConfirmedBookings.length + filteredFinancialData.inRangeVentas.length + filteredFinancialData.inRangeEgresos.length})
               </button>
               <button
                 type="button"
@@ -1175,7 +1264,7 @@ export function DashboardHome({
                   color: financialTab === "ingresos" ? "#4ade80" : "var(--color-text-muted)",
                 }}
               >
-                Citas ({filteredFinancialData.validConfirmedBookings.length})
+                Citas ({filteredFinancialData.inRangePayments.length + filteredFinancialData.validConfirmedBookings.length})
               </button>
               <button
                 type="button"
@@ -1213,7 +1302,8 @@ export function DashboardHome({
           </div>
 
           {/* Table of Movements */}
-          {filteredFinancialData.validConfirmedBookings.length === 0 &&
+          {filteredFinancialData.inRangePayments.length === 0 &&
+          filteredFinancialData.validConfirmedBookings.length === 0 &&
           filteredFinancialData.inRangeVentas.length === 0 &&
           filteredFinancialData.inRangeEgresos.length === 0 ? (
             <p className="text-muted" style={{ textAlign: "center", padding: "20px 0", fontSize: "0.85rem" }}>
@@ -1234,7 +1324,112 @@ export function DashboardHome({
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Ingresos Válidos */}
+                  {/* Cobros Reales Verificados en Citas */}
+                  {(financialTab === "todos" || financialTab === "ingresos") &&
+                    filteredFinancialData.inRangePayments.map((p) => {
+                      const clientName = p.bookings
+                        ? `${p.bookings.client_first_name || ""} ${p.bookings.client_last_name || ""}`.trim()
+                        : "Cliente";
+                      const bookingCode = p.bookings?.booking_code || "—";
+                      const pDate = new Date(p.paid_at);
+                      const dateStr = `${getPeruDateString(pDate)} ${pDate.toLocaleTimeString("es-PE", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                        timeZone: "America/Lima",
+                      })}`;
+                      const isAdvance = p.payment_type === "advance";
+                      const isBalance = p.payment_type === "balance";
+                      const sType = p.bookings?.service_type || "barberia";
+
+                      return (
+                        <tr
+                          key={`payment-${p.id}`}
+                          style={{
+                            borderBottom: "1px solid rgba(255,255,255,0.05)",
+                            backgroundColor: "rgba(34, 197, 94, 0.02)",
+                          }}
+                        >
+                          <td style={{ padding: "8px 10px" }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                background: "rgba(34, 197, 94, 0.15)",
+                                color: "#4ade80",
+                              }}
+                            >
+                              + INGRESO
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
+                            {dateStr}
+                          </td>
+                          <td style={{ padding: "8px 10px" }}>
+                            <span style={{ fontWeight: 600 }}>{clientName}</span>{" "}
+                            <span style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                              ({bookingCode})
+                            </span>
+                            {isAdvance && (
+                              <span
+                                className="badge badge-warning"
+                                style={{ fontSize: "0.65rem", marginLeft: 6, padding: "1px 6px" }}
+                              >
+                                Adelanto
+                              </span>
+                            )}
+                            {isBalance && (
+                              <span
+                                className="badge"
+                                style={{
+                                  fontSize: "0.65rem",
+                                  marginLeft: 6,
+                                  padding: "1px 6px",
+                                  background: "rgba(56, 189, 248, 0.15)",
+                                  color: "#38bdf8",
+                                  border: "1px solid rgba(56, 189, 248, 0.3)",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Liquidación Saldo
+                              </span>
+                            )}
+                            {!isAdvance && !isBalance && (
+                              <span
+                                className="badge badge-success"
+                                style={{ fontSize: "0.65rem", marginLeft: 6, padding: "1px 6px" }}
+                              >
+                                Total
+                              </span>
+                            )}
+                            <span style={{ marginLeft: 6, fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
+                              · {p.payment_method === "yape" ? "💜 Yape" : p.payment_method === "efectivo" || p.payment_method === "cash" ? "💵 Efectivo" : p.payment_method === "transferencia" ? "🏦 Transferencia" : "🔄 " + p.payment_method}
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 10px" }}>
+                            <span className="badge badge-gold" style={{ fontSize: "0.7rem" }}>
+                              {sType === "barberia" ? "Barbería" : sType === "spa" ? "Spa" : "Mixto"}
+                            </span>
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              fontWeight: 700,
+                              color: "#4ade80",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            + {formatCentsToSoles(p.amount_cents)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                  {/* Reservas Históricas sin payment_logs */}
                   {(financialTab === "todos" || financialTab === "ingresos") &&
                     filteredFinancialData.validConfirmedBookings.map((b) => {
                       const amount = calculateValidIncomeForBooking(b);
@@ -1246,7 +1441,7 @@ export function DashboardHome({
                           b.advance_amount_cents < b.total_price_cents);
                       return (
                         <tr
-                          key={`income-${b.id}`}
+                          key={`income-legacy-${b.id}`}
                           style={{
                             borderBottom: "1px solid rgba(255,255,255,0.05)",
                             backgroundColor: "rgba(34, 197, 94, 0.02)",
