@@ -42,7 +42,8 @@ export async function GET() {
     const { data, error } = await admin
       .from("services")
       .select("*")
-      .order("sort_order");
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
 
     if (error) throw error;
     return NextResponse.json(data);

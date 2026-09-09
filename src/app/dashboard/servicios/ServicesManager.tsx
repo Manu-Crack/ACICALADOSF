@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { ServiceFormModal } from "./ServiceFormModal";
 import { formatDuration } from "@/lib/utils/format";
+import { filterAndSortServices } from "@/lib/utils/service-search";
 
 type Service = {
   id: string;
@@ -17,6 +18,7 @@ type Service = {
   is_active: boolean;
   images: string[];
   sort_order: number;
+  created_at?: string;
 };
 
 export function ServicesManager() {
@@ -26,6 +28,7 @@ export function ServicesManager() {
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "barberia" | "spa">("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadServices = useCallback(async () => {
     setLoading(true);
@@ -92,42 +95,186 @@ export function ServicesManager() {
     loadServices();
   }
 
-  const filtered = filter === "all" ? services : services.filter((s) => s.type === filter);
+  // Filtrado reactivo multicriterio y ordenamiento correlativo de menor a mayor
+  const filtered = useMemo(() => {
+    return filterAndSortServices(services, filter, searchQuery);
+  }, [services, filter, searchQuery]);
+
+  const totalCategoryServices = useMemo(() => {
+    return filter === "all"
+      ? services.length
+      : services.filter((s) => s.type === filter).length;
+  }, [services, filter]);
+
+  const isSearching = searchQuery.trim().length > 0;
 
   return (
     <>
-      {/* Toolbar */}
+      {/* Cabecera Superior: Barra de Búsqueda Inteligente y Acciones */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          flexDirection: "column",
           gap: 16,
           marginBottom: 24,
-          flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["all", "barberia", "spa"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={filter === f ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        {/* Fila 1: Input de Búsqueda y Botón Nuevo Servicio */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            width: "100%",
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              flex: 1,
+              minWidth: 280,
+            }}
+          >
+            {/* Icono de Lupa */}
+            <span
+              style={{
+                position: "absolute",
+                left: 14,
+                top: "50%",
+                transform: "translateY(-50%)",
+                pointerEvents: "none",
+                display: "flex",
+                alignItems: "center",
+                color: "var(--color-primary, #c8a45c)",
+                opacity: 0.8,
+              }}
             >
-              {f === "barberia" && (
-                <img src="/LogoBarberia.svg" alt="Barbería" style={{ height: 14, width: "auto" }} />
-              )}
-              {f === "spa" && (
-                <img src="/LogoSpa.svg" alt="Spa" style={{ height: 14, width: "auto" }} />
-              )}
-              {f === "all" ? "Todos" : f === "barberia" ? "Barbería" : "Spa"}
-            </button>
-          ))}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+
+            {/* Campo de Búsqueda */}
+            <input
+              type="text"
+              className="input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setSearchQuery("");
+              }}
+              placeholder="Buscar por nombre de servicio o precio (ej: Fade, Botox, 20)..."
+              style={{
+                paddingLeft: 42,
+                paddingRight: isSearching ? 40 : 16,
+                height: 44,
+                width: "100%",
+                fontSize: "0.9375rem",
+                borderRadius: "var(--radius-md)",
+                transition: "all var(--transition-fast)",
+              }}
+            />
+
+            {/* Botón para limpiar campo con un solo clic */}
+            {isSearching && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                title="Limpiar búsqueda (Esc)"
+                aria-label="Limpiar búsqueda"
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: 24,
+                  height: 24,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.8125rem",
+                  transition: "all var(--transition-fast)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.2)";
+                  e.currentTarget.style.color = "#fff";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.color = "var(--color-text-muted)";
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={handleNew}
+            className="btn btn-primary"
+            style={{ height: 44, whiteSpace: "nowrap" }}
+          >
+            + Nuevo Servicio
+          </button>
         </div>
-        <button onClick={handleNew} className="btn btn-primary">
-          + Nuevo Servicio
-        </button>
+
+        {/* Fila 2: Filtros de Tipo y Contador de Resultados */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {(["all", "barberia", "spa"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={filter === f ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {f === "barberia" && (
+                  <img src="/LogoBarberia.svg" alt="Barbería" style={{ height: 14, width: "auto" }} />
+                )}
+                {f === "spa" && (
+                  <img src="/LogoSpa.svg" alt="Spa" style={{ height: 14, width: "auto" }} />
+                )}
+                {f === "all" ? "Todos" : f === "barberia" ? "Barbería" : "Spa"}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            {isSearching ? (
+              <span>
+                Mostrando <strong style={{ color: "var(--color-primary)" }}>{filtered.length}</strong> de {totalCategoryServices} servicios
+              </span>
+            ) : (
+              <span>
+                Total: <strong style={{ color: "var(--color-text)" }}>{filtered.length}</strong> servicios
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Services Grid */}
@@ -136,15 +283,46 @@ export function ServicesManager() {
           <p className="text-muted">Cargando servicios...</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 48 }}>
-          <div style={{ fontSize: "3rem", marginBottom: 12 }}>✂️</div>
-          <p className="text-muted" style={{ marginBottom: 16 }}>
-            No hay servicios{filter !== "all" ? ` de ${filter}` : ""} registrados aún.
-          </p>
-          <button onClick={handleNew} className="btn btn-primary">
-            Crear primer servicio
-          </button>
-        </div>
+        isSearching ? (
+          /* Estado Vacío por Búsqueda Sin Coincidencias */
+          <div
+            className="card"
+            style={{
+              textAlign: "center",
+              padding: "48px 24px",
+              maxWidth: 520,
+              margin: "24px auto",
+            }}
+          >
+            <div style={{ fontSize: "2.75rem", marginBottom: 12 }}>🔍</div>
+            <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: 8 }}>
+              No se encontraron servicios que coincidan con la búsqueda
+            </h3>
+            <p className="text-muted" style={{ fontSize: "0.875rem", marginBottom: 20 }}>
+              No hay coincidencias para &ldquo;<strong>{searchQuery.trim()}</strong>&rdquo;
+              {filter !== "all" ? ` en la sección de ${filter === "barberia" ? "Barbería" : "Spa"}` : ""}.
+              Intenta con otro término o consulta por el precio del servicio.
+            </p>
+            <button
+              onClick={() => setSearchQuery("")}
+              className="btn btn-secondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              ✕ Limpiar búsqueda
+            </button>
+          </div>
+        ) : (
+          /* Estado Vacío General */
+          <div className="card" style={{ textAlign: "center", padding: 48 }}>
+            <div style={{ fontSize: "3rem", marginBottom: 12 }}>✂️</div>
+            <p className="text-muted" style={{ marginBottom: 16 }}>
+              No hay servicios{filter !== "all" ? ` de ${filter}` : ""} registrados aún.
+            </p>
+            <button onClick={handleNew} className="btn btn-primary">
+              Crear primer servicio
+            </button>
+          </div>
+        )
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
           {filtered.map((service) => (
