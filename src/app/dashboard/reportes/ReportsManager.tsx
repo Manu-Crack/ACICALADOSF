@@ -6,6 +6,7 @@ import type { FullReportData, CounterSaleReportItem } from "@/lib/types/reports"
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS } from "@/lib/types/payments";
 import { DailyClosingWhatsAppModal } from "./DailyClosingWhatsAppModal";
 import { subscribeVentasSync, VentaSyncEvent } from "@/lib/utils/ventas-sync";
+import { parseVentaPaymentBreakdown } from "@/lib/utils/ventas-mixed";
 
 interface EmployeeOption {
   id: string;
@@ -386,14 +387,11 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
               newSummary.total_collected_cents = (newSummary.total_collected_cents || 0) + totalCents;
               newSummary.net_result_cents = (newSummary.net_result_cents || 0) + totalCents;
 
-              const normPay = (venta.metodo_pago || "").toLowerCase();
-              if (normPay.includes("yape")) {
-                newSummary.yape_collected_cents = (newSummary.yape_collected_cents || 0) + totalCents;
-              } else if (normPay.includes("efectivo")) {
-                newSummary.cash_collected_cents = (newSummary.cash_collected_cents || 0) + totalCents;
-              } else if (normPay.includes("transferencia")) {
-                newSummary.transfer_collected_cents = (newSummary.transfer_collected_cents || 0) + totalCents;
-              } else if (normPay.includes("mixto")) {
+              const breakdown = parseVentaPaymentBreakdown(venta.metodo_pago, totalCents);
+              newSummary.cash_collected_cents = (newSummary.cash_collected_cents || 0) + breakdown.efectivoCents;
+              newSummary.yape_collected_cents = (newSummary.yape_collected_cents || 0) + breakdown.yapeCents;
+              newSummary.transfer_collected_cents = (newSummary.transfer_collected_cents || 0) + breakdown.transferenciaCents;
+              if (breakdown.isMixed) {
                 newSummary.mixed_collected_cents = (newSummary.mixed_collected_cents || 0) + totalCents;
               }
             }
@@ -423,15 +421,29 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
             newSummary.total_collected_cents = (newSummary.total_collected_cents || 0) + deltaCents;
             newSummary.net_result_cents = (newSummary.net_result_cents || 0) + deltaCents;
 
-            const normPay = (venta.metodo_pago || "").toLowerCase();
-            if (normPay.includes("yape")) {
-              newSummary.yape_collected_cents = Math.max(0, (newSummary.yape_collected_cents || 0) + deltaCents);
-            } else if (normPay.includes("efectivo")) {
-              newSummary.cash_collected_cents = Math.max(0, (newSummary.cash_collected_cents || 0) + deltaCents);
-            } else if (normPay.includes("transferencia")) {
-              newSummary.transfer_collected_cents = Math.max(0, (newSummary.transfer_collected_cents || 0) + deltaCents);
-            } else if (normPay.includes("mixto")) {
-              newSummary.mixed_collected_cents = Math.max(0, (newSummary.mixed_collected_cents || 0) + deltaCents);
+            const oldBreakdown = parseVentaPaymentBreakdown(oldItem.metodo_pago, oldTotalCents);
+            const newBreakdown = parseVentaPaymentBreakdown(venta.metodo_pago ?? oldItem.metodo_pago, totalCents);
+
+            newSummary.cash_collected_cents = Math.max(
+              0,
+              (newSummary.cash_collected_cents || 0) + (newBreakdown.efectivoCents - oldBreakdown.efectivoCents)
+            );
+            newSummary.yape_collected_cents = Math.max(
+              0,
+              (newSummary.yape_collected_cents || 0) + (newBreakdown.yapeCents - oldBreakdown.yapeCents)
+            );
+            newSummary.transfer_collected_cents = Math.max(
+              0,
+              (newSummary.transfer_collected_cents || 0) + (newBreakdown.transferenciaCents - oldBreakdown.transferenciaCents)
+            );
+
+            if (newBreakdown.isMixed || oldBreakdown.isMixed) {
+              const oldMixed = oldBreakdown.isMixed ? oldTotalCents : 0;
+              const newMixed = newBreakdown.isMixed ? totalCents : 0;
+              newSummary.mixed_collected_cents = Math.max(
+                0,
+                (newSummary.mixed_collected_cents || 0) + (newMixed - oldMixed)
+              );
             }
           }
         } else if (eventType === "DELETE") {
@@ -450,15 +462,24 @@ export function ReportsManager({ userRole }: ReportsManagerProps = {}) {
             );
             newSummary.net_result_cents = (newSummary.net_result_cents || 0) - existingTotalCents;
 
-            const normPay = (existing.metodo_pago || "").toLowerCase();
-            if (normPay.includes("yape")) {
-              newSummary.yape_collected_cents = Math.max(0, (newSummary.yape_collected_cents || 0) - existingTotalCents);
-            } else if (normPay.includes("efectivo")) {
-              newSummary.cash_collected_cents = Math.max(0, (newSummary.cash_collected_cents || 0) - existingTotalCents);
-            } else if (normPay.includes("transferencia")) {
-              newSummary.transfer_collected_cents = Math.max(0, (newSummary.transfer_collected_cents || 0) - existingTotalCents);
-            } else if (normPay.includes("mixto")) {
-              newSummary.mixed_collected_cents = Math.max(0, (newSummary.mixed_collected_cents || 0) - existingTotalCents);
+            const delBreakdown = parseVentaPaymentBreakdown(existing.metodo_pago, existingTotalCents);
+            newSummary.cash_collected_cents = Math.max(
+              0,
+              (newSummary.cash_collected_cents || 0) - delBreakdown.efectivoCents
+            );
+            newSummary.yape_collected_cents = Math.max(
+              0,
+              (newSummary.yape_collected_cents || 0) - delBreakdown.yapeCents
+            );
+            newSummary.transfer_collected_cents = Math.max(
+              0,
+              (newSummary.transfer_collected_cents || 0) - delBreakdown.transferenciaCents
+            );
+            if (delBreakdown.isMixed) {
+              newSummary.mixed_collected_cents = Math.max(
+                0,
+                (newSummary.mixed_collected_cents || 0) - existingTotalCents
+              );
             }
           }
         }

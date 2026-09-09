@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { TicketVentaTermico, TicketVentaData } from "./TicketVentaTermico";
 import { createClient } from "@/lib/supabase/client";
 import { emitVentaChange, subscribeVentasSync } from "@/lib/utils/ventas-sync";
+import {
+  MixedPairOption,
+  MIXED_PAIR_CONFIGS,
+  formatMixedPaymentMethod,
+} from "@/lib/utils/ventas-mixed";
 
 export interface VentaItem {
   id: string;
@@ -82,6 +87,11 @@ export function VentasManager({ userRole }: VentasManagerProps) {
   const [metodoPago, setMetodoPago] = useState<"Efectivo" | "Yape" | "Transferencia" | "Mixto">("Efectivo");
   const [fechaHora, setFechaHora] = useState<string>(getPeruDateTimeLocal());
   const [notas, setNotas] = useState("");
+
+  // Estados para cobro mixto
+  const [mixedPair, setMixedPair] = useState<MixedPairOption>("efectivo_yape");
+  const [monto1, setMonto1] = useState<string>("");
+  const [monto2, setMonto2] = useState<string>("");
 
   // Modal de Ticket Térmico
   const [ticketVenta, setTicketVenta] = useState<TicketVentaData | null>(null);
@@ -192,6 +202,73 @@ export function VentasManager({ userRole }: VentasManagerProps) {
     return Math.round(q * p * 100) / 100;
   }, [cantidad, precioUnitario]);
 
+  // Selección de método de pago principal con inicialización inteligente de cobro mixto
+  const handleSelectMetodoPago = (m: "Efectivo" | "Yape" | "Transferencia" | "Mixto") => {
+    setMetodoPago(m);
+    if (m === "Mixto") {
+      const num1 = parseFloat(monto1);
+      if (isNaN(num1) || num1 <= 0 || num1 >= liveTotal) {
+        const half = Math.round((liveTotal / 2) * 100) / 100;
+        setMonto1(half.toFixed(2));
+        setMonto2((Math.round((liveTotal - half) * 100) / 100).toFixed(2));
+      } else {
+        const rem = Math.round((liveTotal - num1) * 100) / 100;
+        setMonto2(rem.toFixed(2));
+      }
+    }
+  };
+
+  // Reajuste reactivo del segundo monto cuando cambia el total calculado (por cantidad o precio)
+  useEffect(() => {
+    if (metodoPago === "Mixto") {
+      const num1 = parseFloat(monto1);
+      if (!isNaN(num1) && num1 >= 0 && num1 <= liveTotal) {
+        const rem = Math.round((liveTotal - num1) * 100) / 100;
+        setMonto2(rem.toFixed(2));
+      } else if (isNaN(num1) || num1 <= 0) {
+        const half = Math.round((liveTotal / 2) * 100) / 100;
+        setMonto1(half.toFixed(2));
+        setMonto2((Math.round((liveTotal - half) * 100) / 100).toFixed(2));
+      } else {
+        setMonto1(liveTotal.toFixed(2));
+        setMonto2("0.00");
+      }
+    }
+  }, [liveTotal, metodoPago]);
+
+  // Autocálculo reactivo bidireccional entre casillas mixtas
+  const handleMonto1Change = (val: string) => {
+    setMonto1(val);
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      const rem = Math.round((liveTotal - num) * 100) / 100;
+      setMonto2(rem >= 0 ? rem.toFixed(2) : "0.00");
+    } else {
+      setMonto2(liveTotal > 0 ? liveTotal.toFixed(2) : "0.00");
+    }
+  };
+
+  const handleMonto2Change = (val: string) => {
+    setMonto2(val);
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      const rem = Math.round((liveTotal - num) * 100) / 100;
+      setMonto1(rem >= 0 ? rem.toFixed(2) : "0.00");
+    } else {
+      setMonto1(liveTotal > 0 ? liveTotal.toFixed(2) : "0.00");
+    }
+  };
+
+  // Validación matemática estricta: suma debe cubrir 100% del total
+  const isMixedValid = useMemo(() => {
+    if (metodoPago !== "Mixto") return true;
+    const num1 = parseFloat(monto1);
+    const num2 = parseFloat(monto2);
+    if (isNaN(num1) || isNaN(num2) || num1 <= 0 || num2 <= 0) return false;
+    const sum = Math.round((num1 + num2) * 100) / 100;
+    return Math.abs(sum - liveTotal) < 0.005;
+  }, [metodoPago, monto1, monto2, liveTotal]);
+
   // Registro de venta
   const handleRegister = async (printTicketAfter: boolean = false) => {
     setError(null);
@@ -221,6 +298,20 @@ export function VentasManager({ userRole }: VentasManagerProps) {
       return;
     }
 
+    let finalMetodoPago: string = metodoPago;
+    if (metodoPago === "Mixto") {
+      const cfg = MIXED_PAIR_CONFIGS[mixedPair];
+      const val1 = parseFloat(monto1) || 0;
+      const val2 = parseFloat(monto2) || 0;
+      if (!isMixedValid) {
+        setError(
+          `Para cobro mixto, la suma de ambos métodos (S/ ${(val1 + val2).toFixed(2)}) debe ser exactamente igual al total calculado de S/ ${liveTotal.toFixed(2)}.`
+        );
+        return;
+      }
+      finalMetodoPago = formatMixedPaymentMethod(cfg.method1, val1, cfg.method2, val2);
+    }
+
     setSubmitting(true);
     try {
       const payload = {
@@ -228,7 +319,7 @@ export function VentasManager({ userRole }: VentasManagerProps) {
         producto_nombre: productTrimmed,
         cantidad: q,
         precio_unitario: p,
-        metodo_pago: metodoPago,
+        metodo_pago: finalMetodoPago,
         fecha: fechaHora ? new Date(fechaHora).toISOString() : new Date().toISOString(),
         notas: notas.trim() || null,
       };
@@ -267,6 +358,9 @@ export function VentasManager({ userRole }: VentasManagerProps) {
       setProductoNombre("");
       setCantidad(1);
       setPrecioUnitario(25);
+      setMetodoPago("Efectivo");
+      setMonto1("");
+      setMonto2("");
       setNotas("");
       setFechaHora(getPeruDateTimeLocal());
 
@@ -466,6 +560,16 @@ export function VentasManager({ userRole }: VentasManagerProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <style>{`
+        .no-spin-buttons::-webkit-inner-spin-button,
+        .no-spin-buttons::-webkit-outer-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+        }
+        .no-spin-buttons {
+          -moz-appearance: textfield !important;
+        }
+      `}</style>
       {/* 1. Header Oficial */}
       <div
         style={{
@@ -769,7 +873,7 @@ export function VentasManager({ userRole }: VentasManagerProps) {
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setMetodoPago(m)}
+                  onClick={() => handleSelectMetodoPago(m)}
                   className={`btn btn-sm ${metodoPago === m ? "btn-primary" : "btn-secondary"}`}
                   style={{
                     fontSize: "0.78rem",
@@ -801,6 +905,190 @@ export function VentasManager({ userRole }: VentasManagerProps) {
             />
           </div>
         </div>
+
+        {/* Sub-panel Integrado de Cobro Mixto Dinámico */}
+        {metodoPago === "Mixto" && (
+          <div
+            style={{
+              padding: "16px 20px",
+              background: "rgba(200, 164, 92, 0.04)",
+              border: "1px solid rgba(200, 164, 92, 0.25)",
+              borderRadius: "var(--radius-md, 8px)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
+            {/* Cabecera del sub-panel */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: "1.1rem" }}>🔀</span>
+                <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--color-primary, #C8A45C)" }}>
+                  Configuración de Cobro Mixto (2 Vías Simultáneas)
+                </span>
+              </div>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                Autocompletado reactivo según el total calculado
+              </span>
+            </div>
+
+            {/* Selector de Pareja de Métodos */}
+            <div>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, marginBottom: 6, color: "var(--color-text-muted)", textTransform: "uppercase" }}>
+                Selecciona la combinación a cobrar:
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                {(["efectivo_yape", "efectivo_transferencia", "yape_transferencia"] as const).map((pairKey) => {
+                  const cfg = MIXED_PAIR_CONFIGS[pairKey];
+                  const isSelected = mixedPair === pairKey;
+                  return (
+                    <button
+                      key={pairKey}
+                      type="button"
+                      onClick={() => setMixedPair(pairKey)}
+                      className={`btn btn-sm ${isSelected ? "btn-primary" : "btn-secondary"}`}
+                      style={{
+                        padding: "8px 12px",
+                        fontSize: "0.8rem",
+                        fontWeight: isSelected ? 800 : 600,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span>{cfg.icon1} {cfg.method1}</span>
+                      <span style={{ opacity: 0.6 }}>+</span>
+                      <span>{cfg.icon2} {cfg.method2}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Casillas numéricas limpias para ambos montos (sin spin buttons) */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+              {/* Casilla 1 */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: 6 }}>
+                  {MIXED_PAIR_CONFIGS[mixedPair].icon1} Monto en {MIXED_PAIR_CONFIGS[mixedPair].method1} (S/) *
+                </label>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      fontWeight: 800,
+                      color: "var(--color-primary, #C8A45C)",
+                      fontSize: "0.88rem",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    S/
+                  </span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="0.00"
+                    className="input no-spin-buttons"
+                    value={monto1}
+                    onChange={(e) => handleMonto1Change(e.target.value)}
+                    style={{
+                      width: "100%",
+                      paddingLeft: 36,
+                      fontWeight: 700,
+                      fontSize: "1rem",
+                      color: "var(--color-text)",
+                    }}
+                    id="input-monto-1-mixto"
+                  />
+                </div>
+              </div>
+
+              {/* Casilla 2 */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: 6 }}>
+                  {MIXED_PAIR_CONFIGS[mixedPair].icon2} Monto en {MIXED_PAIR_CONFIGS[mixedPair].method2} (S/) *
+                </label>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      fontWeight: 800,
+                      color: "var(--color-primary, #C8A45C)",
+                      fontSize: "0.88rem",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    S/
+                  </span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="0.00"
+                    className="input no-spin-buttons"
+                    value={monto2}
+                    onChange={(e) => handleMonto2Change(e.target.value)}
+                    style={{
+                      width: "100%",
+                      paddingLeft: 36,
+                      fontWeight: 700,
+                      fontSize: "1rem",
+                      color: "var(--color-text)",
+                    }}
+                    id="input-monto-2-mixto"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Estado de validación reactivo */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 8,
+                fontSize: "0.78rem",
+                paddingTop: 4,
+                borderTop: "1px dashed rgba(200, 164, 92, 0.2)",
+              }}
+            >
+              {isMixedValid ? (
+                <span style={{ color: "#4ade80", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span>✓</span>
+                  <span>
+                    Distribución exacta: S/ {Number(monto1 || 0).toFixed(2)} ({MIXED_PAIR_CONFIGS[mixedPair].method1}) + S/ {Number(monto2 || 0).toFixed(2)} ({MIXED_PAIR_CONFIGS[mixedPair].method2}) = S/ {liveTotal.toFixed(2)} (100% cubierto)
+                  </span>
+                </span>
+              ) : (
+                <span style={{ color: "#f87171", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span>⚠️</span>
+                  <span>
+                    La suma actual (S/ {((parseFloat(monto1) || 0) + (parseFloat(monto2) || 0)).toFixed(2)}) difiere del total calculado (S/ {liveTotal.toFixed(2)}).
+                  </span>
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const half = Math.round((liveTotal / 2) * 100) / 100;
+                  setMonto1(half.toFixed(2));
+                  setMonto2((Math.round((liveTotal - half) * 100) / 100).toFixed(2));
+                }}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: "0.72rem", padding: "2px 8px" }}
+              >
+                ⚖️ Dividir 50% / 50%
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Indicador de Total y Botones de Acción */}
         <div
@@ -838,7 +1126,7 @@ export function VentasManager({ userRole }: VentasManagerProps) {
             <button
               type="button"
               onClick={() => handleRegister(false)}
-              disabled={submitting}
+              disabled={submitting || (metodoPago === "Mixto" && !isMixedValid)}
               className="btn btn-secondary"
               style={{ padding: "10px 20px", fontWeight: 700, fontSize: "0.88rem" }}
               id="btn-registrar-venta"
@@ -849,7 +1137,7 @@ export function VentasManager({ userRole }: VentasManagerProps) {
             <button
               type="button"
               onClick={() => handleRegister(true)}
-              disabled={submitting}
+              disabled={submitting || (metodoPago === "Mixto" && !isMixedValid)}
               className="btn btn-primary"
               style={{
                 padding: "10px 22px",
@@ -1032,13 +1320,17 @@ export function VentasManager({ userRole }: VentasManagerProps) {
                           className="badge"
                           style={{
                             background:
-                              v.metodo_pago === "Yape"
+                              v.metodo_pago.startsWith("Mixto")
+                                ? "rgba(200, 164, 92, 0.15)"
+                                : v.metodo_pago === "Yape"
                                 ? "rgba(147, 51, 234, 0.15)"
                                 : v.metodo_pago === "Efectivo"
                                 ? "rgba(34, 197, 94, 0.15)"
                                 : "rgba(59, 130, 246, 0.15)",
                             color:
-                              v.metodo_pago === "Yape"
+                              v.metodo_pago.startsWith("Mixto")
+                                ? "var(--color-primary, #C8A45C)"
+                                : v.metodo_pago === "Yape"
                                 ? "#c084fc"
                                 : v.metodo_pago === "Efectivo"
                                 ? "#4ade80"
@@ -1046,6 +1338,9 @@ export function VentasManager({ userRole }: VentasManagerProps) {
                             fontSize: "0.72rem",
                             fontWeight: 700,
                             padding: "3px 8px",
+                            whiteSpace: "normal",
+                            display: "inline-block",
+                            lineHeight: 1.3,
                           }}
                         >
                           {v.metodo_pago}

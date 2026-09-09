@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { extractTicketMixedBreakdown } from "@/lib/utils/ventas-mixed";
 
 export interface TicketVentaData {
   id: string;
@@ -224,6 +225,10 @@ export function TicketVentaTermico({
   const unitPriceFormatted = Number(venta.precio_unitario).toFixed(2);
   const totalFormatted = Number(venta.total).toFixed(2);
 
+  const mixedBreakdown = useMemo(() => {
+    return extractTicketMixedBreakdown(venta.metodo_pago);
+  }, [venta.metodo_pago]);
+
   // Contenido idéntico y reutilizable tanto para la previsualización como para la impresión física
   const ticketContent = (
     <div className="ticket-thermal-body">
@@ -288,10 +293,40 @@ export function TicketVentaTermico({
         <span>S/ {totalFormatted}</span>
       </div>
 
-      <div style={{ marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" }}>
-        <span>MÉTODO DE PAGO:</span>
-        <span className="bold">{venta.metodo_pago.toUpperCase()}</span>
-      </div>
+      {mixedBreakdown && mixedBreakdown.length >= 2 ? (
+        <div style={{ marginTop: "6px", fontSize: "11px" }}>
+          <div className="bold" style={{ marginBottom: "3px" }}>
+            FORMA DE PAGO: MIXTO
+          </div>
+          {mixedBreakdown.map((item, idx) => (
+            <div
+              key={idx}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "11px",
+                paddingLeft: "2px",
+              }}
+            >
+              <span>- {item.method.toUpperCase()}:</span>
+              <span>S/ {item.amount.toFixed(2)}</span>
+            </div>
+          ))}
+          <div className="divider-dashed" style={{ margin: "4px 0" }}></div>
+          <div
+            className="bold"
+            style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}
+          >
+            <span>TOTAL COBRADO:</span>
+            <span>S/ {totalFormatted}</span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" }}>
+          <span>MÉTODO DE PAGO:</span>
+          <span className="bold">{venta.metodo_pago.toUpperCase()}</span>
+        </div>
+      )}
 
       <div style={{ textAlign: "center", fontSize: "11px", fontWeight: "bold", marginTop: "6px" }}>
         *** VENTA CANCELADA EN MOSTRADOR ***

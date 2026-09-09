@@ -168,7 +168,9 @@ export async function POST(request: Request) {
     }
 
     const validMethods = ["Efectivo", "Yape", "Transferencia", "Mixto"];
-    const resolvedMethod = validMethods.includes(metodo_pago) ? metodo_pago : "Efectivo";
+    const isMixedDetailed = typeof metodo_pago === "string" && metodo_pago.trim().startsWith("Mixto");
+    const resolvedMethod =
+      validMethods.includes(metodo_pago) || isMixedDetailed ? String(metodo_pago).trim() : "Efectivo";
 
     // Cálculo dinámico del total exacto
     const calculatedTotal = Math.round(parsedQty * parsedPrice * 100) / 100;
@@ -298,8 +300,9 @@ export async function PATCH(request: Request) {
 
     if (metodo_pago !== undefined) {
       const validMethods = ["Efectivo", "Yape", "Transferencia", "Mixto"];
-      if (validMethods.includes(metodo_pago)) {
-        updates.metodo_pago = metodo_pago;
+      const isMixedDetailed = typeof metodo_pago === "string" && metodo_pago.trim().startsWith("Mixto");
+      if (validMethods.includes(metodo_pago) || isMixedDetailed) {
+        updates.metodo_pago = String(metodo_pago).trim();
       }
     }
 

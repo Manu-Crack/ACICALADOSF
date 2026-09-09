@@ -12,6 +12,7 @@ import type {
   CounterSaleReportItem,
 } from "@/lib/types/reports";
 import type { Expense } from "@/lib/types/expenses";
+import { parseVentaPaymentBreakdown } from "@/lib/utils/ventas-mixed";
 
 /**
  * REGLA ESTRICTA DE INGRESOS COBRADOS:
@@ -53,7 +54,7 @@ export function normalizePaymentMethod(method: string | null | undefined): strin
   if (m === "cash" || m === "efectivo") return "efectivo";
   if (m === "yape") return "yape";
   if (m === "transfer" || m === "transferencia") return "transferencia";
-  if (m === "mixed" || m === "mixto") return "mixto";
+  if (m === "mixed" || m === "mixto" || m.startsWith("mixto")) return "mixto";
   if (m === "culqi_legacy") return "culqi_legacy";
   return m;
 }
@@ -648,6 +649,16 @@ export async function buildFullReportData(
       transferCollectedCents += totalCents;
     } else if (normPay === "mixto") {
       mixedCollectedCents += totalCents;
+      const breakdown = parseVentaPaymentBreakdown(v.metodo_pago, totalCents);
+      if (breakdown.isMixed) {
+        cashCollectedCents += breakdown.efectivoCents;
+        yapeCollectedCents += breakdown.yapeCents;
+        transferCollectedCents += breakdown.transferenciaCents;
+      } else {
+        const half = Math.floor(totalCents / 2);
+        yapeCollectedCents += half;
+        cashCollectedCents += totalCents - half;
+      }
     }
 
     counterSalesList.push({
