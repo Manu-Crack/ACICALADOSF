@@ -666,7 +666,7 @@ export function NewBookingModal({
         </div>
 
         {/* Form Body Scrollable */}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
           <div
             style={{
               padding: "20px 24px",
@@ -1004,7 +1004,7 @@ export function NewBookingModal({
                               </span>
                               <input
                                 type="number"
-                                step="0.50"
+                                step="any"
                                 min="0"
                                 autoFocus
                                 value={tempEditingPrice}
@@ -1440,7 +1440,7 @@ export function NewBookingModal({
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: "0.85rem", color: paymentMode === "full" ? "#22c55e" : "#fff" }}>
                     <span>💳</span>
-                    <span>Pago Completo (100%)</span>
+                    <span>Pago Completo</span>
                   </div>
                   <p style={{ fontSize: "0.7rem", color: "var(--color-text-muted, #a1a1aa)", margin: "4px 0 0 0" }}>
                     Cobrar la totalidad de <strong>S/ {effectiveTotalPriceSoles}</strong> ahora
@@ -1450,11 +1450,6 @@ export function NewBookingModal({
                 <div
                   onClick={() => {
                     setPaymentMode("advance");
-                    if (!advanceAmount || parseFloat(advanceAmount) === 0) {
-                      // Sugerir 30% por defecto si no ha escrito nada
-                      const defVal = (Math.round((effectiveTotalPriceCents * 0.3) / 100)).toFixed(2);
-                      setAdvanceAmount(defVal);
-                    }
                   }}
                   style={{
                     padding: "12px 14px",
@@ -1504,8 +1499,8 @@ export function NewBookingModal({
                         </span>
                         <input
                           type="number"
-                          step="0.50"
-                          min="0.01"
+                          step="any"
+                          min="0"
                           max={effectiveTotalPriceSoles}
                           className="input"
                           placeholder="0.00"
@@ -1513,31 +1508,6 @@ export function NewBookingModal({
                           onChange={(e) => setAdvanceAmount(e.target.value)}
                           style={{ width: "100%", paddingLeft: 34, fontWeight: 800, fontSize: "1.05rem", color: "#fff" }}
                         />
-                      </div>
-                      {/* Atajos rápidos de porcentajes para comodidad de recepción */}
-                      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", alignSelf: "center" }}>Sugerir:</span>
-                        {[20, 25, 30, 50].map((pct) => {
-                          const val = (Math.round((effectiveTotalPriceCents * (pct / 100)) / 100)).toFixed(2);
-                          return (
-                            <button
-                              key={pct}
-                              type="button"
-                              onClick={() => setAdvanceAmount(val)}
-                              style={{
-                                background: "rgba(245, 158, 11, 0.15)",
-                                border: "1px solid rgba(245, 158, 11, 0.35)",
-                                color: "#f59e0b",
-                                borderRadius: "4px",
-                                fontSize: "0.68rem",
-                                padding: "2px 6px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              {pct}% (S/ {val})
-                            </button>
-                          );
-                        })}
                       </div>
                     </div>
 
@@ -1565,7 +1535,7 @@ export function NewBookingModal({
                         </span>
                       </div>
                       <div style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
-                        <span>Cobrado Hoy: <strong>S/ {parsedAdvanceSoles.toFixed(2)}</strong></span>
+                        <span>Adelanto: <strong>S/ {parsedAdvanceSoles.toFixed(2)}</strong></span>
                         <span>Total: <strong>S/ {effectiveTotalPriceSoles}</strong></span>
                       </div>
                     </div>
@@ -1701,7 +1671,7 @@ export function NewBookingModal({
                       </label>
                       <input
                         type="number"
-                        step="0.10"
+                        step="any"
                         min="0"
                         max={effectiveTotalPriceSoles}
                         className="input"
@@ -1717,7 +1687,7 @@ export function NewBookingModal({
                       </label>
                       <input
                         type="number"
-                        step="0.10"
+                        step="any"
                         min="0"
                         max={effectiveTotalPriceSoles}
                         className="input"
@@ -1841,7 +1811,7 @@ export function NewBookingModal({
                   <input
                     id="booking-custom-total-input"
                     type="number"
-                    step="0.50"
+                    step="any"
                     min="0"
                     value={customTotalPrice}
                     onChange={(e) => {
