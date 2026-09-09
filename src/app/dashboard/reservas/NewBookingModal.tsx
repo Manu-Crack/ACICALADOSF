@@ -239,7 +239,7 @@ export function NewBookingModal({
   // Monto numérico de adelanto y saldo pendiente reactivo en tiempo real
   const parsedAdvanceSoles = useMemo(() => {
     if (paymentMode === "full") return effectiveTotalPriceCents / 100;
-    const num = parseFloat(advanceAmount);
+    const num = parseInt(advanceAmount, 10);
     return isNaN(num) || num < 0 ? 0 : num;
   }, [paymentMode, advanceAmount, effectiveTotalPriceCents]);
 
@@ -1498,14 +1498,22 @@ export function NewBookingModal({
                           S/
                         </span>
                         <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          max={effectiveTotalPriceSoles}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           className="input"
-                          placeholder="0.00"
+                          placeholder="0"
                           value={advanceAmount}
-                          onChange={(e) => setAdvanceAmount(e.target.value)}
+                          onChange={(e) => {
+                            const digitsOnly = e.target.value.replace(/\D/g, "");
+                            const clean = digitsOnly.length > 1 && digitsOnly.startsWith("0") ? String(parseInt(digitsOnly, 10)) : digitsOnly;
+                            setAdvanceAmount(clean);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "." || e.key === "," || e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-") {
+                              e.preventDefault();
+                            }
+                          }}
                           style={{ width: "100%", paddingLeft: 34, fontWeight: 800, fontSize: "1.05rem", color: "#fff" }}
                         />
                       </div>

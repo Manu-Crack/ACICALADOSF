@@ -3,6 +3,7 @@
  * Archivo: tests/unit/service-price-edit-audit-test.ts
  * Sistema: Acicalados Spa & Barber Shop
  */
+export {};
 
 let passed = 0;
 let failed = 0;
