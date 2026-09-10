@@ -5,13 +5,16 @@ import { extractTicketMixedBreakdown } from "@/lib/utils/ventas-mixed";
 
 export interface TicketVentaData {
   id: string;
-  cliente_nombre: string;
-  producto_nombre: string;
-  cantidad: number;
-  precio_unitario: number | string;
-  total: number | string;
-  metodo_pago: string;
-  fecha: string;
+  cliente_nombre?: string;
+  cliente?: string;
+  producto_nombre?: string;
+  producto?: string;
+  descripcion?: string;
+  cantidad?: number;
+  precio_unitario?: number | string;
+  total?: number | string;
+  metodo_pago?: string;
+  fecha?: string;
   notas?: string | null;
 }
 
@@ -195,13 +198,39 @@ const TICKET_CSS_RULES = `
   }
 `;
 
-export function TicketVentaTermico({
-  venta,
-  isOpen = false,
-  onClose,
-}: TicketVentaTermicoProps) {
-  const emissionDate = useMemo(() => {
-    const d = venta?.fecha ? new Date(venta.fecha) : new Date();
+/**
+ * Normalizador tolerante de fechas para timestamps de PostgreSQL y strings ISO.
+ * Soporta formatos "YYYY-MM-DD HH:mm:ss+ZZ", ISO 8601 o Date objects.
+ */
+function parseSafeDate(rawDate?: string | Date | null): Date {
+  if (!rawDate) return new Date();
+  if (rawDate instanceof Date) {
+    return isNaN(rawDate.getTime()) ? new Date() : rawDate;
+  }
+  try {
+    let normalized = String(rawDate).trim();
+    // Si viene en formato Postgres con espacio ej: "2026-09-10 16:46:00+00"
+    if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(" ", "T");
+    }
+    // Si el offset de zona horaria no tiene minutos ej: "+00" o "-05"
+    if (/[+-]\d{2}$/.test(normalized)) {
+      normalized = `${normalized}:00`;
+    }
+    const d = new Date(normalized);
+    if (!isNaN(d.getTime())) {
+      return d;
+    }
+    const direct = new Date(rawDate);
+    return isNaN(direct.getTime()) ? new Date() : direct;
+  } catch {
+    return new Date();
+  }
+}
+
+function formatEmissionDateTime(rawDate?: string | Date | null) {
+  const d = parseSafeDate(rawDate);
+  try {
     return {
       fecha: d.toLocaleDateString("es-PE", {
         day: "2-digit",
@@ -217,17 +246,125 @@ export function TicketVentaTermico({
         timeZone: "America/Lima",
       }),
     };
-  }, [venta]);
+  } catch {
+    return {
+      fecha: d.toISOString().slice(0, 10),
+      hora: d.toISOString().slice(11, 19),
+    };
+  }
+}
 
-  if (!venta) return null;
+/**
+ * Error Boundary para aislar fallos del ticket y prevenir el colapso ("page couldn't load") de la pantalla.
+ */
+class TicketErrorBoundary extends React.Component<
+  { children: React.ReactNode; onClose?: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; onClose?: () => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-  const codigoVenta = `VP-${venta.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-  const unitPriceFormatted = Number(venta.precio_unitario).toFixed(2);
-  const totalFormatted = Number(venta.total).toFixed(2);
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("Error capturado en TicketErrorBoundary:", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 99999,
+            padding: "16px",
+          }}
+          onClick={this.props.onClose}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--color-bg-card, #1A1612)",
+              border: "1px solid #ef4444",
+              borderRadius: "12px",
+              padding: "24px",
+              maxWidth: "400px",
+              width: "100%",
+              textAlign: "center",
+              color: "#F2E8D0",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: "#ef4444", margin: "0 0 10px 0" }}>⚠️ Error al mostrar el ticket</h3>
+            <p style={{ fontSize: "0.85rem", color: "#a8a29e", margin: "0 0 16px 0" }}>
+              Ocurrió un error inesperado al generar el comprobante. Por favor, intente nuevamente.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={this.props.onClose}
+              style={{ fontWeight: 700 }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function TicketVentaTermicoInner({
+  venta,
+  isOpen = false,
+  onClose,
+}: TicketVentaTermicoProps) {
+  // 1. Invocación incondicional de hooks al inicio (garantiza orden constante en React)
+  const emissionDate = useMemo(() => {
+    return formatEmissionDateTime(venta?.fecha);
+  }, [venta?.fecha]);
 
   const mixedBreakdown = useMemo(() => {
-    return extractTicketMixedBreakdown(venta.metodo_pago);
-  }, [venta.metodo_pago]);
+    return extractTicketMixedBreakdown(venta?.metodo_pago);
+  }, [venta?.metodo_pago]);
+
+  // Si no hay venta o no está abierto, no renderizamos nada después de los hooks
+  if (!venta || !isOpen) return null;
+
+  // 2. Sanitización completa de datos para Venta de Mostrador (sin depender de reservas)
+  const rawId = String(venta.id || Date.now().toString());
+  const cleanId = rawId.replace(/-/g, "").slice(0, 8).toUpperCase() || "VENTA";
+  const codigoVenta = `VP-${cleanId}`;
+
+  const clienteNombre = String(
+    venta.cliente_nombre || venta.cliente || "Público General"
+  ).trim() || "Público General";
+
+  const productoNombre = String(
+    venta.producto_nombre || venta.producto || venta.descripcion || "Producto Mostrador"
+  ).trim() || "Producto Mostrador";
+
+  const cantidadNum = Math.max(1, Math.round(Number(venta.cantidad) || 1));
+  const unitPriceNum = Math.max(0, Number(venta.precio_unitario) || 0);
+  const totalNum = Math.max(0, Number(venta.total) || (cantidadNum * unitPriceNum));
+
+  const unitPriceFormatted = unitPriceNum.toFixed(2);
+  const totalFormatted = totalNum.toFixed(2);
+
+  const metodoPagoStr = String(venta.metodo_pago || "Efectivo").trim() || "Efectivo";
+  const notasStr = venta.notas ? String(venta.notas).trim() : null;
 
   // Contenido idéntico y reutilizable tanto para la previsualización como para la impresión física
   const ticketContent = (
@@ -257,7 +394,7 @@ export function TicketVentaTermico({
 
       <div className="meta-data">
         <div>CÓDIGO VENTA    : {codigoVenta}</div>
-        <div>CLIENTE         : {venta.cliente_nombre.toUpperCase()}</div>
+        <div>CLIENTE         : {clienteNombre.toUpperCase()}</div>
         <div>FECHA EMISIÓN   : {emissionDate.fecha}</div>
         <div>HORA EMISIÓN    : {emissionDate.hora}</div>
       </div>
@@ -273,15 +410,15 @@ export function TicketVentaTermico({
         </thead>
         <tbody>
           <tr>
-            <td className="td-qty bold">{venta.cantidad}</td>
-            <td className="bold">{venta.producto_nombre}</td>
+            <td className="td-qty bold">{cantidadNum}</td>
+            <td className="bold">{productoNombre}</td>
             <td className="td-price">S/ {unitPriceFormatted}</td>
             <td className="td-price bold">S/ {totalFormatted}</td>
           </tr>
-          {venta.notas && (
+          {notasStr && (
             <tr>
               <td colSpan={4} style={{ fontSize: "10px", fontStyle: "italic", paddingTop: "3px" }}>
-                Nota: {venta.notas}
+                Nota: {notasStr}
               </td>
             </tr>
           )}
@@ -324,7 +461,7 @@ export function TicketVentaTermico({
       ) : (
         <div style={{ marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" }}>
           <span>MÉTODO DE PAGO:</span>
-          <span className="bold">{venta.metodo_pago.toUpperCase()}</span>
+          <span className="bold">{metodoPagoStr.toUpperCase()}</span>
         </div>
       )}
 
@@ -428,12 +565,21 @@ export function TicketVentaTermico({
       doc.close();
 
       setTimeout(() => {
-        iframe?.contentWindow?.focus();
-        iframe?.contentWindow?.print();
+        try {
+          iframe?.contentWindow?.focus();
+          iframe?.contentWindow?.print();
+        } catch (printErr) {
+          console.warn("Iframe print falló, ejecutando window.print():", printErr);
+          try {
+            window.print();
+          } catch {}
+        }
       }, 250);
     } catch (err) {
       console.warn("Fallback to window.print():", err);
-      window.print();
+      try {
+        window.print();
+      } catch {}
     }
   };
 
@@ -634,5 +780,14 @@ export function TicketVentaTermico({
         </div>
       )}
     </>
+  );
+}
+
+export function TicketVentaTermico(props: TicketVentaTermicoProps) {
+  if (!props.isOpen && !props.venta) return null;
+  return (
+    <TicketErrorBoundary onClose={props.onClose}>
+      <TicketVentaTermicoInner {...props} />
+    </TicketErrorBoundary>
   );
 }

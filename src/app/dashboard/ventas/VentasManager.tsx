@@ -367,15 +367,15 @@ export function VentasManager({ userRole }: VentasManagerProps) {
       // Si solicitó imprimir de inmediato
       if (printTicketAfter) {
         setTicketVenta({
-          id: createdSale.id,
-          cliente_nombre: createdSale.cliente_nombre,
-          producto_nombre: createdSale.producto_nombre,
-          cantidad: createdSale.cantidad,
-          precio_unitario: createdSale.precio_unitario,
-          total: createdSale.total,
-          metodo_pago: createdSale.metodo_pago,
-          fecha: createdSale.fecha,
-          notas: createdSale.notas,
+          id: String(createdSale.id || Date.now()),
+          cliente_nombre: String(createdSale.cliente_nombre || clienteNombre || "Público General").trim() || "Público General",
+          producto_nombre: String(createdSale.producto_nombre || productoNombre || "Producto Mostrador").trim() || "Producto Mostrador",
+          cantidad: Math.max(1, Math.round(Number(createdSale.cantidad) || 1)),
+          precio_unitario: Math.max(0, Number(createdSale.precio_unitario) || 0),
+          total: Math.max(0, Number(createdSale.total) || 0),
+          metodo_pago: String(createdSale.metodo_pago || metodoPago || "Efectivo").trim() || "Efectivo",
+          fecha: createdSale.fecha || new Date().toISOString(),
+          notas: createdSale.notas ? String(createdSale.notas).trim() : null,
         });
         setIsTicketOpen(true);
       }
@@ -449,18 +449,24 @@ export function VentasManager({ userRole }: VentasManagerProps) {
 
   // Abrir ticket de venta
   const handleOpenTicket = (v: VentaItem) => {
-    setTicketVenta({
-      id: v.id,
-      cliente_nombre: v.cliente_nombre,
-      producto_nombre: v.producto_nombre,
-      cantidad: v.cantidad,
-      precio_unitario: v.precio_unitario,
-      total: v.total,
-      metodo_pago: v.metodo_pago,
-      fecha: v.fecha,
-      notas: v.notas,
-    });
-    setIsTicketOpen(true);
+    try {
+      if (!v) return;
+      const safeVenta: TicketVentaData = {
+        id: String(v.id || Date.now()),
+        cliente_nombre: String(v.cliente_nombre || "Público General").trim() || "Público General",
+        producto_nombre: String(v.producto_nombre || "Producto Mostrador").trim() || "Producto Mostrador",
+        cantidad: Math.max(1, Math.round(Number(v.cantidad) || 1)),
+        precio_unitario: Math.max(0, Number(v.precio_unitario) || 0),
+        total: Math.max(0, Number(v.total) || 0),
+        metodo_pago: String(v.metodo_pago || "Efectivo").trim() || "Efectivo",
+        fecha: v.fecha || new Date().toISOString(),
+        notas: v.notas ? String(v.notas).trim() : null,
+      };
+      setTicketVenta(safeVenta);
+      setIsTicketOpen(true);
+    } catch (err) {
+      console.error("Error al abrir ticket de venta:", err);
+    }
   };
 
   // Eliminar venta
